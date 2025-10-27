@@ -1,10 +1,8 @@
-#pragma once
+// App_Controller.h
+#ifndef APP_CONTROLLER_H
+#define APP_CONTROLLER_H
 
-// Uygulamayı başlatır (Serial, input, ui)
-void appBegin();
+void initializeApp();
+void runAppLoop();
 
-// Her döngüde çağrılır: encoder/buton olaylarını işler, UI'yi günceller
-void appLoop();
-void controlsBegin();
-int controlsReadEncoderDetent();
-bool controlsButtonFell(int button);
+#endif

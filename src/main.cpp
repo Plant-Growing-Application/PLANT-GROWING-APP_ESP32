@@ -3,9 +3,12 @@
 
 void setup()
 {
-    appBegin();
+    // Fonksiyonu çağırmanın doğru yolu
+    initializeApp();
 }
+
 void loop()
 {
-    appLoop();
+    // Fonksiyonu çağırmanın doğru yolu
+    runAppLoop();
 }

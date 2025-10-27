@@ -1,14 +1,22 @@
+// Controls.h
+#ifndef CONTROLS_H
+#define CONTROLS_H
 
-#pragma once
 #include <Arduino.h>
 
-enum class Button { EncoderPush, Confirm, Back };
+class Button
+{
+public:
+    uint8_t pin;
+    bool lastState;
+    uint32_t lastDebounceTimeMs;
 
-// Başlatma: pinMode + encoder interrupt’ları
-void inputBegin();
+    Button(uint8_t pinNumber);
+    Button();
+};
 
-// Encoder’dan son çağrıdan bu yana kaç detent (±) okundu
-int  inputReadEncoderDetent();
+void setupEncoder(uint8_t pinA, uint8_t pinB);
+int readEncoderDetentSteps();
+bool isButtonPressed(Button &btn);
 
-// Buton için HIGH->LOW (basıldı) geçişini bir kez döndürür
-bool inputButtonFell(ButtonId b);
+#endif

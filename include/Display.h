@@ -1,19 +1,11 @@
-#pragma once
-#include <Arduino.h>
+#ifndef DISPLAY_H
+#define DISPLAY_H
 
-// Ekranı başlat (I2C + SSD1306). true -> OK, false -> hata
-bool displayBegin();
+#include <Adafruit_SSD1306.h>
 
-// Verilen sayfayı çizer (0..N-1). (Default sayfa çizimi)
-void displayDrawPage(int page);
+void initializeDisplay();
+void renderPage(int currentPage, bool isEditMode, int setpoint, int tempSetpoint,
+                int volume, int tempVolume, int mode, int tempMode, const char *modeLabels[]);
+void showMessage(const char *message, uint16_t durationMs = 1000, int currentPage = 0);
 
-// replace=false: Toast zaten aktifse gelen istek YOK SAYILIR.
-// replace=true : Mevcut toast derhâl yeni mesaja/süreye GÜNCELLENİR.
-void displayShowToast(const char *msg, uint16_t ms, bool replace = false);
-
-// Her loop turunda çağrılmalı: süre dolunca menüye döndürür.
-void displayTick(int currentPage);
-
-void displayDrawPage1_Setpoint(int setpoint, bool edit); // 0..100
-void displayDrawPage2_Volume(int volume, bool edit);     // 0..10
-void displayDrawPage3_Mode(const char *mode, int idx, int count, bool edit);
+#endif
