@@ -1,4 +1,4 @@
-#include "Controls.h"
+#include "define.h"
 
 volatile int8_t encoderStepDelta = 0;
 volatile uint8_t lastEncoderState = 0;

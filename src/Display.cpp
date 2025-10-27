@@ -1,12 +1,10 @@
-#include "Display.h"
-#include <Arduino.h>
+#include "define.h"
 
 #define DISPLAY_WIDTH 128
 #define DISPLAY_HEIGHT 64
 #define OLED_RESET_PIN -1
 #define OLED_I2C_ADDRESS 0x3C
 
-Adafruit_SSD1306 oled(DISPLAY_WIDTH, DISPLAY_HEIGHT, &Wire, OLED_RESET_PIN);
 
 extern int tempBrightness;
 extern int brightness;

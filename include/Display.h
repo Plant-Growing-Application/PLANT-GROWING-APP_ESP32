@@ -1,7 +1,7 @@
+#include "define.h"
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
-#include <Adafruit_SSD1306.h>
 
 void initializeDisplay();
 void renderPage(int currentPage, bool isEditMode, int setpoint, int tempSetpoint,

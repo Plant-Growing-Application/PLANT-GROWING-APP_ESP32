@@ -1,8 +1,5 @@
 // App_Controller.cpp
-#include "App_Controller.h"
-#include "Display.h"
-#include "Controls.h"
-#include "Pins.h"
+#include "define.h"
 
 enum Page : int8_t
 {
@@ -23,19 +20,19 @@ const char *modeLabels[3] = {"AUTO", "MAN", "OFF"};
 int brightness = 100;
 int tempBrightness = 100;
 
-Button encoderButton(ENCODER_PUSH);
-Button confirmButton(CONFIRM_BUTTON);
-Button backButton(BACK_BUTTON);
+Button encoderButton(PIN_ENCODER_PUSH);
+Button confirmButton(PIN_CONFIRM_BUTTON);
+Button backButton(PIN_BACK_BUTTON);
 
 void initializeApp()
 {
   Serial.begin(115200);
   initializeDisplay();
-  setupEncoder(ENCODER_A, ENCODER_B);
-  pinMode(ENCODER_PUSH, INPUT_PULLUP);
-  pinMode(CONFIRM_BUTTON, INPUT_PULLUP);
-  pinMode(BACK_BUTTON, INPUT_PULLUP);
-  renderPage(currentPage, isEditMode, setpoint, tempSetpoint, volume, tempVolume, mode, tempMode, modeLabels);
+  setupEncoder(PIN_ENCODER_A, PIN_ENCODER_B);
+  pinMode(PIN_ENCODER_PUSH, INPUT_PULLUP);
+  pinMode(PIN_CONFIRM_BUTTON, INPUT_PULLUP);
+  pinMode(PIN_BACK_BUTTON, INPUT_PULLUP);
+  // renderPage(currentPage, isEditMode, setpoint, tempSetpoint, volume, tempVolume, mode, tempMode, modeLabels);
 }
 
 void runAppLoop()
