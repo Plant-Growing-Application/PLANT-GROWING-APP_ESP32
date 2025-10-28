@@ -8,10 +8,7 @@ void Task_Display(void *pvParameters)
 {
     for (;;)
     {
-
-    
-            DisplayControl.SelectedPage();
-
+        DisplayControl.SelectedPage();
         vTaskDelay(pdMS_TO_TICKS(50)); // 50ms aralıkla kontrol
     }
 }

@@ -38,17 +38,13 @@ void DisplayProtocol::GoToPageWifi(bool wifiState)
     // Üst başlık
     oled.setTextSize(2);
     oled.setTextColor(SSD1306_WHITE);
-    oled.setCursor((128 - 6 * 2 * 4) / 2, 0); // "WIFI" 4 karakter, 6px base font
+    oled.setCursor((128 - 6 * 2 * 4) / 2, 0); // "WIFI" ortalama
     oled.print("WIFI");
 
-    // Ortada bilgi
-    oled.setTextSize(1);
-    oled.setCursor(10, 28);
-    oled.print("Select Mode:");
-
-    // Altta ON/OFF durumu
+    // Ortada bilgi: "WiFi: ON" veya "WiFi: OFF"
     oled.setTextSize(2);
-    oled.setCursor(30, 45);
+    oled.setCursor(20, 28);
+    oled.print("WiFi: ");
     oled.print(wifiState ? "ON" : "OFF");
 
     oled.display();
@@ -62,17 +58,13 @@ void DisplayProtocol::GoToPageBluetooth(bool btState)
     // Üst başlık
     oled.setTextSize(2);
     oled.setTextColor(SSD1306_WHITE);
-    oled.setCursor((128 - 6 * 2 * 9) / 2, 0); // "BLUETOOTH" 9 karakter, 6px base font
+    oled.setCursor((128 - 6 * 2 * 9) / 2, 0); // "BLUETOOTH" ortalama
     oled.print("BLUETOOTH");
 
-    // Ortada bilgi
-    oled.setTextSize(1);
-    oled.setCursor(10, 28);
-    oled.print("Mode:");
-
-    // Altta ON/OFF durumu
+    // Ortada bilgi: "Bluetooth: ON" veya "Bluetooth: OFF"
     oled.setTextSize(2);
-    oled.setCursor(30, 45);
+    oled.setCursor(0, 28); // Geniş metin için biraz sola alındı
+    oled.print("Bluetooth: ");
     oled.print(btState ? "ON" : "OFF");
 
     oled.display();
@@ -111,34 +103,34 @@ void DisplayProtocol::EncoderControl(int encoderValue)
 
 void DisplayProtocol::SelectedPage()
 {
-    // Buton durumu oku (LOW = basılı)
-    bool currentState = !digitalRead(PIN_ENCODER_PUSH); // tersle, HIGH=basılmamış
+        // Buton durumu oku (LOW = basılı)
+        bool currentState = !digitalRead(PIN_ENCODER_PUSH); // tersle, HIGH=basılmamış
 
-    // Sadece butona dokunduğun an tetikle
-    if (currentState && !previousState)
-    {
-        // Köşe çizgilerini çiz
-        int lineLength = 8; // çizgi uzunluğu
+        // Sadece butona dokunduğun an tetikle
+        if (currentState && !previousState)
+        {
+            // Köşe çizgilerini çiz
+            int lineLength = 8; // çizgi uzunluğu
 
-        // Sol üst köşe
-        oled.drawFastHLine(0, 0, lineLength, SSD1306_WHITE); // yatay
-        oled.drawFastVLine(0, 0, lineLength, SSD1306_WHITE); // dikey
+            // Sol üst köşe
+            oled.drawFastHLine(0, 0, lineLength, SSD1306_WHITE); // yatay
+            oled.drawFastVLine(0, 0, lineLength, SSD1306_WHITE); // dikey
 
-        // Sağ üst köşe
-        oled.drawFastHLine(128 - lineLength, 0, lineLength, SSD1306_WHITE); // yatay
-        oled.drawFastVLine(127, 0, lineLength, SSD1306_WHITE);              // dikey
+            // Sağ üst köşe
+            oled.drawFastHLine(128 - lineLength, 0, lineLength, SSD1306_WHITE); // yatay
+            oled.drawFastVLine(127, 0, lineLength, SSD1306_WHITE);              // dikey
 
-        // Sol alt köşe
-        oled.drawFastHLine(0, 63, lineLength, SSD1306_WHITE);              // yatay
-        oled.drawFastVLine(0, 63 - lineLength, lineLength, SSD1306_WHITE); // dikey
+            // Sol alt köşe
+            oled.drawFastHLine(0, 63, lineLength, SSD1306_WHITE);              // yatay
+            oled.drawFastVLine(0, 63 - lineLength, lineLength, SSD1306_WHITE); // dikey
 
-        // Sağ alt köşe
-        oled.drawFastHLine(128 - lineLength, 63, lineLength, SSD1306_WHITE); // yatay
-        oled.drawFastVLine(127, 63 - lineLength, lineLength, SSD1306_WHITE); // dikey
+            // Sağ alt köşe
+            oled.drawFastHLine(128 - lineLength, 63, lineLength, SSD1306_WHITE); // yatay
+            oled.drawFastVLine(127, 63 - lineLength, lineLength, SSD1306_WHITE); // dikey
 
-        oled.display();
+            oled.display();
+        }
+
+        // Son durumu sakla
+        previousState = currentState;
     }
-
-    // Son durumu sakla
-    previousState = currentState;
-}
