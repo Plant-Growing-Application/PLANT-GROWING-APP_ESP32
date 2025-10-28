@@ -1,5 +1,7 @@
 #include "define.h"
 DisplayProtocol DisplayControl; // nesne oluştur
+MyWiFi wifi;
+
 bool lastButtonState = HIGH;
 bool buttonPressed = false;
 // Task fonksiyonu
@@ -15,9 +17,15 @@ void Task_Display(void *pvParameters)
 void setup()
 {
     initializeApp();
-    DisplayControl.GoToPageIntro();
-
     pinMode(PIN_ENCODER_PUSH, INPUT_PULLUP);
+
+    WiFi.begin("TP-Link_CDE6", "79222006");
+    if (wifi.connect(10000))
+    {
+        Serial.println("WiFi bağlı ");
+        Serial.println(wifi.getLocalIPString());
+        DisplayControl.GoToPageIntro();
+    }
 
     // Task oluştur
     xTaskCreate(
@@ -34,5 +42,5 @@ void loop()
 {
     // Fonksiyonu çağırmanın doğru yolu
     // runAppLoop();
-    DisplayControl.EncoderControl(readEncoderDetentSteps());
+    DisplayControl.ChangePage(readEncoderDetentSteps());
 }

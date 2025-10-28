@@ -72,10 +72,13 @@ class DisplayProtocol
 private:
 public:
     int CurrentPage = 0;
+    bool isInPage = false;
     void GoToPageIntro();
-    void GoToPageBluetooth(bool btState);
-    void GoToPageWifi(bool wifiState);
-    void EncoderControl(int encoderValue);
+    void GoToPageBluetooth();
+    void GoToPageWifi();
+    void ChangePage(int encoderValue);
+    void StateBluetooth(bool btState);
+    void StateWifi(bool wfState);
     void SelectedPage();
 };
 
