@@ -1,209 +1,64 @@
 #include "Define.h"
 Adafruit_SSD1306 oled(128, 64, &Wire, -1);
-bool currentState = false;
-bool previousState = false;
-bool prevBackState = false;
 
-bool bluetoothState = false;
-bool wifiState = false;
+volatile int8_t encoderStepDelta = 0;
+volatile uint8_t lastEncoderState = 0;
+volatile uint32_t lastInterruptTimeUs = 0;
 
-int8_t previousEncoderState = 0;
-void DisplayProtocol::GoToPageIntro()
+DisplayProtocol::DisplayProtocol(uint8_t pinNumber) : pin(pinNumber), lastState(HIGH), lastDebounceTimeMs(0) {}
+DisplayProtocol::DisplayProtocol() : pin(0), lastState(HIGH), lastDebounceTimeMs(0) {}
+void IRAM_ATTR encoderInterruptHandler()
 {
-    CurrentPage = PAGE_INTRO;
-
-    oled.clearDisplay();
-
-    oled.drawBitmap(0, 0, myLogo, 128, 64, SSD1306_WHITE);
-    oled.setTextSize(1);
-    oled.setTextColor(SSD1306_WHITE);
-
-    int textX = 0;
-    int ipY = 28;
-
-    oled.setCursor(textX, ipY);
-    oled.print("IP:" + wifi.getLocalIPString());
-
-    oled.setCursor(textX, ipY + 13);
-    oled.print("MAC:AA:BB:CC:DD:EE:FF");
-
-    // Saat ekle
-    oled.setCursor(textX, ipY + 28);
-
-    oled.print("TIME: 14:35");
-
-    oled.display();
+    uint32_t currentTimeUs = micros();
+    if (currentTimeUs - lastInterruptTimeUs < 800)
+        return;
+    lastInterruptTimeUs = currentTimeUs;
+    int pinAState = digitalRead(33);
+    int pinBState = digitalRead(32);
+    uint8_t currentState = (pinAState << 1) | pinBState;
+    uint8_t previousState = lastEncoderState;
+    if ((previousState == 0b00 && currentState == 0b01) ||
+        (previousState == 0b01 && currentState == 0b11) ||
+        (previousState == 0b11 && currentState == 0b10) ||
+        (previousState == 0b10 && currentState == 0b00))
+        encoderStepDelta++;
+    else if ((previousState == 0b00 && currentState == 0b10) ||
+             (previousState == 0b10 && currentState == 0b11) ||
+             (previousState == 0b11 && currentState == 0b01) ||
+             (previousState == 0b01 && currentState == 0b00))
+        encoderStepDelta--;
+    lastEncoderState = currentState;
 }
-void DisplayProtocol::GoToPageWifi()
+int DisplayProtocol::ReadEncoderDetentSteps()
 {
-    CurrentPage = PAGE_WIFI;
-
-    oled.clearDisplay();
-
-    // Üst başlık
-    oled.setTextSize(2);
-    oled.setTextColor(SSD1306_WHITE);
-    oled.setCursor((128 - 6 * 2 * 4) / 2, 0); // "WIFI" ortalama
-    oled.print("WIFI");
-
-    // Ortada bilgi: "WiFi: ON" veya "WiFi: OFF"
-    oled.setTextSize(1);
-    oled.setCursor(0, 28);
-    oled.print("WiFi: ");
-    StateWifi(wifiState);
-    // Alt çizgi (metnin altına)
-    int lineY = 38; // Yazı yüksekliğinin hemen altı
-    oled.drawLine(0, lineY, 60, lineY, SSD1306_WHITE);
-    oled.display();
+    static int accumulatedSteps = 0;
+    int8_t delta;
+    noInterrupts();
+    delta = encoderStepDelta;
+    encoderStepDelta = 0;
+    interrupts();
+    if (!delta)
+        return 0;
+    accumulatedSteps += delta;
+    const int stepsPerDetent = 2;
+    int detentCount = 0;
+    while (accumulatedSteps >= stepsPerDetent)
+    {
+        accumulatedSteps -= stepsPerDetent;
+        detentCount++;
+    }
+    while (accumulatedSteps <= -stepsPerDetent)
+    {
+        accumulatedSteps += stepsPerDetent;
+        detentCount--;
+    }
+    return detentCount;
 }
-void DisplayProtocol::GoToPageBluetooth()
+void DisplayProtocol::SetupEncoder(uint8_t pinA, uint8_t pinB)
 {
-    CurrentPage = PAGE_BLUETOOTH;
-
-    oled.clearDisplay();
-
-    // Üst başlık
-    oled.setTextSize(2);
-    oled.setTextColor(SSD1306_WHITE);
-    oled.setCursor((128 - 6 * 2 * 9) / 2, 0); // "BLUETOOTH" ortalama
-    oled.print("BLUETOOTH");
-
-    // Ortada bilgi: "Bluetooth: ON" veya "Bluetooth: OFF"
-    oled.setTextSize(1);
-    oled.setCursor(0, 28); // Geniş metin için biraz sola alındı
-    oled.print("Bluetooth: ");
-    StateBluetooth(bluetoothState);
-    // Alt çizgi (metnin altına)
-    int lineY = 38; // Yazı yüksekliğinin hemen altı
-    oled.drawLine(0, lineY, 80, lineY, SSD1306_WHITE);
-    oled.display();
-}
-void DisplayProtocol::ChangePage(int encoderValue)
-{
-    if (encoderValue != previousEncoderState && !isInPage)
-    {
-        previousEncoderState = encoderValue;
-
-        if (encoderValue > 0)
-        {
-            CurrentPage = (CurrentPage + 1) % TOTAL_PAGES; // TOPLAM_SAYFA sabitini tanımla
-        }
-        else if (encoderValue < 0)
-        {
-            CurrentPage = (CurrentPage - 1 + TOTAL_PAGES) % TOTAL_PAGES;
-        }
-
-        // Yeni sayfaya git
-        switch (CurrentPage)
-        {
-        case PAGE_INTRO:
-            GoToPageIntro();
-            break;
-        case PAGE_BLUETOOTH:
-            GoToPageBluetooth();
-            break;
-        case PAGE_WIFI:
-            GoToPageWifi(); // Varsayılan olarak WIFI kapalı
-            break;
-            // Diğer sayfalar için ekle
-        }
-    }
-    else if (encoderValue != previousEncoderState && isInPage)
-    {
-        switch (CurrentPage)
-        {
-        case PAGE_BLUETOOTH:
-            StateBluetooth(!bluetoothState);
-            break;
-        case PAGE_WIFI:
-            StateWifi(!wifiState);
-            break;
-        default:
-            break;
-        }
-    }
-}
-
-void DisplayProtocol::SelectedPage()
-{
-    // Buton durumu oku (LOW = basılı)
-    bool currentState = !digitalRead(PIN_ENCODER_PUSH); // tersle, HIGH=basılmamış
-    bool backState = !digitalRead(PIN_BACK_BUTTON);     // Exit tuşu
-
-    // Sadece butona dokunduğun an tetikle
-    if (currentState != previousState && CurrentPage != PAGE_INTRO)
-    {
-        isInPage = true;
-        // Köşe çizgilerini çiz
-        int lineLength = 8; // çizgi uzunluğu
-
-        // Sol üst köşe
-        oled.drawFastHLine(0, 0, lineLength, SSD1306_WHITE); // yatay
-        oled.drawFastVLine(0, 0, lineLength, SSD1306_WHITE); // dikey
-
-        // Sağ üst köşe
-        oled.drawFastHLine(128 - lineLength, 0, lineLength, SSD1306_WHITE); // yatay
-        oled.drawFastVLine(127, 0, lineLength, SSD1306_WHITE);              // dikey
-
-        // Sol alt köşe
-        oled.drawFastHLine(0, 63, lineLength, SSD1306_WHITE);              // yatay
-        oled.drawFastVLine(0, 63 - lineLength, lineLength, SSD1306_WHITE); // dikey
-
-        // Sağ alt köşe
-        oled.drawFastHLine(128 - lineLength, 63, lineLength, SSD1306_WHITE); // yatay
-        oled.drawFastVLine(127, 63 - lineLength, lineLength, SSD1306_WHITE); // dikey
-
-        oled.display();
-    }
-    // EXIT (geri tuşu)
-    if (backState == !prevBackState && isInPage)
-    {
-        isInPage = false;
-        switch (CurrentPage)
-        {
-        case PAGE_INTRO:
-            GoToPageIntro();
-            break;
-        case PAGE_BLUETOOTH:
-            GoToPageBluetooth();
-            break;
-        case PAGE_WIFI:
-            GoToPageWifi(); // Varsayılan olarak WIFI kapalı
-            break;
-        }
-
-        // Durumları kaydet
-        previousState = currentState;
-        prevBackState = backState;
-    }
-}
-
-void DisplayProtocol::StateBluetooth(bool btState)
-{
-    bluetoothState = btState;
-
-    // Eğer şu an Bluetooth sayfasındaysak ekranı güncelle
-    if (CurrentPage == PAGE_BLUETOOTH)
-    {
-        oled.fillRect(33, 28, 30, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
-        oled.setCursor(40, 28);                       // "ON/OFF" yazısının konumu
-        oled.setTextColor(SSD1306_WHITE);
-        oled.print(bluetoothState ? "ON" : "OFF");
-        oled.display();
-    }
-}
-
-void DisplayProtocol::StateWifi(bool wfState)
-{
-    wifiState = wfState; // ← küçük ama kritik düzeltme: "wifiState = wifiState" değil!
-
-    // Eğer şu an WiFi sayfasındaysak ekranı güncelle
-    if (CurrentPage == PAGE_WIFI)
-    {
-        oled.fillRect(33, 28, 30, 10, SSD1306_BLACK); // Bölgeyi temizle
-        oled.setCursor(33, 28);                       // "ON/OFF" konumu
-        oled.setTextColor(SSD1306_WHITE);
-        oled.print(wifiState ? "ON" : "OFF");
-        oled.display();
-    }
+    pinMode(pinA, INPUT_PULLUP);
+    pinMode(pinB, INPUT_PULLUP);
+    lastEncoderState = (digitalRead(pinA) << 1) | digitalRead(pinB);
+    attachInterrupt(digitalPinToInterrupt(pinA), encoderInterruptHandler, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(pinB), encoderInterruptHandler, CHANGE);
 }

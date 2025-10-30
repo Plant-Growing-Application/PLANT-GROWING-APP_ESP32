@@ -5,14 +5,17 @@
 #include <Preferences.h>
 #include <Arduino.h>
 #include <Adafruit_SSD1306.h>
-#include "App_Controller.h"
-#include "Display.h"
-#include "Controls.h"
-#include "Pins.h"
-#include "DisplayProtocol.h"
+#include "GrowPlant.h"
 #include "MyWiFi.h"
-extern Adafruit_SSD1306 oled; // sadece referans
+#include "RealTimeClock.h"
+#include "DisplayProtocol.h"
 
+#define DISPLAY_WIDTH 128
+#define DISPLAY_HEIGHT 64
+#define OLED_RESET_PIN -1
+#define OLED_I2C_ADDRESS 0x3C
+extern Adafruit_SSD1306 oled; // sadece referans
+extern RealTimeClock rtc;     // sadece bildir
 #define TOTAL_PAGES 3
 #define PAGE_INTRO 0
 #define PAGE_BLUETOOTH 1
