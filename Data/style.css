@@ -1,0 +1,9 @@
+body { font-family: sans-serif; text-align: center; background-color: #111; color: #fff; }
+h2 { color: #00ccff; }
+.btn {
+  width: 120px; height: 120px; border-radius: 50%;
+  font-size: 20px; color: white; border: none; margin: 15px;
+  cursor: pointer; transition: 0.3s;
+}
+.on { background-color: #00e676; box-shadow: 0 0 20px #00e676; }
+.off { background-color: #ff1744; box-shadow: 0 0 20px #ff1744; }

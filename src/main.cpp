@@ -1,24 +1,38 @@
 #include "define.h"
+#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
+#include "WebServer.h"
 
 GrowPlant growPlant;        // nesne oluştur
 DisplayProtocol DpProtocol; // nesne oluştur
 MyWiFi wifi;
+AsyncWebServer server(80);
+AsyncWebSocket ws("/ws");
+WebServerManager webServer(server, ws);
 
 bool lastButtonState = HIGH;
 bool buttonPressed = false;
-RealTimeClock rtc("pool.ntp.org", 10800, 0); // GMT+3 için 10800 saniye offset
+RealTimeClock rtc("pool.ntp.org", 10800, 0); // GMT+3 offset
 
 void Task_Display(void *pvParameters)
 {
     for (;;)
     {
-        if (growPlant.CurrentPage == PAGE_INTRO)
+        if (growPlant.CurrentPage == PAGE_INTRO && WiFi.status() == WL_CONNECTED)
         {
             growPlant.ShowClock();
             growPlant.ShowIP();
             growPlant.ShowMac();
         }
         vTaskDelay(pdMS_TO_TICKS(50)); // 50ms aralıkla kontrol
+    }
+}
+void Task_WebSocketCleanup(void *pvParameters)
+{
+    for (;;)
+    {
+        ws.cleanupClients();
+        vTaskDelay(pdMS_TO_TICKS(10000)); // her 10 saniyede bir
     }
 }
 void setup()
@@ -47,6 +61,7 @@ void setup()
 
     rtc.begin();
 
+    webServer.begin(); // 🌐 Web arayüzünü başlat
     // Task oluştur
     xTaskCreate(
         Task_Display,  // Task fonksiyonu
@@ -56,6 +71,7 @@ void setup()
         1,             // Öncelik
         NULL           // Handle
     );
+    xTaskCreate(Task_WebSocketCleanup, "WSCleanup", 2048, NULL, 1, NULL);
 }
 
 void loop()
