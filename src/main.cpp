@@ -3,36 +3,70 @@
 #include <AsyncTCP.h>
 #include "WebServer.h"
 
-GrowPlant growPlant;        // nesne oluştur
-DisplayProtocol DpProtocol; // nesne oluştur
-MyWiFi wifi;
+wifi_mode_t mode = WiFi.getMode();
+GrowPlant growPlant;
+DisplayProtocol DpProtocol;
+MyWiFi wifi("wifi");
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 WebServerManager webServer(server, ws);
+bool isServerMode = true;
+RealTimeClock rtc("pool.ntp.org", 10800, 0); // GMT+3
 
-bool lastButtonState = HIGH;
-bool buttonPressed = false;
-RealTimeClock rtc("pool.ntp.org", 10800, 0); // GMT+3 offset
-
+// 💡 Global cache (ekrana hızlı yazmak için)
+String currentIP = "";
+String currentMAC = "";
+String currentTime = "";
 void Task_Display(void *pvParameters)
 {
     for (;;)
     {
-        if (growPlant.CurrentPage == PAGE_INTRO && WiFi.status() == WL_CONNECTED)
+        // 🔹 Wi-Fi modunu al (STA = client, AP = server)
+        wifi_mode_t mode = WiFi.getMode();
+
+        // ⏰ Saat her zaman güncellensin (bağlantı olmasa bile)
+        currentTime = rtc.getFormattedTime();
+
+        // 🌐 IP ve MAC sadece AP veya STA moddaysa alınsın
+        if (mode == WIFI_AP || mode == WIFI_STA)
         {
-            growPlant.ShowClock();
-            growPlant.ShowIP();
-            growPlant.ShowMac();
+            String ipNow = (mode == WIFI_AP) ? WiFi.softAPIP().toString()
+                                             : WiFi.localIP().toString();
+
+            if (currentIP != ipNow)
+                currentIP = ipNow;
+
+            if (currentMAC.isEmpty())
+                currentMAC = WiFi.macAddress();
+
+            rtc.begin();
         }
-        vTaskDelay(pdMS_TO_TICKS(50)); // 50ms aralıkla kontrol
+
+        // 🖥️ Sadece intro sayfasında ekrana yaz
+        if (growPlant.CurrentPage == PAGE_INTRO)
+        {
+            growPlant.ShowClock(currentTime);
+            growPlant.ShowIP(currentIP);
+            growPlant.ShowMac(currentMAC);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1 saniyede bir güncelle
     }
 }
-void Task_WebSocketCleanup(void *pvParameters)
+
+void Task_WiFiMonitor(void *pvParameters)
 {
     for (;;)
     {
-        ws.cleanupClients();
-        vTaskDelay(pdMS_TO_TICKS(10000)); // her 10 saniyede bir
+        if (!isServerMode) // sadece client modda kontrol et
+        {
+            if (WiFi.status() != WL_CONNECTED)
+            {
+                WiFi.reconnect();
+                Serial.println("🔁 WiFi yeniden bağlanıyor...");
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
 void setup()
@@ -41,44 +75,30 @@ void setup()
     Wire.begin(21, 22);
 
     if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDRESS))
-    {
         while (true)
-            ; // sonsuz döngü
-    }
+            ;
+
     DpProtocol.SetupEncoder(PIN_ENCODER_A, PIN_ENCODER_B);
     pinMode(PIN_ENCODER_PUSH, INPUT_PULLUP);
     pinMode(PIN_CONFIRM_BUTTON, INPUT_PULLUP);
     pinMode(PIN_BACK_BUTTON, INPUT_PULLUP);
-    pinMode(PIN_ENCODER_PUSH, INPUT_PULLUP);
 
     WiFi.begin("TP-Link_CDE6", "79222006");
-    if (wifi.connect(5000))
-    {
-        growPlant.ShowIP();
-        growPlant.ShowMac();
-    }
+    wifi.connect(5000);
+
     growPlant.GoToPageIntro();
+    webServer.begin();
 
-    rtc.begin();
-
-    webServer.begin(); // 🌐 Web arayüzünü başlat
-    // Task oluştur
-    xTaskCreate(
-        Task_Display,  // Task fonksiyonu
-        "DisplayTask", // Task adı
-        2048,          // Stack boyutu
-        NULL,          // Parametre yok
-        1,             // Öncelik
-        NULL           // Handle
-    );
-    xTaskCreate(Task_WebSocketCleanup, "WSCleanup", 2048, NULL, 1, NULL);
+    // Task’lar
+    xTaskCreate(Task_Display, "DisplayTask", 4096, NULL, 1, NULL);
+    xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 2048, NULL, 1, NULL);
+    xTaskCreate([](void *)
+                { 
+        for (;;) { ws.cleanupClients(); vTaskDelay(pdMS_TO_TICKS(10000)); } }, "WSCleanup", 2048, NULL, 1, NULL);
 }
 
 void loop()
 {
-    // ONLY WORKING THE IF CHANGE THE ENCODER VALUE
     growPlant.ChangePage(DpProtocol.ReadEncoderDetentSteps());
-
-    // ITS WORK WHEN PUSHED THE ENCODER BUTTON
     growPlant.SelectedPage();
 }

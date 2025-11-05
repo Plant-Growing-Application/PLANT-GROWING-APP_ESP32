@@ -1,8 +1,16 @@
 #include "Define.h"
+#include "WebServer.h"
 int8_t previousEncoderState = 0;
 
 bool bluetoothState = false;
 bool wifiState = false;
+extern bool isServerMode;
+extern String currentTime;
+extern String currentIP;
+extern String currentMAC;
+
+extern WebServerManager webServer;
+extern MyWiFi wifi;
 
 // Sayfa değiştirme
 void GrowPlant::ChangePage(int encoderValue)
@@ -66,21 +74,17 @@ void GrowPlant::GoToPageWifi()
     CurrentPage = PAGE_WIFI;
 
     oled.clearDisplay();
-
-    // Üst başlık
     oled.setTextSize(2);
     oled.setTextColor(SSD1306_WHITE);
-    oled.setCursor((128 - 6 * 2 * 4) / 2, 0); // "WIFI" ortalama
+    oled.setCursor((128 - 6 * 2 * 4) / 2, 0);
     oled.print("WIFI");
 
-    // Ortada bilgi: "WiFi: ON" veya "WiFi: OFF"
     oled.setTextSize(1);
     oled.setCursor(0, 28);
     oled.print("WiFi: ");
-    StateWifi(wifiState);
-    // Alt çizgi (metnin altına)
-    int lineY = 38; // Yazı yüksekliğinin hemen altı
-    oled.drawLine(0, lineY, 60, lineY, SSD1306_WHITE);
+    oled.print(wifiState ? "SERVER" : "CLIENT");
+
+    oled.drawLine(0, 38, 60, 38, SSD1306_WHITE);
     oled.display();
 }
 void GrowPlant::GoToPageBluetooth()
@@ -116,68 +120,54 @@ void GrowPlant::GoToPageBluetooth()
     oled.display();
 }
 
-void GrowPlant::ShowIP()
+void GrowPlant::ShowIP(const String &ipStr)
 {
     if (CurrentPage != PAGE_INTRO)
-        return; // sadece intro sayfasında çalışsın
+        return;
 
-    String ipStr = wifi.getLocalIPString();
-    if (ipStr.length() == 0 || ipStr == "0.0.0.0")
-        return; // IP daha alınmamışsa boş döner, ekrana yazma
+    if (ipStr == "0.0.0.0" || ipStr.isEmpty())
+        return;
 
+    // 📡 Mod türüne göre IP belirle
+    String displayIP;
+    if (WiFi.getMode() == WIFI_AP)
+        displayIP = WiFi.softAPIP().toString(); // Server mod (ESP32 Access Point)
+    else if (WiFi.getMode() == WIFI_STA)
+        displayIP = WiFi.localIP().toString(); // Client mod (modeme bağlı)
+    else
+        displayIP = "0.0.0.0";
+
+    // 🖥️ OLED güncelleme
     oled.setTextSize(1);
     oled.setTextColor(SSD1306_WHITE);
 
-    // IP yazısının pozisyonu (intro sayfanla uyumlu olacak şekilde)
-    int textX = 0;
-    int ipY = 28;
+    // Her sayfa dönüşünde sıfırdan çiz
+    oled.fillRect(0, 28, 128, 10, SSD1306_BLACK);
+    oled.setCursor(0, 28);
+    oled.print("WiFi: " + displayIP);
 
-    // Eski IP alanını temizle (çakışma olmasın diye)
-    oled.fillRect(textX, ipY, 128, 10, SSD1306_BLACK);
-
-    oled.setCursor(textX, ipY);
-    oled.print("IP: " + ipStr);
     oled.display();
 }
 
-void GrowPlant::ShowMac()
+void GrowPlant::ShowMac(const String &macStr)
 {
-    if (CurrentPage != PAGE_INTRO)
-        return; // sadece intro sayfasında çalışsın
-
-    String macStr = WiFi.macAddress();
-
-    oled.setTextSize(1);
-    oled.setTextColor(SSD1306_WHITE);
-
-    int textX = 0;
-    int macY = 39; // IP'nin altına yerleştir
-
-    // Eski MAC alanını temizle
-    oled.fillRect(textX, macY, 128, 10, SSD1306_BLACK);
-
-    oled.setCursor(textX, macY);
+    if (macStr.isEmpty())
+        return;
+    oled.fillRect(0, 39, 128, 10, SSD1306_BLACK);
+    oled.setCursor(0, 39);
     oled.print("MAC:" + macStr);
     oled.display();
 }
-void GrowPlant::ShowClock()
+void GrowPlant::ShowClock(const String &timeStr)
 {
-    if (CurrentPage != PAGE_INTRO)
-        return; // Sadece intro sayfasında çalışsın
-    String timeStr = rtc.getFormattedTime();
-    // Zaman yazı ayarları
-    oled.setTextSize(1);
-    oled.setTextColor(SSD1306_WHITE);
-    // Yazının genişliğini hesapla
+    if (timeStr.isEmpty())
+        return;
     int16_t x1, y1;
     uint16_t w, h;
     oled.getTextBounds(timeStr, 0, 0, &x1, &y1, &w, &h);
-    int rightX = oled.width() - w - 2; // Sağdan 2 piksel boşluk
-    int topY = 0;
-    // Eski zamanı silmek için o bölgeyi temizle
-    oled.fillRect(rightX, topY, w + 2, h + 2, SSD1306_BLACK);
-    // Yeni zamanı yaz
-    oled.setCursor(rightX, topY);
+    int rightX = oled.width() - w - 2;
+    oled.fillRect(rightX, 0, w + 2, h + 2, SSD1306_BLACK);
+    oled.setCursor(rightX, 0);
     oled.print(timeStr);
     oled.display();
 }
@@ -246,15 +236,42 @@ void GrowPlant::StateBluetooth(bool btState)
 }
 void GrowPlant::StateWifi(bool wfState)
 {
-    wifiState = wfState; // ← küçük ama kritik düzeltme: "wifiState = wifiState" değil!
+    wifiState = wfState;
+    isServerMode = wifiState;
 
-    // Eğer şu an WiFi sayfasındaysak ekranı güncelle
+    // Görsel kısım
     if (CurrentPage == PAGE_WIFI)
     {
-        oled.fillRect(33, 28, 30, 10, SSD1306_BLACK); // Bölgeyi temizle
-        oled.setCursor(33, 28);                       // "ON/OFF" konumu
+        oled.fillRect(33, 28, 60, 10, SSD1306_BLACK);
+        oled.setCursor(33, 28);
         oled.setTextColor(SSD1306_WHITE);
-        oled.print(wifiState ? "ON" : "OFF");
+        oled.print(wifiState ? "SERVER" : "CLIENT");
         oled.display();
+    }
+
+    // 🌐 Gerçek işlevsel kısım
+    if (wifiState)
+    {
+        // Server Mode (ESP kendi WiFi’sini kuracak)
+        Serial.println("📡 SERVER MODE aktif");
+        WiFi.mode(WIFI_AP);
+        WiFi.softAP("ESP32_SERVER", "12345678");
+        webServer.begin();
+    }
+    else
+    {
+        // Client Mode (mevcut modem)
+        Serial.println("🌐 CLIENT MODE aktif");
+        WiFi.mode(WIFI_STA);
+        WiFi.begin("TP-Link_CDE6", "79222006");
+        if (wifi.connect(5000))
+        {
+            Serial.println("✅ WiFi bağlandı");
+            webServer.begin();
+        }
+        else
+        {
+            Serial.println("❌ WiFi bağlanamadı");
+        }
     }
 }

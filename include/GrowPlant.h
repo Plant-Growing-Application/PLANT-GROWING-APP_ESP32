@@ -89,8 +89,8 @@ public:
     void StateBluetooth(bool btState);
     void StateWifi(bool wfState);
     void SelectedPage();
-    void ShowClock();
-    void ShowIP();
-    void ShowMac();
+    void ShowClock(const String &timeStr);
+    void ShowIP(const String &ipStr);
+    void ShowMac(const String &macStr);
 };
 #endif // GROW_PLANT_H
