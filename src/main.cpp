@@ -69,6 +69,25 @@ void Task_WiFiMonitor(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
+void Task_WifiLed(void *pvParameters)
+{
+    for (;;)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            digitalWrite(WIFI_LED, HIGH);
+            vTaskDelay(pdMS_TO_TICKS(200));
+            digitalWrite(WIFI_LED, LOW);
+            vTaskDelay(pdMS_TO_TICKS(200)); // bağlıysa hızlı yanıp sönme
+        }
+        else
+        {
+            digitalWrite(WIFI_LED, LOW); // bağlantı yoksa kapalı
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -82,6 +101,7 @@ void setup()
     pinMode(PIN_ENCODER_PUSH, INPUT_PULLUP);
     pinMode(PIN_CONFIRM_BUTTON, INPUT_PULLUP);
     pinMode(PIN_BACK_BUTTON, INPUT_PULLUP);
+    pinMode(WIFI_LED, OUTPUT);
 
     WiFi.begin("TP-Link_CDE6", "79222006");
     wifi.connect(5000);
@@ -90,6 +110,7 @@ void setup()
     webServer.begin();
 
     // Task’lar
+    xTaskCreate(Task_WifiLed, "WifiLed", 1024, NULL, 1, NULL);
     xTaskCreate(Task_Display, "DisplayTask", 4096, NULL, 1, NULL);
     xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 2048, NULL, 1, NULL);
     xTaskCreate([](void *)

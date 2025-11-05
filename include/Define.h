@@ -27,4 +27,5 @@ extern RealTimeClock rtc;     // sadece bildir
 #define PIN_ENCODER_PUSH 25
 #define PIN_CONFIRM_BUTTON 26
 #define PIN_BACK_BUTTON 27
+#define WIFI_LED 2
 #endif // DEFINE_H
