@@ -175,49 +175,53 @@ void GrowPlant::ShowClock(const String &timeStr)
 void GrowPlant::SelectedPage()
 {
     // Buton durumu oku (LOW = basılı)
-    IsEncoderPressed = digitalRead(PIN_ENCODER_PUSH); // tersle, HIGH=basılmamış
-    IsBackPressed = !digitalRead(PIN_BACK_BUTTON);    // Exit tuşu     // Sadece butona dokunduğun an tetikle
+    IsEncoderPressed = digitalRead(PIN_ENCODER_PUSH);
+
+    // Encoder basıldığında (HIGH->LOW geçişi yakala)
     if (IsEncoderPressed && !PreviousPressed && CurrentPage != PAGE_INTRO)
     {
-        isInPage = true;
-        int lineLength = 7;
-        // Köşe çizgilerini çiz
-        // Sol üst
-        oled.drawFastHLine(0, 0, lineLength, SSD1306_WHITE);
-        oled.drawFastVLine(0, 0, lineLength, SSD1306_WHITE);
+        isInPage = !isInPage; // Sayfa içindeysek çık, dışındaysak gir
 
-        // Sağ üst
-        oled.drawFastHLine(128 - lineLength, 0, lineLength, SSD1306_WHITE);
-        oled.drawFastVLine(127 - 1, 0, lineLength, SSD1306_WHITE);
-
-        // Sol alt
-        oled.drawFastHLine(0, 63 - 1, lineLength, SSD1306_WHITE);
-        oled.drawFastVLine(0, 63 - lineLength, lineLength, SSD1306_WHITE);
-
-        // Sağ alt
-        oled.drawFastHLine(128 - lineLength, 63 - 1, lineLength, SSD1306_WHITE);
-        oled.drawFastVLine(127 - 1, 63 - lineLength, lineLength, SSD1306_WHITE);
-        oled.display();
-    }
-    // EXIT (geri tuşu)
-    if (IsBackPressed && !PrevBackPressed && isInPage)
-    {
-        isInPage = false;
-        switch (CurrentPage)
+        if (isInPage)
         {
-        case PAGE_INTRO:
-            GoToPageIntro();
-            break;
-        case PAGE_BLUETOOTH:
-            GoToPageBluetooth();
-            break;
-        case PAGE_WIFI:
-            GoToPageWifi(); // Varsayılan olarak WIFI kapalı
-            break;
-        } // Durumları kaydet
+            int lineLength = 7;
+            // Köşe çizgilerini çiz
+            // Sol üst
+            oled.drawFastHLine(0, 0, lineLength, SSD1306_WHITE);
+            oled.drawFastVLine(0, 0, lineLength, SSD1306_WHITE);
+
+            // Sağ üst
+            oled.drawFastHLine(128 - lineLength, 0, lineLength, SSD1306_WHITE);
+            oled.drawFastVLine(127 - 1, 0, lineLength, SSD1306_WHITE);
+
+            // Sol alt
+            oled.drawFastHLine(0, 63 - 1, lineLength, SSD1306_WHITE);
+            oled.drawFastVLine(0, 63 - lineLength, lineLength, SSD1306_WHITE);
+
+            // Sağ alt
+            oled.drawFastHLine(128 - lineLength, 63 - 1, lineLength, SSD1306_WHITE);
+            oled.drawFastVLine(127 - 1, 63 - lineLength, lineLength, SSD1306_WHITE);
+            oled.display();
+        }
+        else
+        {
+            // Sayfadan çıkınca, mevcut sayfayı yeniden yükle
+            switch (CurrentPage)
+            {
+            case PAGE_INTRO:
+                GoToPageIntro();
+                break;
+            case PAGE_BLUETOOTH:
+                GoToPageBluetooth();
+                break;
+            case PAGE_WIFI:
+                GoToPageWifi();
+                break;
+            }
+        }
     }
+
     PreviousPressed = IsEncoderPressed;
-    PrevBackPressed = IsBackPressed;
 }
 
 void GrowPlant::StateBluetooth(bool btState)
@@ -272,6 +276,45 @@ void GrowPlant::StateWifi(bool wfState)
         else
         {
             Serial.println("❌ WiFi bağlanamadı");
+        }
+    }
+}
+
+void GrowPlant::SendWifiInfo()
+{
+    // 🔹 Wi-Fi modunu al (STA = client, AP = server)
+    wifi_mode_t mode = WiFi.getMode();
+
+    // ⏰ Saat her zaman güncellensin (bağlantı olmasa bile)
+    currentTime = rtc.getFormattedTime();
+
+    // 🌐 IP ve MAC sadece AP veya STA moddaysa alınsın
+    if (mode == WIFI_AP || mode == WIFI_STA)
+    {
+        String ipNow = (mode == WIFI_AP) ? WiFi.softAPIP().toString()
+                                         : WiFi.localIP().toString();
+
+        if (currentIP != ipNow)
+            currentIP = ipNow;
+
+        if (currentMAC.isEmpty())
+            currentMAC = WiFi.macAddress();
+    }
+    if (CurrentPage == PAGE_INTRO)
+    {
+        ShowClock(currentTime);
+        ShowIP(currentIP);
+        ShowMac(currentMAC);
+    }
+}
+void GrowPlant::ReConnectWifi()
+{
+    if (!isServerMode) // sadece client modda kontrol et
+    {
+        if (WiFi.status() != WL_CONNECTED)
+        {
+            WiFi.reconnect();
+            Serial.println("🔁 WiFi yeniden bağlanıyor...");
         }
     }
 }

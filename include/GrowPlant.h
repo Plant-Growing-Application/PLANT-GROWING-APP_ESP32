@@ -92,5 +92,7 @@ public:
     void ShowClock(const String &timeStr);
     void ShowIP(const String &ipStr);
     void ShowMac(const String &macStr);
+    void ReConnectWifi();
+    void SendWifiInfo();
 };
 #endif // GROW_PLANT_H
