@@ -107,7 +107,7 @@ void setup()
     // Task'ları başlat
     xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 4096, NULL, 1, NULL);
     xTaskCreate(Task_Display, "DisplayTask", 4096, NULL, 2, NULL);
-    xTaskCreate(Task_WifiLed, "WifiLed", 2048, NULL, 3, NULL);
+    xTaskCreate(Task_WifiLed, "WifiLed", 1024, NULL, 3, NULL);
     xTaskCreate([](void *)
                 {
                     for (;;)

@@ -20,12 +20,11 @@ public:
 
     String getLocalIPString() const;
     IPAddress getLocalIP() const;
-
-private:
     const char *_ssid;
     const char *_password;
     const char *_prefsNs;
 
+private:
     bool _useDHCP;
     IPAddress _localIP, _gateway, _subnet, _dns;
 

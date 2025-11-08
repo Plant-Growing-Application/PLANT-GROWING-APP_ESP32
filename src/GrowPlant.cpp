@@ -1,5 +1,5 @@
 #include "Define.h"
-#include "WebServer.h"
+
 int8_t previousEncoderState = 0;
 
 bool bluetoothState = false;
@@ -11,6 +11,7 @@ extern String currentMAC;
 
 extern WebServerManager webServer;
 extern MyWiFi wifi;
+String displayIP;
 
 // Sayfa değiştirme
 void GrowPlant::ChangePage(int encoderValue)
@@ -74,19 +75,41 @@ void GrowPlant::GoToPageWifi()
     CurrentPage = PAGE_WIFI;
 
     oled.clearDisplay();
-    oled.setTextSize(2);
     oled.setTextColor(SSD1306_WHITE);
-    oled.setCursor((128 - 6 * 2 * 4) / 2, 0);
+
+    // 🔸 Başlık
+    oled.setTextSize(1.3);
+    oled.setCursor((128 - 6 * 2 * 4) / 2, 0); // "WIFI" ortala
     oled.print("WIFI");
 
+    // 🔸 Mod (SERVER / CLIENT)
     oled.setTextSize(1);
-    oled.setCursor(0, 28);
-    oled.print("WiFi: ");
-    oled.print(wifiState ? "SERVER" : "CLIENT");
+    oled.setCursor(0, 18);
+    oled.print("MODE: ");
+    oled.print(isServerMode ? "SERVER" : "CLIENT");
 
-    oled.drawLine(0, 38, 60, 38, SSD1306_WHITE);
+    // 🔸 Ayrım çizgisi
+    oled.drawLine(0, 28, 127, 28, SSD1306_WHITE);
+
+    // 🔸 SSID
+    oled.setCursor(0, 34);
+    if (isServerMode) // Server modu
+    {
+        oled.print("SSID: ESP32_SERVER"); // SoftAP SSID
+        oled.setCursor(0, 44);
+        oled.print("PASS: 12345678"); // SoftAP şifre
+    }
+    else if (!isServerMode) // Client modu
+    {
+        oled.print("SSID: TP-Link_CDE6"); // SoftAP SSID
+        oled.setCursor(0, 44);
+        oled.print("PASS: 79222006"); // SoftAP şifre
+    }
+
+    ShowIP(currentIP);
     oled.display();
 }
+
 void GrowPlant::GoToPageBluetooth()
 {
     CurrentPage = PAGE_BLUETOOTH;
@@ -122,15 +145,12 @@ void GrowPlant::GoToPageBluetooth()
 
 void GrowPlant::ShowIP(const String &ipStr)
 {
-    if (CurrentPage != PAGE_INTRO)
-        return;
 
     if (ipStr == "0.0.0.0" || ipStr.isEmpty())
         return;
 
     // 📡 Mod türüne göre IP belirle
-    String displayIP;
-    if (WiFi.getMode() == WIFI_AP)
+    if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA)
         displayIP = WiFi.softAPIP().toString(); // Server mod (ESP32 Access Point)
     else if (WiFi.getMode() == WIFI_STA)
         displayIP = WiFi.localIP().toString(); // Client mod (modeme bağlı)
@@ -142,9 +162,18 @@ void GrowPlant::ShowIP(const String &ipStr)
     oled.setTextColor(SSD1306_WHITE);
 
     // Her sayfa dönüşünde sıfırdan çiz
-    oled.fillRect(0, 28, 128, 10, SSD1306_BLACK);
-    oled.setCursor(0, 28);
-    oled.print("WiFi: " + displayIP);
+    if (CurrentPage == PAGE_INTRO)
+    {
+        oled.fillRect(0, 28, 128, 10, SSD1306_BLACK);
+        oled.setCursor(0, 28);
+        oled.print("WiFi: " + displayIP);
+    }
+    else if (CurrentPage == PAGE_WIFI)
+    {
+        oled.fillRect(30, 58, 98, 8, SSD1306_BLACK); // sadece IP alanını temizle
+        oled.setCursor(0, 54);
+        oled.print("IP: " + displayIP);
+    }
 
     oled.display();
 }
@@ -246,8 +275,8 @@ void GrowPlant::StateWifi(bool wfState)
     // Görsel kısım
     if (CurrentPage == PAGE_WIFI)
     {
-        oled.fillRect(33, 28, 60, 10, SSD1306_BLACK);
-        oled.setCursor(33, 28);
+        oled.fillRect(33, 18, 60, 10, SSD1306_BLACK);
+        oled.setCursor(33, 18);
         oled.setTextColor(SSD1306_WHITE);
         oled.print(wifiState ? "SERVER" : "CLIENT");
         oled.display();
@@ -309,12 +338,10 @@ void GrowPlant::SendWifiInfo()
 }
 void GrowPlant::ReConnectWifi()
 {
-    if (!isServerMode) // sadece client modda kontrol et
+
+    if (WiFi.status() != WL_CONNECTED)
     {
-        if (WiFi.status() != WL_CONNECTED)
-        {
-            WiFi.reconnect();
-            Serial.println("🔁 WiFi yeniden bağlanıyor...");
-        }
+        WiFi.reconnect();
+        Serial.println("🔁 WiFi yeniden bağlanıyor...");
     }
 }

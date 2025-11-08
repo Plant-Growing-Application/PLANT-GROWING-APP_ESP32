@@ -1,4 +1,5 @@
 #include "define.h"
+#include "MyWifi.h"
 
 MyWiFi::MyWiFi(const char *prefsNamespace)
     : _ssid(nullptr), _password(nullptr), _prefsNs(prefsNamespace),
