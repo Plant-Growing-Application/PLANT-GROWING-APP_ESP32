@@ -1,6 +1,6 @@
 #include "define.h"
+#include "MyWiFi.h"
 
-wifi_mode_t mode = WiFi.getMode();
 GrowPlant growPlant;
 DisplayProtocol DpProtocol;
 MyWiFi wifi("wifi");
@@ -30,7 +30,19 @@ void Task_WiFiMonitor(void *pvParameters)
     esp_task_wdt_add(NULL);
     for (;;)
     {
-        growPlant.ReConnectWifi();
+        if (wifi.isWpsActive())
+        {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_task_wdt_reset();
+            continue;
+        }
+
+        // KAPALI → WDT reset haricinde hiçbir blok yok
+        if (!wifi.isConnected())
+        {
+            wifi.connect(5000);
+        }
+
         growPlant.SendWifiInfo();
         vTaskDelay(pdMS_TO_TICKS(1000));
         esp_task_wdt_reset();
@@ -77,8 +89,17 @@ void setup()
     pinMode(WIFI_LED, OUTPUT);
     digitalWrite(WIFI_LED, LOW);
 
-    WiFi.begin("TP-Link_CDE6", "79222006");
-    wifi.connect(20000);
+    wifi.attachWpsHandler(); // event bağla
+    bool connected = wifi.connect(20000);
+
+    if (!connected)
+    {
+        Serial.println("⚠️ WiFi yok → WPS başlatılıyor...");
+        wifi.startWPS();
+    }
+    else
+        Serial.println("✅ Kayıtlı bilgiler ile bağlandı");
+ 
 
     webServer.begin();
     rtc.begin();
@@ -87,9 +108,8 @@ void setup()
     xTaskCreate(Task_Display, "DisplayTask", 8192, NULL, 2, NULL);
     xTaskCreate(Task_WifiLed, "WifiLed", 2048, NULL, 3, NULL);
 
-    // WHATCH DOG TIMER
     esp_task_wdt_init(WDT_TIMEOUT, true);
-    Serial.println("✅ Setup tamamlandı, task'lar başlatıldı!");
+    Serial.println("✅ Setup tamamlandı!");
 }
 
 void loop()

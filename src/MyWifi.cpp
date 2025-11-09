@@ -1,17 +1,37 @@
-#include "define.h"
-#include "MyWifi.h"
+#include "MyWiFi.h"
+#include <string.h> // memset
+
+// statikler tanımla
+bool MyWiFi::_wpsActive = false;
+esp_wps_config_t MyWiFi::_wps_config; // init elle yapılacak
 
 MyWiFi::MyWiFi(const char *prefsNamespace)
-    : _ssid(nullptr), _password(nullptr), _prefsNs(prefsNamespace),
+    : _prefsNs(prefsNamespace),
+      _ssid(nullptr), _password(nullptr),
       _useDHCP(true),
-      _localIP(0, 0, 0, 0), _gateway(0, 0, 0, 0), _subnet(0, 0, 0, 0), _dns(8, 8, 8, 8)
+      _localIP(0, 0, 0, 0), _gateway(0, 0, 0, 0), _subnet(0, 0, 0, 0),
+      _dns(8, 8, 8, 8)
 {
+    _ssidStr = "";
+    _passwordStr = "";
+
+    // güvenli wps config init (makroya güvenme)
+    memset(&_wps_config, 0, sizeof(_wps_config));
+    _wps_config.wps_type = WPS_TYPE_PBC;
 }
 
 void MyWiFi::begin(const char *ssid, const char *password)
 {
-    _ssid = ssid;
-    _password = password;
+    if (ssid && strlen(ssid) > 0)
+    {
+        _ssidStr = String(ssid);
+        _ssid = _ssidStr.c_str();
+    }
+    if (password && strlen(password) > 0)
+    {
+        _passwordStr = String(password);
+        _password = _passwordStr.c_str();
+    }
 
     _prefs.begin(_prefsNs, false);
 
@@ -27,9 +47,12 @@ void MyWiFi::begin(const char *ssid, const char *password)
             String sn = _prefs.getString("sn", "");
             String dn = _prefs.getString("dn", "");
 
-            parseIP(lip.c_str(), _localIP);
-            parseIP(gw.c_str(), _gateway);
-            parseIP(sn.c_str(), _subnet);
+            if (lip.length())
+                parseIP(lip.c_str(), _localIP);
+            if (gw.length())
+                parseIP(gw.c_str(), _gateway);
+            if (sn.length())
+                parseIP(sn.c_str(), _subnet);
             if (dn.length())
                 parseIP(dn.c_str(), _dns);
         }
@@ -79,7 +102,7 @@ bool MyWiFi::setStaticIP(const char *localIP, const char *gateway, const char *s
     return true;
 }
 
-void MyWiFi::saveSettings()
+bool MyWiFi::saveSettings()
 {
     _prefs.begin(_prefsNs, false);
     _prefs.putInt("mode", _useDHCP ? 0 : 1);
@@ -100,6 +123,7 @@ void MyWiFi::saveSettings()
     }
 
     _prefs.end();
+    return true;
 }
 
 void MyWiFi::clearSettings()
@@ -108,6 +132,8 @@ void MyWiFi::clearSettings()
     _prefs.clear();
     _prefs.end();
     _useDHCP = true;
+    _ssidStr = "";
+    _passwordStr = "";
 }
 
 bool MyWiFi::applyConfig()
@@ -123,9 +149,27 @@ bool MyWiFi::applyConfig()
 
 bool MyWiFi::connect(unsigned long timeoutMs)
 {
+    // Eğer _ssidStr boşsa Preferences'dan oku
+    if (_ssidStr.length() == 0)
+    {
+        _prefs.begin(_prefsNs, true);
+        String ssid = _prefs.getString("ssid", "");
+        String pass = _prefs.getString("pass", "");
+        _prefs.end();
+
+        if (ssid.length())
+        {
+            _ssidStr = ssid;
+            _passwordStr = pass;
+            _ssid = _ssidStr.c_str();
+            _password = _passwordStr.c_str();
+        }
+    }
+
     if (WiFi.status() == WL_CONNECTED)
-        return true; // zaten bağlı
-    if (!_ssid)
+        return true;
+
+    if (_ssidStr.length() == 0)
         return false;
 
     if (!_useDHCP)
@@ -133,7 +177,7 @@ bool MyWiFi::connect(unsigned long timeoutMs)
     else
         WiFi.mode(WIFI_STA);
 
-    WiFi.begin(_ssid, _password);
+    WiFi.begin(_ssidStr.c_str(), _passwordStr.c_str());
 
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs)
@@ -162,4 +206,88 @@ String MyWiFi::getLocalIPString() const
 IPAddress MyWiFi::getLocalIP() const
 {
     return WiFi.localIP();
+}
+
+/* -------- WPS / Event handling --------------- */
+
+void MyWiFi::attachWpsHandler()
+{
+    WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t info)
+                 { this->onWiFiEvent(event); });
+}
+
+void MyWiFi::startWPS()
+{
+    _wpsActive = true;
+
+    Serial.println("WPS Başlatılıyor...");
+
+    WiFi.disconnect(true); // eski bağlantıları sök
+    WiFi.mode(WIFI_STA);   // <-- BUNUN BURADA olması ŞART
+    delay(200);            // ESP ye nefes
+
+    // wps kaldır varsa
+    esp_wifi_wps_disable();
+
+    esp_err_t r = esp_wifi_wps_enable(&_wps_config);
+    if (r != ESP_OK)
+    {
+        Serial.printf("esp_wifi_wps_enable HATA: %d\n", r);
+        return; // <-- enable hata ise CONTINUE ETME
+    }
+
+    r = esp_wifi_wps_start(0);
+    Serial.printf("esp_wifi_wps_start: %d\n", r);
+}
+
+void MyWiFi::onWiFiEvent(WiFiEvent_t event)
+{
+    switch (event)
+    {
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+        Serial.print("IP: ");
+        Serial.println(WiFi.localIP());
+        _wpsActive = false;
+        break;
+
+    case ARDUINO_EVENT_WPS_ER_SUCCESS:
+    {
+        _wpsActive = false;
+        Serial.println("WPS BAŞARILI - credential alınıyor...");
+
+        wifi_config_t cfg;
+        if (esp_wifi_get_config(WIFI_IF_STA, &cfg) == ESP_OK)
+        {
+            String ssd = String((char *)cfg.sta.ssid);
+            String pss = String((char *)cfg.sta.password);
+
+            Serial.printf("Alinan SSID: %s\n", ssd.c_str());
+            Serial.printf("Alinan PASS len: %d\n", (int)pss.length());
+
+            Preferences p;
+            p.begin("wifi", false);
+            p.putString("ssid", ssd);
+            p.putString("pass", pss);
+            p.end();
+        }
+        else
+        {
+            Serial.println("esp_wifi_get_config hata");
+        }
+
+        esp_wifi_wps_disable();
+        WiFi.begin();
+        break;
+    }
+
+    case ARDUINO_EVENT_WPS_ER_FAILED:
+    case ARDUINO_EVENT_WPS_ER_TIMEOUT:
+        Serial.println("WPS BAŞARISIZ veya TIMEOUT");
+        _wpsActive = false;
+        esp_wifi_wps_disable();
+        break;
+
+    default:
+        break;
+    }
 }
