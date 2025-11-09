@@ -13,6 +13,8 @@
 #include <AsyncTCP.h>
 #include "WebServer.h"
 #include <esp_task_wdt.h>
+#include <ArduinoJson.h>
+#include <SPIFFS.h>
 // #include "WPS.h"
 // #include "esp_wifi.h"    // wifi_config_t, esp_wifi_get_config vb.
 // #include "esp_err.h"     // esp_err_t

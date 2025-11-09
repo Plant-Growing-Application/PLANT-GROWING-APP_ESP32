@@ -78,7 +78,7 @@ void GrowPlant::GoToPageWifi()
     oled.setTextColor(SSD1306_WHITE);
 
     // 🔸 Başlık
-    oled.setTextSize(1.3);
+    oled.setTextSize(2);
     oled.setCursor((128 - 6 * 2 * 4) / 2, 0); // "WIFI" ortala
     oled.print("WIFI");
 
@@ -86,20 +86,20 @@ void GrowPlant::GoToPageWifi()
     oled.setTextSize(1);
     oled.setCursor(0, 18);
     oled.print("MODE: ");
-    oled.print(isServerMode ? "SERVER" : "CLIENT");
+    oled.print(IsServerMode ? "SERVER" : "CLIENT");
 
     // 🔸 Ayrım çizgisi
     oled.drawLine(0, 28, 127, 28, SSD1306_WHITE);
 
     // 🔸 SSID
     oled.setCursor(0, 34);
-    if (isServerMode) // Server modu
+    if (IsServerMode) // Server modu
     {
         oled.print("SSID: ESP32_SERVER"); // SoftAP SSID
         oled.setCursor(0, 44);
         oled.print("PASS: 12345678"); // SoftAP şifre
     }
-    else if (!isServerMode) // Client modu
+    else if (!IsServerMode) // Client modu
     {
         oled.print("SSID: TP-Link_CDE6"); // SoftAP SSID
         oled.setCursor(0, 44);
@@ -270,7 +270,7 @@ void GrowPlant::StateBluetooth(bool btState)
 void GrowPlant::StateWifi(bool wfState)
 {
     wifiState = wfState;
-    isServerMode = wifiState;
+    IsServerMode = wifiState;
 
     // Görsel kısım
     if (CurrentPage == PAGE_WIFI)
@@ -282,22 +282,24 @@ void GrowPlant::StateWifi(bool wfState)
         oled.display();
     }
 
-    // 🌐 Gerçek işlevsel kısım
-    if (wifiState)
+    if (IsServerMode)
     {
-        // Server Mode (ESP kendi WiFi’sini kuracak)
-        Serial.println("📡 SERVER MODE aktif");
-        WiFi.mode(WIFI_AP);
+        // 🔹 SERVER + CLIENT aynı anda aktif olsun
+        Serial.println("📡 SERVER MODE aktif (AP + STA)");
+        WiFi.mode(WIFI_AP_STA);  // 👈 kritik değişiklik
+
+        // SoftAP başlat (ESP kendi ağı)
         WiFi.softAP("ESP32_SERVER", "12345678");
+
+        IPAddress apIP = WiFi.softAPIP();
+        Serial.print("🌐 AP IP: ");
+        Serial.println(apIP);
         webServer.begin();
     }
     else
     {
-        // Client Mode (mevcut modem)
-        Serial.println("🌐 CLIENT MODE aktif");
         WiFi.mode(WIFI_STA);
-        WiFi.begin("TP-Link_CDE6", "79222006");
-        if (wifi.connect(5000))
+        if (WiFi.status() == WL_CONNECTED)
         {
             Serial.println("✅ WiFi bağlandı");
             webServer.begin();
@@ -308,6 +310,7 @@ void GrowPlant::StateWifi(bool wfState)
         }
     }
 }
+
 
 void GrowPlant::SendWifiInfo()
 {

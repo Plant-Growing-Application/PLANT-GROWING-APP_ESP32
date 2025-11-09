@@ -82,6 +82,7 @@ public:
 
     int CurrentPage = 0;
     bool isInPage = false;
+    bool IsServerMode = false;
     void ChangePage(int encoderValue);
     void GoToPageIntro();
     void GoToPageBluetooth();
