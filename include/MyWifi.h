@@ -8,9 +8,9 @@
 class MyWiFi
 {
 public:
-    MyWiFi(const char *prefsNamespace);
-    bool isWpsActive() const { return _wpsActive; }
+    MyWiFi(const char *prefsNamespace = "wifi"); // tek constructor
 
+    // Başlat
     void begin(const char *ssid = nullptr, const char *password = nullptr);
 
     // Bağlan (timeout ms)
@@ -21,16 +21,21 @@ public:
     String getLocalIPString() const;
     IPAddress getLocalIP() const;
 
-    // ağ konfigürasyonu
+    // Ağ konfigürasyonu
     void useDHCP();
     bool setStaticIP(const char *localIP, const char *gateway, const char *subnet, const char *dns);
     bool saveSettings();
+    void setSSID(const char *ssid);
+    void setPassword(const char *pass);
+    const char *getSSID();
+    const char *getPassword();
     void clearSettings();
     bool applyConfig();
 
     // WPS / event handler
     void attachWpsHandler(); // WiFi.onEvent(...) bağlar — setup içinde çağır
     void startWPS();         // WPS PBC başlatır
+    bool isWpsActive() const { return _wpsActive; }
 
 private:
     // event callback (member function)

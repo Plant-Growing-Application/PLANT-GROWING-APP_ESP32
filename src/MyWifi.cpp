@@ -3,8 +3,9 @@
 
 // statikler tanımla
 bool MyWiFi::_wpsActive = false;
-esp_wps_config_t MyWiFi::_wps_config; // init elle yapılacak
+esp_wps_config_t MyWiFi::_wps_config;
 
+// Constructor
 MyWiFi::MyWiFi(const char *prefsNamespace)
     : _prefsNs(prefsNamespace),
       _ssid(nullptr), _password(nullptr),
@@ -15,11 +16,12 @@ MyWiFi::MyWiFi(const char *prefsNamespace)
     _ssidStr = "";
     _passwordStr = "";
 
-    // güvenli wps config init (makroya güvenme)
+    // güvenli WPS config init
     memset(&_wps_config, 0, sizeof(_wps_config));
     _wps_config.wps_type = WPS_TYPE_PBC;
 }
 
+// Başlat
 void MyWiFi::begin(const char *ssid, const char *password)
 {
     if (ssid && strlen(ssid) > 0)
@@ -61,6 +63,7 @@ void MyWiFi::begin(const char *ssid, const char *password)
     _prefs.end();
 }
 
+// Helper: IP parse
 bool MyWiFi::parseIP(const char *ipStr, IPAddress &out)
 {
     if (!ipStr || strlen(ipStr) < 7)
@@ -75,10 +78,8 @@ bool MyWiFi::parseIP(const char *ipStr, IPAddress &out)
     return true;
 }
 
-void MyWiFi::useDHCP()
-{
-    _useDHCP = true;
-}
+// DHCP / Static
+void MyWiFi::useDHCP() { _useDHCP = true; }
 
 bool MyWiFi::setStaticIP(const char *localIP, const char *gateway, const char *subnet, const char *dns)
 {
@@ -102,27 +103,20 @@ bool MyWiFi::setStaticIP(const char *localIP, const char *gateway, const char *s
     return true;
 }
 
+// Setter / Getter
+void MyWiFi::setSSID(const char *ssid) { _ssidStr = String(ssid); _ssid = _ssidStr.c_str(); }
+void MyWiFi::setPassword(const char *pass) { _passwordStr = String(pass); _password = _passwordStr.c_str(); }
+const char *MyWiFi::getSSID() { return _ssid; }
+const char *MyWiFi::getPassword() { return _password; }
+
+// Kaydet / temizle
 bool MyWiFi::saveSettings()
 {
     _prefs.begin(_prefsNs, false);
-    _prefs.putInt("mode", _useDHCP ? 0 : 1);
-
-    if (!_useDHCP)
-    {
-        _prefs.putString("lip", _localIP.toString());
-        _prefs.putString("gw", _gateway.toString());
-        _prefs.putString("sn", _subnet.toString());
-        _prefs.putString("dn", _dns.toString());
-    }
-    else
-    {
-        _prefs.remove("lip");
-        _prefs.remove("gw");
-        _prefs.remove("sn");
-        _prefs.remove("dn");
-    }
-
+    _prefs.putString("ssid", _ssidStr);
+    _prefs.putString("pass", _passwordStr);
     _prefs.end();
+    Serial.println("✅ WiFi bilgileri kaydedildi!");
     return true;
 }
 
@@ -136,6 +130,7 @@ void MyWiFi::clearSettings()
     _passwordStr = "";
 }
 
+// Apply config
 bool MyWiFi::applyConfig()
 {
     if (_useDHCP)
@@ -147,9 +142,9 @@ bool MyWiFi::applyConfig()
     return WiFi.config(_localIP, _gateway, _subnet, _dns);
 }
 
+// Connect
 bool MyWiFi::connect(unsigned long timeoutMs)
 {
-    // Eğer _ssidStr boşsa Preferences'dan oku
     if (_ssidStr.length() == 0)
     {
         _prefs.begin(_prefsNs, true);
@@ -168,7 +163,6 @@ bool MyWiFi::connect(unsigned long timeoutMs)
 
     if (WiFi.status() == WL_CONNECTED)
         return true;
-
     if (_ssidStr.length() == 0)
         return false;
 
@@ -186,54 +180,32 @@ bool MyWiFi::connect(unsigned long timeoutMs)
     return WiFi.status() == WL_CONNECTED;
 }
 
-bool MyWiFi::isDHCP() const
-{
-    return _useDHCP;
-}
+// Status / IP
+bool MyWiFi::isDHCP() const { return _useDHCP; }
+bool MyWiFi::isConnected() const { return WiFi.status() == WL_CONNECTED; }
+String MyWiFi::getLocalIPString() const { return WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "0.0.0.0"; }
+IPAddress MyWiFi::getLocalIP() const { return WiFi.localIP(); }
 
-bool MyWiFi::isConnected() const
-{
-    return WiFi.status() == WL_CONNECTED;
-}
-
-String MyWiFi::getLocalIPString() const
-{
-    if (WiFi.status() != WL_CONNECTED)
-        return "0.0.0.0";
-    return WiFi.localIP().toString();
-}
-
-IPAddress MyWiFi::getLocalIP() const
-{
-    return WiFi.localIP();
-}
-
-/* -------- WPS / Event handling --------------- */
-
+// WPS
 void MyWiFi::attachWpsHandler()
 {
-    WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t info)
-                 { this->onWiFiEvent(event); });
+    WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t info) { this->onWiFiEvent(event); });
 }
 
 void MyWiFi::startWPS()
 {
     _wpsActive = true;
-
     Serial.println("WPS Başlatılıyor...");
-
-    WiFi.disconnect(true); // eski bağlantıları sök
-    WiFi.mode(WIFI_STA);   // <-- BUNUN BURADA olması ŞART
-    delay(200);            // ESP ye nefes
-
-    // wps kaldır varsa
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_STA);
+    delay(200);
     esp_wifi_wps_disable();
 
     esp_err_t r = esp_wifi_wps_enable(&_wps_config);
     if (r != ESP_OK)
     {
         Serial.printf("esp_wifi_wps_enable HATA: %d\n", r);
-        return; // <-- enable hata ise CONTINUE ETME
+        return;
     }
 
     r = esp_wifi_wps_start(0);
@@ -245,8 +217,7 @@ void MyWiFi::onWiFiEvent(WiFiEvent_t event)
     switch (event)
     {
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-        Serial.print("IP: ");
-        Serial.println(WiFi.localIP());
+        Serial.print("IP: "); Serial.println(WiFi.localIP());
         _wpsActive = false;
         break;
 
@@ -254,26 +225,19 @@ void MyWiFi::onWiFiEvent(WiFiEvent_t event)
     {
         _wpsActive = false;
         Serial.println("WPS BAŞARILI - credential alınıyor...");
-
         wifi_config_t cfg;
         if (esp_wifi_get_config(WIFI_IF_STA, &cfg) == ESP_OK)
         {
             String ssd = String((char *)cfg.sta.ssid);
             String pss = String((char *)cfg.sta.password);
 
-            Serial.printf("Alinan SSID: %s\n", ssd.c_str());
-            Serial.printf("Alinan PASS len: %d\n", (int)pss.length());
-
             Preferences p;
-            p.begin("wifi", false);
+            p.begin(_prefsNs, false);
             p.putString("ssid", ssd);
             p.putString("pass", pss);
             p.end();
         }
-        else
-        {
-            Serial.println("esp_wifi_get_config hata");
-        }
+        else Serial.println("esp_wifi_get_config hata");
 
         esp_wifi_wps_disable();
         WiFi.begin();
@@ -287,7 +251,6 @@ void MyWiFi::onWiFiEvent(WiFiEvent_t event)
         esp_wifi_wps_disable();
         break;
 
-    default:
-        break;
+    default: break;
     }
 }

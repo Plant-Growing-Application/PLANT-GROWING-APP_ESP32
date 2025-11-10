@@ -1,18 +1,65 @@
+/* Genel gövde */
 body {
-  font-family: "Poppins", sans-serif;
+  font-family: "Poppins", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: linear-gradient(135deg, #1d3557, #457b9d);
-  color: white;
-  text-align: center;
+  color: #333;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   margin: 0;
   padding: 0;
   min-height: 100vh;
 }
 
-h2 {
-  margin-top: 20px;
-  font-size: 1.8rem;
+/* Kart tasarımı (wifi sayfası + kontrol sayfası) */
+.wifi-card,
+.control-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  padding: 28px 24px;
+  width: 90%;
+  max-width: 420px;
+  text-align: center;
+  animation: fadeIn 0.4s ease-in-out;
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Başlık ve buton */
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  color: #007bff;
+  font-weight: 700;
+}
+
+#wifi-btn {
+  background: #007bff;
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  border-radius: 25px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+
+#wifi-btn:hover {
+  background: #005fcc;
+  transform: scale(1.05);
+}
+
+/* Röle butonları */
 .relay-container {
   display: flex;
   justify-content: center;
@@ -37,25 +84,97 @@ h2 {
 }
 
 .btn.on {
-  background: #2a9d8f;
+  background: #28a745;
   color: #fff;
-  box-shadow: 0 4px 8px rgba(42, 157, 143, 0.4);
+  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.4);
 }
 
 .btn:hover {
   transform: scale(1.05);
 }
 
-.info {
-  margin-top: 10px;
-  font-size: 1.2rem;
+/* Bilgi ve durum yazıları */
+.status-text {
+  font-size: 1rem;
+  color: #555;
+  margin-top: 20px;
+  font-style: italic;
 }
 
+/* Footer */
 footer {
-  position: absolute;
-  bottom: 15px;
-  width: 100%;
-  font-size: 0.9rem;
-  opacity: 0.8;
+  margin-top: 30px;
+  text-align: center;
+  color: #666;
+  font-size: 0.9em;
 }
-    
+
+/* --- Wi-Fi setup sayfası (önceden verdiğin) --- */
+label {
+  display: block;
+  margin-top: 14px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+}
+
+input[type=text],
+input[type=password],
+select {
+  width: 100%;
+  padding: 10px 12px;
+  margin-top: 6px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1em;
+  transition: border 0.2s, box-shadow 0.2s;
+}
+
+input:focus,
+select:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 6px rgba(0,123,255,0.2);
+  outline: none;
+}
+
+.scan-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.scan-btn {
+  flex-shrink: 0;
+  background: #28a745;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.scan-btn:hover {
+  background: #218838;
+  transform: scale(1.05);
+}
+
+.save-btn {
+  background: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 18px;
+  margin-top: 20px;
+  font-size: 1em;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.save-btn:hover {
+  background: #005fcc;
+  transform: scale(1.03);
+}

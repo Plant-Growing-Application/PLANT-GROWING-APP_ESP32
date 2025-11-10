@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ESP32 Wi-Fi Kurulum</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="wifi-card">
+    <h2>📶 ESP32 Wi-Fi Kurulum</h2>
+    <p class="small">
+      Telefonunu <b>ESP32_Setup</b> ağına bağla,<br>
+      ardından aşağıdan Wi-Fi bilgilerini gir.
+    </p>
+
+    <div class="wifi-scan">
+      <label for="networks">Bulunan Ağlar</label>
+      <div class="scan-row">
+        <select id="networks"><option value="">-- Tarama yap --</option></select>
+        <button class="scan-btn" onclick="scanNetworks()">🔍 Tara</button>
+      </div>
+    </div>
+
+    <form id="wifiForm" method="POST" action="/saveWiFi" class="wifi-form">
+      <label for="ssid">SSID</label>
+      <input type="text" id="ssid" name="ssid" placeholder="Ağ adı (SSID)" required>
+
+      <label for="pass">Parola</label>
+      <input type="password" id="pass" name="pass" placeholder="Parola (WPA/WPA2)">
+
+      <button type="submit" class="save-btn">💾 Kaydet ve Bağlan</button>
+    </form>
+
+    <p class="small">
+      Alternatif: SSID'yi listeden seç, parola girip <b>Kaydet</b>’e tıkla.
+    </p>
+
+    <p id="status" class="status-text"></p>
+  </div>
+
+  <script src="/script.js"></script>
+</body>
+</html>
