@@ -1,9 +1,6 @@
 #include "define.h"
-#include "MyWiFi.h"
-#include "WebServer.h"
 GrowPlant growPlant;
 DisplayProtocol DpProtocol;
-MyWiFi wifi("wifi");
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 WebServerManager webServer(server, ws, wifi); // 3. parametre eklendi
@@ -86,6 +83,17 @@ void setup()
 {
     Serial.begin(115200);
     Wire.begin(21, 22);
+    MyEeprom.Begin();
+    // EEPROM’dan ayarları oku
+    if (!MyEeprom.GetSettings(MyEeprom.Setting))
+    {
+        Serial.println("EEPROM boş veya geçersiz, varsayılan ayarlar kullanılıyor.");
+        memset(&MyEeprom.Setting, 0, sizeof(Settings));
+    }
+    Serial.print("Connecting to SSID: ");
+    Serial.println(MyEeprom.Setting.SSID);
+    Serial.print("Password: ");
+    Serial.println(MyEeprom.Setting.Password);
     if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDRESS))
     {
         Serial.println("❌ OLED başlatılamadı!");
@@ -102,13 +110,25 @@ void setup()
     digitalWrite(WIFI_LED, LOW);
 
     wifi.attachWpsHandler(); // event bağla
+    if (strlen(MyEeprom.Setting.SSID) == 0)
+    {
+        Serial.println("EEPROM boş, AP mod başlatılıyor");
+        WiFi.mode(WIFI_AP);
+        WiFi.softAP("MyDeviceAP");
+    }
+    else
+    {
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(MyEeprom.Setting.SSID, MyEeprom.Setting.Password);
+    }
     bool connected = wifi.connect(20000);
 
     if (!connected)
     {
         Serial.println("⚠️ WiFi yok → Server Mod başlatılıyor...");
         WiFi.mode(WIFI_AP);
-        WiFi.softAP("ESP32_SERVER");
+        // SoftAP başlat (ESP kendi ağı)
+        WiFi.softAP("ESP32_SERVER", "12345678");
         currentIP = WiFi.softAPIP().toString();
         Serial.println("🌐 SoftAP IP: " + currentIP);
     }
@@ -132,4 +152,33 @@ void setup()
 void loop()
 {
     ws.cleanupClients();
+
+    if (webServer.wifiShouldReconnect)
+    {
+        webServer.wifiShouldReconnect = false;
+
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(MyEeprom.Setting.SSID, MyEeprom.Setting.Password);
+
+        Serial.print("Connecting to SSID: ");
+        Serial.println(MyEeprom.Setting.SSID);
+
+        // Opsiyonel: WiFi bağlanana kadar bekle
+        unsigned long start = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - start < 10000)
+        {
+            delay(100); // küçük delay → WDT tetiklemez
+        }
+
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            Serial.print("Connected! IP: ");
+            Serial.println(WiFi.localIP());
+        }
+        else
+        {
+            Serial.println("Failed to connect.");
+        }
+    }
 }

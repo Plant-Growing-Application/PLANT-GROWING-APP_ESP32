@@ -4,11 +4,13 @@
 #include <ESPAsyncWebServer.h>
 #include "MyWiFi.h"
 
-class WebServerManager {
+class WebServerManager
+{
 public:
     WebServerManager(AsyncWebServer &server, AsyncWebSocket &ws, MyWiFi &wifiRef);
 
     void begin();
+    bool wifiShouldReconnect;
 
 private:
     AsyncWebServer &_server;

@@ -2,16 +2,12 @@
 
 int8_t previousEncoderState = 0;
 
-bool bluetoothState = false;
-bool wifiState = false;
-extern bool isServerMode;
 extern String currentTime;
 extern String currentIP;
 extern String currentMAC;
 
 extern WebServerManager webServer;
 extern MyWiFi wifi;
-String displayIP;
 
 // Sayfa değiştirme
 void GrowPlant::ChangePage(int encoderValue)
@@ -39,6 +35,9 @@ void GrowPlant::ChangePage(int encoderValue)
         case PAGE_WIFI:
             GoToPageWifi(); // Varsayılan olarak WIFI kapalı
             break;
+        case PAGE_WPS:
+            GoToPageWPS(); // Varsayılan olarak WIFI kapalı
+            break;
             // Diğer sayfalar için ekle
         }
     }
@@ -47,10 +46,13 @@ void GrowPlant::ChangePage(int encoderValue)
         switch (CurrentPage)
         {
         case PAGE_BLUETOOTH:
-            StateBluetooth(!bluetoothState);
+            StateBluetooth(!MyEeprom.Setting.IsBluetoothActive);
             break;
         case PAGE_WIFI:
-            StateWifi(!wifiState);
+            StateWifi(!MyEeprom.Setting.IsServerMode);
+            break;
+        case PAGE_WPS:
+            StateWPS(!MyEeprom.Setting.IsWpsActive);
             break;
         default:
             break;
@@ -86,27 +88,62 @@ void GrowPlant::GoToPageWifi()
     oled.setTextSize(1);
     oled.setCursor(0, 18);
     oled.print("MODE: ");
-    oled.print(IsServerMode ? "SERVER" : "CLIENT");
+    oled.print(MyEeprom.Setting.IsServerMode ? "SERVER" : "CLIENT");
 
     // 🔸 Ayrım çizgisi
     oled.drawLine(0, 28, 127, 28, SSD1306_WHITE);
 
     // 🔸 SSID
     oled.setCursor(0, 34);
-    if (IsServerMode) // Server modu
+    if (MyEeprom.Setting.IsServerMode) // Server modu
     {
         oled.print("SSID: ESP32_SERVER"); // SoftAP SSID
         oled.setCursor(0, 44);
         oled.print("PASS: 12345678"); // SoftAP şifre
     }
-    else if (!IsServerMode) // Client modu
+    else if (!MyEeprom.Setting.IsServerMode) // Client modu
     {
-        oled.print("SSID: TP-Link_CDE6"); // SoftAP SSID
+        // 🔸 SSID ve Password
+        oled.setCursor(0, 34);
+        oled.print("SSID: ");
+        oled.print(MyEeprom.Setting.SSID); // EEPROM’dan al
+
         oled.setCursor(0, 44);
-        oled.print("PASS: 79222006"); // SoftAP şifre
+        oled.print("PASS: ");
+        oled.print(MyEeprom.Setting.Password); // EEPROM’dan al
     }
 
-    ShowIP(currentIP);
+    ShowIP();
+    oled.display();
+}
+void GrowPlant::GoToPageWPS()
+{
+    CurrentPage = PAGE_WPS;
+    oled.clearDisplay();
+
+    // Üst başlık: WPS
+    oled.setTextSize(2);
+    oled.setTextColor(SSD1306_WHITE);
+    String title = "WPS";
+
+    int16_t x1, y1;
+    uint16_t w, h;
+    oled.getTextBounds(title, 0, 0, &x1, &y1, &w, &h);
+    int centerX = (oled.width() - w) / 2;
+    int centerY = (oled.height() - h) / 4 - 10; // biraz yukarıdaf
+    oled.setCursor(centerX, centerY);
+    oled.print(title);
+
+    // Ortada bilgi
+    oled.setTextSize(1);
+    oled.setCursor(0, 28);
+    oled.print("WPS: ");
+    StateWPS(MyEeprom.Setting.IsWpsActive);
+
+    // Alt çizgi (metnin altına)
+    int lineY = 38; // Yazı yüksekliğinin hemen altı
+    oled.drawLine(0, lineY, 60, lineY, SSD1306_WHITE);
+
     oled.display();
 }
 
@@ -134,7 +171,7 @@ void GrowPlant::GoToPageBluetooth()
     oled.setTextSize(1);
     oled.setCursor(0, 28);
     oled.print("Bluetooth: ");
-    StateBluetooth(bluetoothState);
+    StateBluetooth(MyEeprom.Setting.IsBluetoothActive);
 
     // Alt çizgi (metnin altına)
     int lineY = 38; // Yazı yüksekliğinin hemen altı
@@ -143,36 +180,35 @@ void GrowPlant::GoToPageBluetooth()
     oled.display();
 }
 
-void GrowPlant::ShowIP(const String &ipStr)
+void GrowPlant::ShowIP()
 {
+    // 🖥️ IP stringi güncelle
+    String ipStr;
+    if (MyEeprom.Setting.IsServerMode)
+        ipStr = WiFi.softAPIP().toString(); // Server mod
+    if (!MyEeprom.Setting.IsServerMode)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+            ipStr = WiFi.localIP().toString(); // Client mod
+        else
+            ipStr = "Connecting...";
+    }
 
-    if (ipStr == "0.0.0.0" || ipStr.isEmpty())
-        return;
-
-    // 📡 Mod türüne göre IP belirle
-    if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA)
-        displayIP = WiFi.softAPIP().toString(); // Server mod (ESP32 Access Point)
-    else if (WiFi.getMode() == WIFI_STA)
-        displayIP = WiFi.localIP().toString(); // Client mod (modeme bağlı)
-    else
-        displayIP = "0.0.0.0";
-
-    // 🖥️ OLED güncelleme
+    // OLED güncelle
     oled.setTextSize(1);
     oled.setTextColor(SSD1306_WHITE);
-
     // Her sayfa dönüşünde sıfırdan çiz
     if (CurrentPage == PAGE_INTRO)
     {
         oled.fillRect(0, 28, 128, 10, SSD1306_BLACK);
         oled.setCursor(0, 28);
-        oled.print("WiFi: " + displayIP);
+        oled.print("WiFi: " + ipStr);
     }
     else if (CurrentPage == PAGE_WIFI)
     {
-        oled.fillRect(30, 58, 98, 8, SSD1306_BLACK); // sadece IP alanını temizle
+        oled.fillRect(30, 58, 98, 8, SSD1306_BLACK); // IP alanını temizle
         oled.setCursor(0, 54);
-        oled.print("IP: " + displayIP);
+        oled.print("IP: " + ipStr);
     }
 
     oled.display();
@@ -246,6 +282,9 @@ void GrowPlant::SelectedPage()
             case PAGE_WIFI:
                 GoToPageWifi();
                 break;
+            case PAGE_WPS:
+                GoToPageWPS();
+                break;
             }
         }
     }
@@ -255,7 +294,7 @@ void GrowPlant::SelectedPage()
 
 void GrowPlant::StateBluetooth(bool btState)
 {
-    bluetoothState = btState;
+    MyEeprom.Setting.IsBluetoothActive = btState;
 
     // Eğer şu an Bluetooth sayfasındaysak ekranı güncelle
     if (CurrentPage == PAGE_BLUETOOTH)
@@ -263,14 +302,13 @@ void GrowPlant::StateBluetooth(bool btState)
         oled.fillRect(58, 28, 30, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
         oled.setCursor(60, 28);                       // "ON/OFF" yazısının konumu
         oled.setTextColor(SSD1306_WHITE);
-        oled.print(bluetoothState ? "ON" : "OFF");
+        oled.print(MyEeprom.Setting.IsBluetoothActive ? "ON" : "OFF");
         oled.display();
     }
 }
 void GrowPlant::StateWifi(bool wfState)
 {
-    wifiState = wfState;
-    IsServerMode = wifiState;
+    MyEeprom.Setting.IsServerMode = !MyEeprom.Setting.IsServerMode;
 
     // Görsel kısım
     if (CurrentPage == PAGE_WIFI)
@@ -278,15 +316,17 @@ void GrowPlant::StateWifi(bool wfState)
         oled.fillRect(33, 18, 60, 10, SSD1306_BLACK);
         oled.setCursor(33, 18);
         oled.setTextColor(SSD1306_WHITE);
-        oled.print(wifiState ? "SERVER" : "CLIENT");
+        oled.print(MyEeprom.Setting.IsServerMode ? "SERVER" : "CLIENT");
+
+        // oled.print(MyEeprom.Setting.IsServerMode ? "CLIENT" : "SERVER");
         oled.display();
     }
 
-    if (IsServerMode)
+    if (MyEeprom.Setting.IsServerMode)
     {
         // 🔹 SERVER + CLIENT aynı anda aktif olsun
         Serial.println("📡 SERVER MODE aktif (AP + STA)");
-        WiFi.mode(WIFI_AP_STA);  // 👈 kritik değişiklik
+        WiFi.mode(WIFI_AP_STA); // 👈 kritik değişiklik
 
         // SoftAP başlat (ESP kendi ağı)
         WiFi.softAP("ESP32_SERVER", "12345678");
@@ -298,7 +338,8 @@ void GrowPlant::StateWifi(bool wfState)
     }
     else
     {
-        WiFi.mode(WIFI_STA);
+        Serial.println("💻 CLIENT MODE aktif (STA)");
+        WiFi.mode(WIFI_STA); // Sadece Station olarak ayarla
         if (WiFi.status() == WL_CONNECTED)
         {
             Serial.println("✅ WiFi bağlandı");
@@ -310,8 +351,19 @@ void GrowPlant::StateWifi(bool wfState)
         }
     }
 }
+void GrowPlant::StateWPS(bool wpsState)
+{
+    MyEeprom.Setting.IsWpsActive = wpsState;
 
-
+    if (CurrentPage == PAGE_WPS)
+    {
+        oled.fillRect(30, 28, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
+        oled.setCursor(30, 28);                       // "ON/OFF" yazısının konumu
+        oled.setTextColor(SSD1306_WHITE);
+        oled.print(MyEeprom.Setting.IsWpsActive ? "STOP" : "START");
+        oled.display();
+    }
+}
 void GrowPlant::SendWifiInfo()
 {
     // 🔹 Wi-Fi modunu al (STA = client, AP = server)
@@ -335,7 +387,7 @@ void GrowPlant::SendWifiInfo()
     if (CurrentPage == PAGE_INTRO)
     {
         ShowClock(currentTime);
-        ShowIP(currentIP);
+        ShowIP();
         ShowMac(currentMAC);
     }
 }

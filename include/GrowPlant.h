@@ -82,16 +82,17 @@ public:
 
     int CurrentPage = 0;
     bool isInPage = false;
-    bool IsServerMode = false;
     void ChangePage(int encoderValue);
     void GoToPageIntro();
     void GoToPageBluetooth();
     void GoToPageWifi();
+    void GoToPageWPS();
     void StateBluetooth(bool btState);
     void StateWifi(bool wfState);
+    void StateWPS(bool wpsState);
     void SelectedPage();
     void ShowClock(const String &timeStr);
-    void ShowIP(const String &ipStr);
+    void ShowIP();
     void ShowMac(const String &macStr);
     void ReConnectWifi();
     void SendWifiInfo();

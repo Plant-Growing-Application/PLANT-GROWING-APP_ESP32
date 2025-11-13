@@ -1,66 +1,64 @@
-#include "MyWiFi.h"
+#include "define.h"
 #include <string.h> // memset
-
+Settings Setting;
 // statikler tanımla
 bool MyWiFi::_wpsActive = false;
 esp_wps_config_t MyWiFi::_wps_config;
+String _ssidStr;
+String _passwordStr;
+const char *_ssid;
+const char *_password;
+MyWiFi wifi("wifi");
 
 // Constructor
 MyWiFi::MyWiFi(const char *prefsNamespace)
-    : _prefsNs(prefsNamespace),
-      _ssid(nullptr), _password(nullptr),
-      _useDHCP(true),
-      _localIP(0, 0, 0, 0), _gateway(0, 0, 0, 0), _subnet(0, 0, 0, 0),
-      _dns(8, 8, 8, 8)
+    : _useDHCP(true), _localIP(0, 0, 0, 0), _gateway(0, 0, 0, 0), _subnet(0, 0, 0, 0), _dns(8, 8, 8, 8)
 {
-    _ssidStr = "";
-    _passwordStr = "";
-
-    // güvenli WPS config init
-    memset(&_wps_config, 0, sizeof(_wps_config));
-    _wps_config.wps_type = WPS_TYPE_PBC;
+    // opsiyonel: prefsNamespace saklanabilir
 }
-
-// Başlat
 void MyWiFi::begin(const char *ssid, const char *password)
 {
+    // Wi-Fi SSID ve şifreyi parametrelerden al
     if (ssid && strlen(ssid) > 0)
     {
         _ssidStr = String(ssid);
         _ssid = _ssidStr.c_str();
+        snprintf(MyEeprom.Setting.SSID, sizeof(MyEeprom.Setting.SSID), "%s", ssid);
     }
     if (password && strlen(password) > 0)
     {
         _passwordStr = String(password);
         _password = _passwordStr.c_str();
+        snprintf(MyEeprom.Setting.Password, sizeof(MyEeprom.Setting.Password), "%s", password);
     }
 
-    _prefs.begin(_prefsNs, false);
+    // EEPROM'dan ayarları oku
+    MyEeprom.GetSettings(MyEeprom.Setting);
 
-    if (_prefs.isKey("mode"))
+    // DHCP mi yoksa Statik IP mi?
+    _useDHCP = (MyEeprom.Setting.IsServerMode == 0);
+
+    if (!_useDHCP)
     {
-        int mode = _prefs.getInt("mode", 1);
-        _useDHCP = (mode == 0);
 
-        if (!_useDHCP)
-        {
-            String lip = _prefs.getString("lip", "");
-            String gw = _prefs.getString("gw", "");
-            String sn = _prefs.getString("sn", "");
-            String dn = _prefs.getString("dn", "");
-
-            if (lip.length())
-                parseIP(lip.c_str(), _localIP);
-            if (gw.length())
-                parseIP(gw.c_str(), _gateway);
-            if (sn.length())
-                parseIP(sn.c_str(), _subnet);
-            if (dn.length())
-                parseIP(dn.c_str(), _dns);
-        }
+        Serial.println("Static IP Settings loaded from EEPROM:");
+    }
+    else
+    {
+        Serial.println("DHCP mode enabled (from EEPROM)");
     }
 
-    _prefs.end();
+    // Şimdi bağlantıyı başlat
+    if (_useDHCP)
+    {
+        WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+    }
+    else
+    {
+        WiFi.config(_localIP, _gateway, _subnet, _dns);
+    }
+
+    WiFi.begin(_ssid, _password);
 }
 
 // Helper: IP parse
@@ -103,33 +101,6 @@ bool MyWiFi::setStaticIP(const char *localIP, const char *gateway, const char *s
     return true;
 }
 
-// Setter / Getter
-void MyWiFi::setSSID(const char *ssid) { _ssidStr = String(ssid); _ssid = _ssidStr.c_str(); }
-void MyWiFi::setPassword(const char *pass) { _passwordStr = String(pass); _password = _passwordStr.c_str(); }
-const char *MyWiFi::getSSID() { return _ssid; }
-const char *MyWiFi::getPassword() { return _password; }
-
-// Kaydet / temizle
-bool MyWiFi::saveSettings()
-{
-    _prefs.begin(_prefsNs, false);
-    _prefs.putString("ssid", _ssidStr);
-    _prefs.putString("pass", _passwordStr);
-    _prefs.end();
-    Serial.println("✅ WiFi bilgileri kaydedildi!");
-    return true;
-}
-
-void MyWiFi::clearSettings()
-{
-    _prefs.begin(_prefsNs, false);
-    _prefs.clear();
-    _prefs.end();
-    _useDHCP = true;
-    _ssidStr = "";
-    _passwordStr = "";
-}
-
 // Apply config
 bool MyWiFi::applyConfig()
 {
@@ -145,25 +116,12 @@ bool MyWiFi::applyConfig()
 // Connect
 bool MyWiFi::connect(unsigned long timeoutMs)
 {
-    if (_ssidStr.length() == 0)
-    {
-        _prefs.begin(_prefsNs, true);
-        String ssid = _prefs.getString("ssid", "");
-        String pass = _prefs.getString("pass", "");
-        _prefs.end();
-
-        if (ssid.length())
-        {
-            _ssidStr = ssid;
-            _passwordStr = pass;
-            _ssid = _ssidStr.c_str();
-            _password = _passwordStr.c_str();
-        }
-    }
+    if (sizeof(MyEeprom.Setting.SSID) == 0)
+        MyEeprom.Setting.IsServerMode = true;
 
     if (WiFi.status() == WL_CONNECTED)
         return true;
-    if (_ssidStr.length() == 0)
+    if (sizeof(MyEeprom.Setting.SSID) == 0)
         return false;
 
     if (!_useDHCP)
@@ -171,7 +129,7 @@ bool MyWiFi::connect(unsigned long timeoutMs)
     else
         WiFi.mode(WIFI_STA);
 
-    WiFi.begin(_ssidStr.c_str(), _passwordStr.c_str());
+    WiFi.begin(MyEeprom.Setting.SSID, MyEeprom.Setting.Password);
 
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs)
@@ -189,7 +147,8 @@ IPAddress MyWiFi::getLocalIP() const { return WiFi.localIP(); }
 // WPS
 void MyWiFi::attachWpsHandler()
 {
-    WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t info) { this->onWiFiEvent(event); });
+    WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t info)
+                 { this->onWiFiEvent(event); });
 }
 
 void MyWiFi::startWPS()
@@ -217,7 +176,8 @@ void MyWiFi::onWiFiEvent(WiFiEvent_t event)
     switch (event)
     {
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-        Serial.print("IP: "); Serial.println(WiFi.localIP());
+        Serial.print("IP: ");
+        Serial.println(WiFi.localIP());
         _wpsActive = false;
         break;
 
@@ -225,32 +185,42 @@ void MyWiFi::onWiFiEvent(WiFiEvent_t event)
     {
         _wpsActive = false;
         Serial.println("WPS BAŞARILI - credential alınıyor...");
+
         wifi_config_t cfg;
         if (esp_wifi_get_config(WIFI_IF_STA, &cfg) == ESP_OK)
         {
-            String ssd = String((char *)cfg.sta.ssid);
-            String pss = String((char *)cfg.sta.password);
+            // WPS ile alınan SSID ve Password
+            String ssid = String((char *)cfg.sta.ssid);
+            String pass = String((char *)cfg.sta.password);
 
-            Preferences p;
-            p.begin(_prefsNs, false);
-            p.putString("ssid", ssd);
-            p.putString("pass", pss);
-            p.end();
+            // EEPROM’a kaydet
+            MyEeprom.Setting.IsWpsActive = true; // flag
+            strncpy(MyEeprom.Setting.SSID, ssid.c_str(), sizeof(MyEeprom.Setting.SSID));
+            strncpy(MyEeprom.Setting.Password, pass.c_str(), sizeof(MyEeprom.Setting.Password));
+
+            MyEeprom.SaveSettings(MyEeprom.Setting);
+            Serial.println("SSID ve şifre EEPROM'a kaydedildi ✅");
         }
-        else Serial.println("esp_wifi_get_config hata");
+        else
+        {
+            Serial.println("esp_wifi_get_config hata ❌");
+        }
 
         esp_wifi_wps_disable();
-        WiFi.begin();
+        WiFi.begin(); // kaydedilmiş credential ile bağlan
         break;
     }
 
     case ARDUINO_EVENT_WPS_ER_FAILED:
     case ARDUINO_EVENT_WPS_ER_TIMEOUT:
-        Serial.println("WPS BAŞARISIZ veya TIMEOUT");
+        Serial.println("WPS BAŞARISIZ veya TIMEOUT ❌");
         _wpsActive = false;
+        MyEeprom.Setting.IsWpsActive = false;    // flag
+        MyEeprom.SaveSettings(MyEeprom.Setting); // EEPROM’a kaydet
         esp_wifi_wps_disable();
         break;
 
-    default: break;
+    default:
+        break;
     }
 }

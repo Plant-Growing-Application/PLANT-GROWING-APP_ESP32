@@ -9,6 +9,8 @@
         "string_view": "cpp",
         "initializer_list": "cpp",
         "displayprotocol": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "list": "cpp",
+        "regex": "cpp"
     }
 }
