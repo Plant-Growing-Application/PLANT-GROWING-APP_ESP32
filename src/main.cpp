@@ -50,9 +50,8 @@ void Task_WiFiMonitor(void *pvParameters)
 
         MywiFi.ConnectFromWPS();
         MywiFi.ConnectFromWeb();
-        GrowPlant.SendWifiInfo();
         esp_task_wdt_reset();
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
@@ -133,6 +132,7 @@ void setup()
 
     esp_task_wdt_init(WDT_TIMEOUT, true);
     Serial.println("✅ Setup tamamlandı!");
+    GrowPlant.SendWifiInfo();
 }
 
 void loop()

@@ -10,23 +10,48 @@ DisplayProtocol::DisplayProtocol() : pin(0), lastState(HIGH), lastDebounceTimeMs
 void IRAM_ATTR encoderInterruptHandler()
 {
     uint32_t currentTimeUs = micros();
-    if (currentTimeUs - lastInterruptTimeUs < 800)
+    // 800 yerine 250 us olarak değiştirildi
+    if (currentTimeUs - lastInterruptTimeUs < 250)
         return;
     lastInterruptTimeUs = currentTimeUs;
+
     int pinAState = digitalRead(33);
     int pinBState = digitalRead(32);
+
+    // Geçerli pin durumunu al
     uint8_t currentState = (pinAState << 1) | pinBState;
     uint8_t previousState = lastEncoderState;
-    if ((previousState == 0b00 && currentState == 0b01) ||
-        (previousState == 0b01 && currentState == 0b11) ||
-        (previousState == 0b11 && currentState == 0b10) ||
-        (previousState == 0b10 && currentState == 0b00))
-        encoderStepDelta++;
-    else if ((previousState == 0b00 && currentState == 0b10) ||
-             (previousState == 0b10 && currentState == 0b11) ||
-             (previousState == 0b11 && currentState == 0b01) ||
-             (previousState == 0b01 && currentState == 0b00))
-        encoderStepDelta--;
+
+    // Yön tespiti (Dörtlü Adımlama/Quadrature Logic)
+    if (previousState == 0b00)
+    {
+        if (currentState == 0b01)
+            encoderStepDelta++;
+        else if (currentState == 0b10)
+            encoderStepDelta--;
+    }
+    else if (previousState == 0b01)
+    {
+        if (currentState == 0b11)
+            encoderStepDelta++;
+        else if (currentState == 0b00)
+            encoderStepDelta--;
+    }
+    else if (previousState == 0b11)
+    {
+        if (currentState == 0b10)
+            encoderStepDelta++;
+        else if (currentState == 0b01)
+            encoderStepDelta--;
+    }
+    else if (previousState == 0b10)
+    {
+        if (currentState == 0b00)
+            encoderStepDelta++;
+        else if (currentState == 0b11)
+            encoderStepDelta--;
+    }
+
     lastEncoderState = currentState;
 }
 int DisplayProtocol::ReadEncoderDetentSteps()
@@ -40,7 +65,7 @@ int DisplayProtocol::ReadEncoderDetentSteps()
     if (!delta)
         return 0;
     accumulatedSteps += delta;
-    const int stepsPerDetent = 2;
+    const int stepsPerDetent = 2; // Bu değer enkoderin kalitesine göre 4 olabilir.
     int detentCount = 0;
     while (accumulatedSteps >= stepsPerDetent)
     {

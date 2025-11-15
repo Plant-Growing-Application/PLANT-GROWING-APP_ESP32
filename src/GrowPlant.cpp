@@ -71,6 +71,7 @@ void GrowPlantClass::GoToPageIntro()
     oled.setCursor(0, 28);
     oled.setCursor(0, 41);
     oled.display();
+    SendWifiInfo();
 }
 void GrowPlantClass::GoToPageWifi()
 {
@@ -138,17 +139,17 @@ void GrowPlantClass::GoToPageWPS()
     {
         oled.setTextSize(1);
         oled.fillRect(30, 35, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
-        oled.setCursor(30, 35);                       
+        oled.setCursor(30, 35);
         oled.setTextColor(SSD1306_WHITE);
         oled.print("Internet Bagli");
         oled.display();
     }
     else
     {
-        
+
         oled.setTextSize(1);
         oled.fillRect(30, 35, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
-        oled.setCursor(30, 35);                      
+        oled.setCursor(30, 35);
         oled.setTextColor(SSD1306_WHITE);
         oled.print("Wps Baslat");
         oled.display();
@@ -282,7 +283,7 @@ void GrowPlantClass::SelectedPage()
             switch (CurrentPage)
             {
             case PAGE_INTRO:
-                GoToPageIntro();
+                // GoToPageIntro();
                 break;
             case PAGE_BLUETOOTH:
                 GoToPageBluetooth();
@@ -362,19 +363,9 @@ void GrowPlantClass::StateWifi(bool wfState)
 void GrowPlantClass::StateWPS(bool wpsState)
 {
     MyEeprom.Setting.IsWpsActive = wpsState;
-
     if (CurrentPage == PAGE_WPS)
     {
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            oled.setTextSize(1);
-            oled.fillRect(30, 28, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
-            oled.setCursor(30, 28);                       // "ON/OFF" yazısının konumu
-            oled.setTextColor(SSD1306_WHITE);
-            oled.print("Internet Bagli");
-            oled.display();
-        }
-        else
+        if (!WiFi.status() == WL_CONNECTED)
         {
             oled.setTextSize(1);
             oled.fillRect(30, 28, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
