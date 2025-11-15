@@ -16,10 +16,11 @@
 #include <SPIFFS.h>
 #include <EEPROM.h>
 #include "MyEeproom.h"
+#include "Wps.h"
+#include <esp_wifi.h>
+#include <esp_wps.h>
+#include "esp_err.h" // esp_err_t
 
-// #include "WPS.h"
-// #include "esp_wifi.h"    // wifi_config_t, esp_wifi_get_config vb.
-// #include "esp_err.h"     // esp_err_t
 #define DISPLAY_WIDTH 128
 #define DISPLAY_HEIGHT 64
 #define OLED_RESET_PIN -1

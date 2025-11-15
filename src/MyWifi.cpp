@@ -8,7 +8,7 @@ String _ssidStr;
 String _passwordStr;
 const char *_ssid;
 const char *_password;
-MyWiFi wifi("wifi");
+MyWiFi MywiFi("wifi");
 
 // Constructor
 MyWiFi::MyWiFi(const char *prefsNamespace)
@@ -151,26 +151,6 @@ void MyWiFi::attachWpsHandler()
                  { this->onWiFiEvent(event); });
 }
 
-void MyWiFi::startWPS()
-{
-    _wpsActive = true;
-    Serial.println("WPS Başlatılıyor...");
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_STA);
-    delay(200);
-    esp_wifi_wps_disable();
-
-    esp_err_t r = esp_wifi_wps_enable(&_wps_config);
-    if (r != ESP_OK)
-    {
-        Serial.printf("esp_wifi_wps_enable HATA: %d\n", r);
-        return;
-    }
-
-    r = esp_wifi_wps_start(0);
-    Serial.printf("esp_wifi_wps_start: %d\n", r);
-}
-
 void MyWiFi::onWiFiEvent(WiFiEvent_t event)
 {
     switch (event)
@@ -222,5 +202,90 @@ void MyWiFi::onWiFiEvent(WiFiEvent_t event)
 
     default:
         break;
+    }
+}
+
+void MyWiFi::ConnectFromWeb()
+{
+    if (wifiShouldReconnect)
+    {
+        wifiShouldReconnect = false;
+
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(MyEeprom.Setting.SSID, MyEeprom.Setting.Password);
+
+        Serial.print("Connecting to SSID: ");
+        Serial.println(MyEeprom.Setting.SSID);
+
+        // Opsiyonel: WiFi bağlanana kadar bekle
+        unsigned long start = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - start < 10000)
+        {
+            delay(100); // küçük delay → WDT tetiklemez
+        }
+
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            Serial.print("Connected! IP: ");
+            Serial.println(WiFi.localIP());
+        }
+        else
+        {
+            Serial.println("Failed to connect.");
+        }
+    }
+}
+
+void MyWiFi::ConnectFromWPS()
+{
+    if (GrowPlant.CurrentPage != PAGE_WPS)
+        return; // Sadece WPS sayfasında çalışsın
+
+    static unsigned long wpsStartTime = 0;
+    static bool wpsStarted = false;
+
+    bool backState = !digitalRead(PIN_BACK_BUTTON);
+
+    if (backState && !MywiFi.isConnected()) // Butona basılı
+    {
+        if (!wpsStarted)
+        {
+            // WPS başlat
+            wpsManager.StartWps();
+            wpsStarted = true;
+            wpsStartTime = millis(); // zamanlayıcı başlat
+
+            // OLED mesajı
+            oled.fillRect(0, 35, 128, 16, SSD1306_BLACK); // eski yazıyı sil
+            oled.setCursor(25, 35);
+            oled.setTextColor(SSD1306_WHITE);
+            oled.print("WPS Baslatildi");
+            oled.display();
+        }
+        else
+        {
+            // 2 saniye içinde bağlanmadıysa hata göster
+            if (!MywiFi.isConnected() && millis() - wpsStartTime > 2000)
+            {
+                oled.fillRect(0, 35, 128, 16, SSD1306_BLACK);
+                oled.setCursor(30, 35);
+                oled.setTextColor(SSD1306_WHITE);
+                oled.print("WPS Hata!");
+                oled.display();
+            }
+            else if (MywiFi.isConnected())
+            {
+                oled.fillRect(0, 35, 128, 16, SSD1306_BLACK);
+                oled.setCursor(30, 35);
+                oled.setTextColor(SSD1306_WHITE);
+                oled.print("WPS Basarili");
+                oled.display();
+            }
+        }
+    }
+    else // Buton bırakıldı
+    {
+        wpsStarted = false;
     }
 }

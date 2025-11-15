@@ -1,13 +1,13 @@
-#include "Wps.h"
+#include "define.h"
 
 static esp_wps_config_t wps_config = WPS_CONFIG_INIT_DEFAULT(WPS_TYPE_PBC);
-
+WpsManager wpsManager;
 void WpsManager::begin()
 {
     WiFi.onEvent(WpsManager::WiFiEvent);
 }
 
-void WpsManager::start()
+void WpsManager::StartWps()
 {
     Serial.println("WPS Başlatılıyor...");
     WiFi.mode(WIFI_STA);

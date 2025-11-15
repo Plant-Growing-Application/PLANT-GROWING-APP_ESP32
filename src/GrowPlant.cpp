@@ -1,7 +1,7 @@
 #include "Define.h"
 
 int8_t previousEncoderState = 0;
-
+GrowPlantClass GrowPlant;
 extern String currentTime;
 extern String currentIP;
 extern String currentMAC;
@@ -10,7 +10,7 @@ extern WebServerManager webServer;
 extern MyWiFi wifi;
 
 // Sayfa değiştirme
-void GrowPlant::ChangePage(int encoderValue)
+void GrowPlantClass::ChangePage(int encoderValue)
 {
     if (encoderValue != previousEncoderState && !isInPage)
     {
@@ -60,7 +60,7 @@ void GrowPlant::ChangePage(int encoderValue)
     }
 }
 
-void GrowPlant::GoToPageIntro()
+void GrowPlantClass::GoToPageIntro()
 {
     CurrentPage = PAGE_INTRO;
     oled.clearDisplay();
@@ -72,7 +72,7 @@ void GrowPlant::GoToPageIntro()
     oled.setCursor(0, 41);
     oled.display();
 }
-void GrowPlant::GoToPageWifi()
+void GrowPlantClass::GoToPageWifi()
 {
     CurrentPage = PAGE_WIFI;
 
@@ -116,7 +116,7 @@ void GrowPlant::GoToPageWifi()
     ShowIP();
     oled.display();
 }
-void GrowPlant::GoToPageWPS()
+void GrowPlantClass::GoToPageWPS()
 {
     CurrentPage = PAGE_WPS;
     oled.clearDisplay();
@@ -133,21 +133,29 @@ void GrowPlant::GoToPageWPS()
     int centerY = (oled.height() - h) / 4 - 10; // biraz yukarıdaf
     oled.setCursor(centerX, centerY);
     oled.print(title);
-
-    // Ortada bilgi
-    oled.setTextSize(1);
-    oled.setCursor(0, 28);
-    oled.print("WPS: ");
-    StateWPS(MyEeprom.Setting.IsWpsActive);
-
-    // Alt çizgi (metnin altına)
-    int lineY = 38; // Yazı yüksekliğinin hemen altı
-    oled.drawLine(0, lineY, 60, lineY, SSD1306_WHITE);
-
     oled.display();
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        oled.setTextSize(1);
+        oled.fillRect(30, 35, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
+        oled.setCursor(30, 35);                       
+        oled.setTextColor(SSD1306_WHITE);
+        oled.print("Internet Bagli");
+        oled.display();
+    }
+    else
+    {
+        
+        oled.setTextSize(1);
+        oled.fillRect(30, 35, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
+        oled.setCursor(30, 35);                      
+        oled.setTextColor(SSD1306_WHITE);
+        oled.print("Wps Baslat");
+        oled.display();
+    }
 }
 
-void GrowPlant::GoToPageBluetooth()
+void GrowPlantClass::GoToPageBluetooth()
 {
     CurrentPage = PAGE_BLUETOOTH;
     oled.clearDisplay();
@@ -180,7 +188,7 @@ void GrowPlant::GoToPageBluetooth()
     oled.display();
 }
 
-void GrowPlant::ShowIP()
+void GrowPlantClass::ShowIP()
 {
     // 🖥️ IP stringi güncelle
     String ipStr;
@@ -214,7 +222,7 @@ void GrowPlant::ShowIP()
     oled.display();
 }
 
-void GrowPlant::ShowMac(const String &macStr)
+void GrowPlantClass::ShowMac(const String &macStr)
 {
     if (macStr.isEmpty())
         return;
@@ -223,7 +231,7 @@ void GrowPlant::ShowMac(const String &macStr)
     oled.print("MAC:" + macStr);
     oled.display();
 }
-void GrowPlant::ShowClock(const String &timeStr)
+void GrowPlantClass::ShowClock(const String &timeStr)
 {
     if (timeStr.isEmpty())
         return;
@@ -237,7 +245,7 @@ void GrowPlant::ShowClock(const String &timeStr)
     oled.display();
 }
 
-void GrowPlant::SelectedPage()
+void GrowPlantClass::SelectedPage()
 {
     // Buton durumu oku (LOW = basılı)
     IsEncoderPressed = digitalRead(PIN_ENCODER_PUSH);
@@ -292,7 +300,7 @@ void GrowPlant::SelectedPage()
     PreviousPressed = IsEncoderPressed;
 }
 
-void GrowPlant::StateBluetooth(bool btState)
+void GrowPlantClass::StateBluetooth(bool btState)
 {
     MyEeprom.Setting.IsBluetoothActive = btState;
 
@@ -306,7 +314,7 @@ void GrowPlant::StateBluetooth(bool btState)
         oled.display();
     }
 }
-void GrowPlant::StateWifi(bool wfState)
+void GrowPlantClass::StateWifi(bool wfState)
 {
     MyEeprom.Setting.IsServerMode = !MyEeprom.Setting.IsServerMode;
 
@@ -351,20 +359,33 @@ void GrowPlant::StateWifi(bool wfState)
         }
     }
 }
-void GrowPlant::StateWPS(bool wpsState)
+void GrowPlantClass::StateWPS(bool wpsState)
 {
     MyEeprom.Setting.IsWpsActive = wpsState;
 
     if (CurrentPage == PAGE_WPS)
     {
-        oled.fillRect(30, 28, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
-        oled.setCursor(30, 28);                       // "ON/OFF" yazısının konumu
-        oled.setTextColor(SSD1306_WHITE);
-        oled.print(MyEeprom.Setting.IsWpsActive ? "STOP" : "START");
-        oled.display();
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            oled.setTextSize(1);
+            oled.fillRect(30, 28, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
+            oled.setCursor(30, 28);                       // "ON/OFF" yazısının konumu
+            oled.setTextColor(SSD1306_WHITE);
+            oled.print("Internet Bagli");
+            oled.display();
+        }
+        else
+        {
+            oled.setTextSize(1);
+            oled.fillRect(30, 28, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
+            oled.setCursor(30, 28);                       // "ON/OFF" yazısının konumu
+            oled.setTextColor(SSD1306_WHITE);
+            oled.print("Wps Baslat");
+            oled.display();
+        }
     }
 }
-void GrowPlant::SendWifiInfo()
+void GrowPlantClass::SendWifiInfo()
 {
     // 🔹 Wi-Fi modunu al (STA = client, AP = server)
     wifi_mode_t mode = WiFi.getMode();
@@ -389,14 +410,5 @@ void GrowPlant::SendWifiInfo()
         ShowClock(currentTime);
         ShowIP();
         ShowMac(currentMAC);
-    }
-}
-void GrowPlant::ReConnectWifi()
-{
-
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        WiFi.reconnect();
-        Serial.println("🔁 WiFi yeniden bağlanıyor...");
     }
 }

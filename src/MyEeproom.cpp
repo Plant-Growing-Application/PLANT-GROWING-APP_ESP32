@@ -31,13 +31,27 @@ bool MyEEPROM::GetSettings(Settings &outSetting)
 }
 
 // Ayarları temizle
-void MyEEPROM::ClearSettings()
+void MyEEPROM::ResetEeprom()
 {
-    StoredData sd;
-    memset(&sd, 0, sizeof(StoredData));
-    EEPROM.writeBytes(_address, (uint8_t *)&sd, sizeof(StoredData));
+    // EEPROM başlat
+    EEPROM.begin(sizeof(MyEeprom.Setting));
+    // String alanları temizle
+    memset(MyEeprom.Setting.SSID, 0, sizeof(MyEeprom.Setting.SSID));
+    memset(MyEeprom.Setting.Password, 0, sizeof(MyEeprom.Setting.Password));
+    memset(MyEeprom.Setting.IP, 0, sizeof(MyEeprom.Setting.IP));
+    memset(MyEeprom.Setting.MAC, 0, sizeof(MyEeprom.Setting.MAC));
+    // Bool değerleri default
+    MyEeprom.Setting.IsServerMode = true;
+    MyEeprom.Setting.IsBluetoothActive = false;
+    MyEeprom.Setting.IsWpsActive = false;
+
+    // EEPROM'a yaz ve commit et
+    EEPROM.put(0, MyEeprom.Setting);
     EEPROM.commit();
+
+    Serial.println("✅ EEPROM resetlendi");
 }
+
 
 // Global nesne
 MyEEPROM MyEeprom;

@@ -30,7 +30,7 @@ public:
     void Begin();  // EEPROM başlatma
     void SaveSettings(const Settings &Setting);
     bool GetSettings(Settings &outSetting);
-    void ClearSettings();
+    void ResetEeprom();
     void SaveIP(IPAddress ip, int ipOffset); // parametre ipOffset ile
     IPAddress GetIP(int ipOffset);
 

@@ -1,7 +1,6 @@
 // GrowPlant.h
 #ifndef GROW_PLANT_H
 #define GROW_PLANT_H
-#include <Arduino.h>
 
 const unsigned char myLogo[] PROGMEM = {
 
@@ -70,7 +69,7 @@ const unsigned char myLogo[] PROGMEM = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-class GrowPlant
+class GrowPlantClass
 {
 private:
 public:
@@ -94,7 +93,7 @@ public:
     void ShowClock(const String &timeStr);
     void ShowIP();
     void ShowMac(const String &macStr);
-    void ReConnectWifi();
     void SendWifiInfo();
 };
+extern GrowPlantClass GrowPlant;
 #endif // GROW_PLANT_H

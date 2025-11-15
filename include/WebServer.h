@@ -1,4 +1,6 @@
-// WebServer.h
+#ifndef WEBSEVER_MANEGER_H
+#define WEBSEVER_MANEGER_H
+
 #pragma once
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
@@ -8,9 +10,7 @@ class WebServerManager
 {
 public:
     WebServerManager(AsyncWebServer &server, AsyncWebSocket &ws, MyWiFi &wifiRef);
-
     void begin();
-    bool wifiShouldReconnect;
 
 private:
     AsyncWebServer &_server;
@@ -28,3 +28,6 @@ private:
     void handleScan(AsyncWebServerRequest *request);
     void handleNotFound(AsyncWebServerRequest *request);
 };
+extern WebServerManager WebServer;
+
+#endif /* WEBSEVER_MANEGER_H */

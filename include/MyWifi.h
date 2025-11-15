@@ -26,10 +26,14 @@ public:
 
     // WPS / event handler
     void attachWpsHandler(); // WiFi.onEvent(...) bağlar — setup içinde çağır
-    void startWPS();         // WPS PBC başlatır
+    void ConnectFromWeb();
+    void ConnectFromWPS(); // WPS PBC başlatır
     bool isWpsActive() const { return _wpsActive; }
+    bool wifiShouldReconnect = false;
 
 private:
+    unsigned long backPressTime = 0;
+    bool wpsRunning = false;
     // event callback (member function)
     void onWiFiEvent(WiFiEvent_t event);
 
@@ -44,4 +48,4 @@ private:
     static bool _wpsActive;
     static esp_wps_config_t _wps_config;
 };
-extern MyWiFi wifi; 
+extern MyWiFi MywiFi;

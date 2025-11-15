@@ -110,18 +110,18 @@ void WebServerManager::handleSaveWiFi(AsyncWebServerRequest *request)
         String pass = request->arg("pass");
 
         memset(MyEeprom.Setting.SSID, 0, sizeof(MyEeprom.Setting.SSID));
-        strncpy(MyEeprom.Setting.SSID, ssid.c_str(), sizeof(MyEeprom.Setting.SSID)-1);
-        MyEeprom.Setting.SSID[sizeof(MyEeprom.Setting.SSID)-1] = '\0';
+        strncpy(MyEeprom.Setting.SSID, ssid.c_str(), sizeof(MyEeprom.Setting.SSID) - 1);
+        MyEeprom.Setting.SSID[sizeof(MyEeprom.Setting.SSID) - 1] = '\0';
 
         memset(MyEeprom.Setting.Password, 0, sizeof(MyEeprom.Setting.Password));
-        strncpy(MyEeprom.Setting.Password, pass.c_str(), sizeof(MyEeprom.Setting.Password)-1);
-        MyEeprom.Setting.Password[sizeof(MyEeprom.Setting.Password)-1] = '\0';
+        strncpy(MyEeprom.Setting.Password, pass.c_str(), sizeof(MyEeprom.Setting.Password) - 1);
+        MyEeprom.Setting.Password[sizeof(MyEeprom.Setting.Password) - 1] = '\0';
 
         MyEeprom.Setting.IsWpsActive = false;
         MyEeprom.SaveSettings(MyEeprom.Setting);
 
         // **Reset yerine flag set et**
-        wifiShouldReconnect = true;
+        MywiFi.wifiShouldReconnect = true;
 
         request->send(200, "text/plain", "WIFI:OK");
     }
