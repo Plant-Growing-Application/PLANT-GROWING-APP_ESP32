@@ -15,11 +15,14 @@ typedef struct
     bool IsServerMode;
     bool IsBluetoothActive;
     bool IsWpsActive;
+    bool LittleFSFormatted;
 } Settings;
 
-struct StoredData {
+struct StoredData
+{
     uint32_t magic;
     Settings setting;
+    bool LittleFSFormatted;
 };
 
 class MyEEPROM
@@ -27,13 +30,12 @@ class MyEEPROM
 public:
     Settings Setting;
 
-    void Begin();  // EEPROM başlatma
+    void Begin(); // EEPROM başlatma
     void SaveSettings(const Settings &Setting);
     bool GetSettings(Settings &outSetting);
     void ResetEeprom();
     void SaveIP(IPAddress ip, int ipOffset); // parametre ipOffset ile
     IPAddress GetIP(int ipOffset);
-
     int _address = 0;
 
 private:

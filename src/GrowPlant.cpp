@@ -1,4 +1,5 @@
 #include "Define.h"
+#include <LittleFS.h>
 
 int8_t previousEncoderState = 0;
 GrowPlantClass GrowPlant;
@@ -403,3 +404,4 @@ void GrowPlantClass::SendWifiInfo()
         ShowMac(currentMAC);
     }
 }
+

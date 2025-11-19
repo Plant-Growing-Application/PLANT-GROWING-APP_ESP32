@@ -1,4 +1,6 @@
 #include "define.h"
+#include "MyEeproom.h"
+#include <LittleFS.h>
 DisplayProtocol DpProtocol;
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
@@ -81,6 +83,31 @@ void setup()
     Serial.begin(115200);
     Wire.begin(21, 22);
     MyEeprom.Begin();
+    if (!MyEeprom.GetSettings(MyEeprom.Setting))
+    {
+        Serial.println("EEPROM boş → varsayılan ayarlar");
+        memset(&MyEeprom.Setting, 0, sizeof(Settings));
+    }
+    if (!MyEeprom.Setting.LittleFSFormatted)
+    {
+        Serial.println("📌 İlk kurulum → LittleFS formatlanıyor...");
+        LittleFS.begin(true);
+        MyEeprom.Setting.LittleFSFormatted = true;
+        MyEeprom.SaveSettings(MyEeprom.Setting);
+    }
+    else
+    {
+        if (!LittleFS.begin(false))
+        {
+            Serial.println("❌ LittleFS mount hatası!");
+        }
+        else
+        {
+            Serial.println("✔ LittleFS hazır");
+        }
+    }
+    if (!SPIFFS.begin(true))
+        Serial.println("❌ SPIFFS açılamadı");
     // EEPROM’dan ayarları oku
     if (!MyEeprom.GetSettings(MyEeprom.Setting))
     {
@@ -107,7 +134,7 @@ void setup()
     digitalWrite(WIFI_LED, LOW);
 
     MywiFi.attachWpsHandler(); // event bağla
-    bool connected = MywiFi.connect(2000);
+    bool connected = MywiFi.connect(4000);
     if (!connected)
     {
         Serial.println("⚠️ WiFi yok → Server Mod başlatılıyor...");
@@ -126,6 +153,12 @@ void setup()
     }
     webServer.begin();
     rtc.begin();
+    if (!SqlManager::Instance().Begin("sensor.db"))
+        Serial.println("❌ SQLite DB açılamadı!");
+    else
+        Serial.println("📌 SQLite hazır!");
+
+    // Tasklar
     xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 8192, NULL, 1, NULL);
     xTaskCreate(Task_Display, "DisplayTask", 4096, NULL, 2, NULL);
     xTaskCreate(Task_WifiLed, "WifiLed", 2048, NULL, 3, NULL);

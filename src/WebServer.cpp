@@ -34,7 +34,13 @@ void WebServerManager::begin()
                { handleStyle(request); });
     _server.on("/script.js", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleScript(request); });
-
+    _server.on("/download_db", HTTP_GET, [](AsyncWebServerRequest *request)
+               {
+    if (LittleFS.exists("/sensor.db")) {
+        request->send(LittleFS, "/sensor.db", "application/octet-stream");
+    } else {
+        request->send(404, "text/plain", "DB Not Found");
+    } });
     // WiFi kaydetme
     _server.on("/saveWiFi", HTTP_POST, [this](AsyncWebServerRequest *request)
                { handleSaveWiFi(request); });
