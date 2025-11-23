@@ -1,11 +1,14 @@
 #include "define.h"
 #include "MyEeproom.h"
 #include <LittleFS.h>
+#include "SqlManager.h"
+
 DisplayProtocol DpProtocol;
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 WebServerManager webServer(server, ws, MywiFi); // 3. parametre eklendi
 RealTimeClock rtc("pool.ntp.org", 10800, 0);    // GMT+3
+unsigned long lastSave = 0;
 
 String currentIP = "";
 String currentMAC = "";
@@ -52,6 +55,8 @@ void Task_WiFiMonitor(void *pvParameters)
 
         MywiFi.ConnectFromWPS();
         MywiFi.ConnectFromWeb();
+        GrowPlant.SendWifiInfo();
+
         esp_task_wdt_reset();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -106,8 +111,6 @@ void setup()
             Serial.println("✔ LittleFS hazır");
         }
     }
-    if (!SPIFFS.begin(true))
-        Serial.println("❌ SPIFFS açılamadı");
     // EEPROM’dan ayarları oku
     if (!MyEeprom.GetSettings(MyEeprom.Setting))
     {
@@ -171,4 +174,16 @@ void setup()
 void loop()
 {
     ws.cleanupClients();
+    unsigned long now = millis();
+
+    if (now - lastSave >= 10000) // 10 saniye
+    {
+        lastSave = now;
+
+        float sensorValue = random(100, 300) / 10.0; // 10.0–30.0 arası örnek değer
+        SqlManager::Instance().InsertSensorValue(sensorValue);
+
+        Serial.print("🌡 Sensör kaydedildi: ");
+        Serial.println(sensorValue);
+    }
 }

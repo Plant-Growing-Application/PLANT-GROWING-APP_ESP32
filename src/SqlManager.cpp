@@ -1,5 +1,6 @@
 #include "SqlManager.h"
 #include <LittleFS.h>
+#include <ArduinoJson.h>
 
 SqlManager &SqlManager::Instance()
 {
@@ -18,16 +19,14 @@ SqlManager::~SqlManager()
 
 bool SqlManager::Begin(const char *dbName)
 {
-    // Mutlaka önce LittleFS açılmalı
     if (!LittleFS.begin(true))
     {
         Serial.println("❌ LittleFS mount FAILED!");
         return false;
     }
 
-    // Doğru SQLite dosya yolu
     String path = "/littlefs/";
-    path += dbName; // örn: sensor.db
+    path += dbName;
     const char *finalPath = path.c_str();
 
     Serial.print("📂 SQLite açılıyor: ");
@@ -37,13 +36,10 @@ bool SqlManager::Begin(const char *dbName)
 
     if (rc != SQLITE_OK)
     {
-        Serial.print("❌ SQLite açılamadı! Kod: ");
-        Serial.println(rc);
-        Serial.print("❌ Mesaj: ");
+        Serial.println("❌ SQLite açılamadı!");
         Serial.println(sqlite3_errmsg(Db));
 
-        if (Db)
-            sqlite3_close(Db);
+        sqlite3_close(Db);
         Db = nullptr;
 
         return false;
@@ -51,7 +47,7 @@ bool SqlManager::Begin(const char *dbName)
 
     Serial.println("✅ SQLite bağlantısı açıldı");
     isReady = true;
-
+    
     return CreateTable();
 }
 
@@ -80,6 +76,59 @@ bool SqlManager::Execute(const char *sql)
         return false;
     }
 
-    Serial.println("✔ SQL OK");
     return true;
+}
+
+// ⭐ SENSÖR DEĞERİ EKLEME
+bool SqlManager::InsertSensorValue(float value)
+{
+    if (!Db) return false;
+
+    const char *sql = "INSERT INTO sensor (value) VALUES (?);";
+    sqlite3_stmt *stmt = nullptr;
+
+    if (sqlite3_prepare_v2(Db, sql, -1, &stmt, NULL) != SQLITE_OK)
+    {
+        Serial.println(sqlite3_errmsg(Db));
+        return false;
+    }
+
+    sqlite3_bind_double(stmt, 1, value);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE)
+    {
+        Serial.println(sqlite3_errmsg(Db));
+        sqlite3_finalize(stmt);
+        return false;
+    }
+
+    sqlite3_finalize(stmt);
+    return true;
+}
+
+// ⭐ TÜM SATIRLARI JSON FORMATINDA GETİR
+String SqlManager::GetAllRowsAsJson()
+{
+    DynamicJsonDocument doc(8192);
+    JsonArray arr = doc.to<JsonArray>();
+
+    const char *sql = "SELECT id, value, time FROM sensor ORDER BY id DESC LIMIT 50;";
+    sqlite3_stmt *stmt;
+
+    if (sqlite3_prepare_v2(Db, sql, -1, &stmt, NULL) == SQLITE_OK)
+    {
+        while (sqlite3_step(stmt) == SQLITE_ROW)
+        {
+            JsonObject row = arr.createNestedObject();
+            row["id"] = sqlite3_column_int(stmt, 0);
+            row["value"] = sqlite3_column_double(stmt, 1);
+            row["time"] = (const char *)sqlite3_column_text(stmt, 2);
+        }
+    }
+
+    sqlite3_finalize(stmt);
+
+    String json;
+    serializeJson(arr, json);
+    return json;
 }

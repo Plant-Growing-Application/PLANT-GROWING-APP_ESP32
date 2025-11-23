@@ -19,7 +19,7 @@ private:
 
     void initWebSocket();
     void handleWebSocketMessage(void *arg, uint8_t *data, size_t len);
-
+    void handleDBRows(AsyncWebServerRequest *request);
     void handleRoot(AsyncWebServerRequest *request);
     void handleWiFi(AsyncWebServerRequest *request);
     void handleStyle(AsyncWebServerRequest *request);

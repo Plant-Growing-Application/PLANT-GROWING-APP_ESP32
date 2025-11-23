@@ -404,4 +404,3 @@ void GrowPlantClass::SendWifiInfo()
         ShowMac(currentMAC);
     }
 }
-

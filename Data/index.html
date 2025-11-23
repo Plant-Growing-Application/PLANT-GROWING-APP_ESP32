@@ -5,9 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ESP32 Kontrol Paneli</title>
   <link rel="stylesheet" href="/style.css" />
+  <style>
+    .db-container {
+      margin-top: 25px;
+      background: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 8px 6px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+
+    th {
+      background: #f4f4f4;
+      font-weight: bold;
+    }
+
+    .refresh-btn {
+      margin-top: 8px;
+      background: #4caf50;
+      color: white;
+      padding: 7px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+  </style>
 </head>
+
 <body>
   <div class="wifi-card control-card">
+
     <header class="panel-header">
       <h2>🌱 ESP32 Kontrol Paneli</h2>
       <button id="wifi-btn" onclick="window.location.href='/wifi'">📶 Wi-Fi Ayarları</button>
@@ -23,8 +63,56 @@
     <footer>
       <p>IP: <span id="ip">Yükleniyor...</span></p>
     </footer>
+
+    <!-- ⭐⭐⭐ SQLITE TABLO ALANI ⭐⭐⭐ -->
+    <div class="db-container">
+      <h3>📊 Kaydedilen Sensör Verileri</h3>
+
+      <button class="refresh-btn" onclick="loadTable()">🔄 Yenile</button>
+
+      <table id="dbTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Sensor</th>
+            <th>Değer</th>
+            <th>Zaman</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
   </div>
 
   <script src="/script.js"></script>
+
+  <script>
+    function loadTable() {
+      fetch('/api/get-rows')
+        .then(r => r.json())
+        .then(rows => {
+          let tbody = document.querySelector('#dbTable tbody');
+          tbody.innerHTML = "";
+
+          rows.forEach(r => {
+            tbody.innerHTML += `
+              <tr>
+                <td>${r.id}</td>
+                <td>${r.sensor}</td>
+                <td>${r.value.toFixed(2)}</td>
+                <td>${r.time}</td>
+              </tr>`;
+          });
+        });
+    }
+
+    // Sayfa açılınca yükle
+    loadTable();
+
+    // 10 saniyede bir tabloyu otomatik yenile
+    setInterval(loadTable, 10000);
+  </script>
+
 </body>
 </html>
