@@ -174,16 +174,4 @@ void setup()
 void loop()
 {
     ws.cleanupClients();
-    unsigned long now = millis();
-
-    if (now - lastSave >= 10000) // 10 saniye
-    {
-        lastSave = now;
-
-        float sensorValue = random(100, 300) / 10.0; // 10.0–30.0 arası örnek değer
-        SqlManager::Instance().InsertSensorValue(sensorValue);
-
-        Serial.print("🌡 Sensör kaydedildi: ");
-        Serial.println(sensorValue);
-    }
 }

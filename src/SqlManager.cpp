@@ -47,7 +47,7 @@ bool SqlManager::Begin(const char *dbName)
 
     Serial.println("✅ SQLite bağlantısı açıldı");
     isReady = true;
-    
+
     return CreateTable();
 }
 
@@ -82,7 +82,8 @@ bool SqlManager::Execute(const char *sql)
 // ⭐ SENSÖR DEĞERİ EKLEME
 bool SqlManager::InsertSensorValue(float value)
 {
-    if (!Db) return false;
+    if (!Db)
+        return false;
 
     const char *sql = "INSERT INTO sensor (value) VALUES (?);";
     sqlite3_stmt *stmt = nullptr;
@@ -131,4 +132,30 @@ String SqlManager::GetAllRowsAsJson()
     String json;
     serializeJson(arr, json);
     return json;
+}
+
+// SqlManager.cpp
+void SqlManager::ClearTable()
+{
+    sqlite3 *db;
+    if (sqlite3_open("/littlefs/sensor.db", &db) != SQLITE_OK)
+    {
+        Serial.println("❌ DB açılamadı!");
+        return;
+    }
+
+    const char *sql = "DELETE FROM logs;";
+    char *errMsg = nullptr;
+
+    if (sqlite3_exec(db, sql, NULL, NULL, &errMsg) != SQLITE_OK)
+    {
+        Serial.printf("❌ SQL temizleme hatası: %s\n", errMsg);
+        sqlite3_free(errMsg);
+    }
+    else
+    {
+        Serial.println("🗑️ Sensor tablosu temizlendi!");
+    }
+
+    sqlite3_close(db);
 }

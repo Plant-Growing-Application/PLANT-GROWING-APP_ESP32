@@ -13,6 +13,7 @@ public:
     bool Begin(const char *dbName);
     bool CreateTable();
     bool Execute(const char *sql);
+    void ClearTable();
 
     bool InsertSensorValue(float value);
     String GetAllRowsAsJson();

@@ -36,40 +36,54 @@ function sendCmd(id) {
   ws.send(JSON.stringify({ id }));
 }
 
-// WiFi tarama
-function scanNetworks() {
-  const status = document.getElementById('status');
-  if (status) status.innerText = 'Tarama yapılıyor... bir kaç saniye bekleyin.';
+// Tema değiştir
+function toggleTheme() {
+  const html = document.documentElement;
+  const icon = document.getElementById("themeIcon");
 
-  fetch('/scan')
-    .then(resp => resp.json())
-    .then(data => {
-      const sel = document.getElementById('networks');
-      sel.innerHTML = '<option value="">-- Ağa seçin --</option>';
-
-      data.forEach(function (item) {
-        const opt = document.createElement('option');
-        opt.value = item.ssid;
-        opt.text = item.ssid + ' (' + item.rssi + ' dBm)';
-        sel.appendChild(opt);
-      });
-
-      if (status) status.innerText = 'Tarama tamamlandı. Listeden seç veya elle gir.';
-    })
-    .catch(err => {
-      if (status) status.innerText = 'Tarama hatası: ' + err;
-    });
+  if (html.getAttribute("data-theme") === "light") {
+    html.setAttribute("data-theme", "dark");
+    icon.classList.replace("bi-moon-stars", "bi-brightness-high");
+  } else {
+    html.setAttribute("data-theme", "light");
+    icon.classList.replace("bi-brightness-high", "bi-moon-stars");
+  }
 }
 
-// SSID otomatik doldurma
-const networkSelect = document.getElementById('networks');
-if (networkSelect) {
-  networkSelect.addEventListener('change', function () {
-    if (this.value) {
-      const ssidField = document.getElementById('ssid');
-      if (ssidField) ssidField.value = this.value;
-    }
-  });
+// Parola göster/gizle
+function togglePass() {
+  const pass = document.getElementById("pass");
+  const icon = document.getElementById("passIcon");
+
+  if (pass.type === "password") {
+    pass.type = "text";
+    icon.classList.replace("bi-eye-slash", "bi-eye");
+  } else {
+    pass.type = "password";
+    icon.classList.replace("bi-eye", "bi-eye-slash");
+  }
+}
+
+// WiFi tarama
+function scanNetworks() {
+  fetch("/scan")
+    .then(res => res.json())
+    .then(list => {
+      const select = document.getElementById("networks");
+      select.innerHTML = "";
+
+      list.forEach(n => {
+        const opt = document.createElement("option");
+        opt.value = n.ssid;
+        opt.innerText = `${n.ssid} (${n.rssi} dBm)`;
+        select.appendChild(opt);
+      });
+
+      select.addEventListener("change", () => {
+        document.getElementById("ssid").value = select.value;
+      });
+    })
+    .catch(() => alert("Ağ taraması yapılamadı!"));
 }
 
 /* -------------------------------------------------------------

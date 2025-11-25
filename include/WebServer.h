@@ -27,6 +27,7 @@ private:
     void handleSaveWiFi(AsyncWebServerRequest *request);
     void handleScan(AsyncWebServerRequest *request);
     void handleNotFound(AsyncWebServerRequest *request);
+    void clearSensorTable();
 };
 extern WebServerManager WebServer;
 

@@ -1,43 +1,71 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" data-theme="light">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>ESP32 Wi-Fi Kurulum</title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- Harici CSS -->
   <link rel="stylesheet" href="/style.css">
 </head>
+
 <body>
-  <div class="wifi-card">
-    <h2>📶 ESP32 Wi-Fi Kurulum</h2>
-    <p class="small">
-      Telefonunu <b>ESP32_Setup</b> ağına bağla,<br>
-      ardından aşağıdan Wi-Fi bilgilerini gir.
+
+  <div class="wifi-card text-center">
+    <h3 class="mb-2">
+      <i class="bi bi-wifi"></i> Wi-Fi Kurulum
+    </h3>
+    <p class="small text-description">
+      Telefonunu <b>ESP32_Setup</b> ağına bağla ve aşağıya Wi-Fi bilgilerini gir.
     </p>
 
-    <div class="wifi-scan">
-      <label for="networks">Bulunan Ağlar</label>
-      <div class="scan-row">
-        <select id="networks"><option value="">-- Tarama yap --</option></select>
-        <button class="scan-btn" onclick="scanNetworks()">🔍 Tara</button>
-      </div>
+    <!-- WiFi Scan -->
+    <label class="fw-semibold mt-3 text-description">Bulunan Ağlar</label>
+    <div class="input-group mb-3">
+      <select id="networks" class="form-select">
+        <option value="">— Tarama yap —</option>
+      </select>
+      <button class="btn btn-green" onclick="scanNetworks()">
+        <i class="bi bi-search"></i>
+      </button>
     </div>
 
-    <form id="wifiForm" method="POST" action="/saveWiFi" class="wifi-form">
-      <label for="ssid">SSID</label>
-      <input type="text" id="ssid" name="ssid" placeholder="Ağ adı (SSID)" required>
+    <!-- Form -->
+    <form id="wifiForm" method="POST" action="/saveWiFi">
 
-      <label for="pass">Parola</label>
-      <input type="password" id="pass" name="pass" placeholder="Parola (WPA/WPA2)">
+      <label class="fw-semibold text-description">SSID</label>
+      <input type="text" id="ssid" name="ssid"
+             class="form-control mb-3"
+             placeholder="Ağ adı (SSID)" required>
 
-      <button type="submit" class="save-btn">💾 Kaydet ve Bağlan</button>
+      <label class="fw-semibold text-description">Parola</label>
+      <div class="input-group mb-4">
+        <input type="password" id="pass" name="pass"
+               class="form-control"
+               placeholder="Parola (WPA/WPA2)">
+        <button class="btn btn-outline-secondary" type="button" onclick="togglePass()">
+          <i id="passIcon" class="bi bi-eye-slash"></i>
+        </button>
+      </div>
+
+      <button type="submit" class="btn btn-green w-100 py-2 fw-semibold">
+        <i class="bi bi-save"></i> Kaydet ve Bağlan
+      </button>
     </form>
 
-    <p class="small">
-      Alternatif: SSID'yi listeden seç, parola girip <b>Kaydet</b>’e tıkla.
-    </p>
-
-    <p id="status" class="status-text"></p>
+    <p id="status" class="text-center mt-2 small"></p>
   </div>
+
+  <!-- Tema butonu (FAB) -->
+  <button class="theme-btn" onclick="toggleTheme()">
+    <i id="themeIcon" class="bi bi-moon-stars"></i>
+  </button>
 
   <script src="/script.js"></script>
 </body>

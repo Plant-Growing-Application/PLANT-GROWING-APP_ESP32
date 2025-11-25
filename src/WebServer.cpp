@@ -4,8 +4,6 @@
 #include <SQLite3.h>
 
 #define FILESYSTEM LittleFS
-#define RELAY1 16
-#define RELAY2 17
 
 WebServerManager::WebServerManager(AsyncWebServer &server, AsyncWebSocket &ws, MyWiFi &wifiRef)
     : _server(server), _ws(ws), _wifi(wifiRef) {}
@@ -27,10 +25,15 @@ void WebServerManager::begin()
     initWebSocket();
 
     // ---- HTML / API endpoints ----
-    _server.on("/api/get-rows", HTTP_GET, [](AsyncWebServerRequest *request)
+
+    _server.on("/api/get-rows", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleDBRows(request); });
+
+    // ⭐ SENSOR VERILERINI SIFIRLAMA API ⭐
+    _server.on("/api/clear-sensor", HTTP_POST, [this](AsyncWebServerRequest *request)
                {
-        String json = SqlManager::Instance().GetAllRowsAsJson();
-        request->send(200, "application/json", json); });
+                   clearSensorTable();
+                   request->send(200, "text/plain", "CLEARED"); });
 
     _server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleRoot(request); });
@@ -52,10 +55,6 @@ void WebServerManager::begin()
         } else {
             request->send(404, "text/plain", "DB Not Found");
         } });
-
-    // ⭐ SQLITE TABLO OKUMA API ⭐
-    _server.on("/api/get-rows", HTTP_GET, [this](AsyncWebServerRequest *request)
-               { handleDBRows(request); });
 
     // WiFi kaydet
     _server.on("/saveWiFi", HTTP_POST, [this](AsyncWebServerRequest *request)
@@ -156,7 +155,7 @@ void WebServerManager::handleSaveWiFi(AsyncWebServerRequest *request)
     request->send(200, "text/plain", "WIFI:FAIL");
 }
 
-// ⭐⭐⭐ SQLITE TABLO OKUMA API ⭐⭐⭐
+// ---- SQLITE TABLO OKUMA ----
 void WebServerManager::handleDBRows(AsyncWebServerRequest *request)
 {
     sqlite3 *db;
@@ -189,7 +188,13 @@ void WebServerManager::handleDBRows(AsyncWebServerRequest *request)
     request->send(200, "application/json", json);
 }
 
-// ---- WİFİ TARAMA ----
+// ---- SQLITE TABLO TEMİZLEME ⭐⭐ ----
+void WebServerManager::clearSensorTable()
+{
+    SqlManager::Instance().ClearTable(); // Tek noktadan temizleme
+}
+
+// ---- WIFI TARAMA ----
 void WebServerManager::handleScan(AsyncWebServerRequest *request)
 {
     WiFi.mode(WIFI_MODE_AP);

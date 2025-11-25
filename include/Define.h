@@ -19,7 +19,6 @@
 #include "Wps.h"
 #include <esp_wifi.h>
 #include <esp_wps.h>
-#include "esp_err.h"
 #include <sqlite3.h>
 #include "SqlManager.h"
 
@@ -43,4 +42,6 @@ extern RealTimeClock rtc;     // sadece bildir
 #define PIN_BACK_BUTTON 27
 #define TEST_SENSOR_VALUE 34
 #define WIFI_LED 23
+#define RELAY1 16
+#define RELAY2 17
 #endif // DEFINE_H
