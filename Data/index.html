@@ -63,55 +63,6 @@
     <footer>
       <p>IP: <span id="ip">Yükleniyor...</span></p>
     </footer>
-
-    <!-- ⭐⭐⭐ SQLITE TABLO ALANI ⭐⭐⭐ -->
-    <div class="db-container">
-      <h3>📊 Kaydedilen Sensör Verileri</h3>
-
-      <button class="refresh-btn" onclick="loadTable()">🔄 Yenile</button>
-
-      <table id="dbTable">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Sensor</th>
-            <th>Değer</th>
-            <th>Zaman</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-  </div>
-
-  <script src="/script.js"></script>
-
-  <script>
-    function loadTable() {
-      fetch('/api/get-rows')
-        .then(r => r.json())
-        .then(rows => {
-          let tbody = document.querySelector('#dbTable tbody');
-          tbody.innerHTML = "";
-
-          rows.forEach(r => {
-            tbody.innerHTML += `
-              <tr>
-                <td>${r.id}</td>
-                <td>${r.sensor}</td>
-                <td>${r.value.toFixed(2)}</td>
-                <td>${r.time}</td>
-              </tr>`;
-          });
-        });
-    }
-
-    // Sayfa açılınca yükle
-    loadTable();
-
-    // 10 saniyede bir tabloyu otomatik yenile
-    setInterval(loadTable, 10000);
   </script>
 
 </body>

@@ -86,33 +86,5 @@ function scanNetworks() {
     .catch(() => alert("Ağ taraması yapılamadı!"));
 }
 
-/* -------------------------------------------------------------
-   ⭐⭐⭐ SQLite TABLO VERİSİ YÜKLEME FONKSİYONU
---------------------------------------------------------------*/
-function loadTable() {
-  fetch('/api/get-rows')
-    .then(r => r.json())
-    .then(rows => {
-      let tbody = document.querySelector('#dbTable tbody');
-      if (!tbody) return;
 
-      tbody.innerHTML = "";
 
-      rows.forEach(r => {
-        tbody.innerHTML += `
-          <tr>
-            <td>${r.id}</td>
-            <td>${r.sensor}</td>
-            <td>${r.value}</td>
-            <td>${r.time}</td>
-          </tr>
-        `;
-      });
-    })
-    .catch(err => console.error("SQL tablo yükleme hatası:", err));
-}
-
-// Sayfa açılınca tabloyu doldur
-if (document.getElementById("dbTable")) {
-  loadTable();
-}

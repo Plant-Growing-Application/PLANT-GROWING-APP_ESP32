@@ -1,7 +1,6 @@
 #include "define.h"
 #include "MyEeproom.h"
 #include <LittleFS.h>
-#include "SqlManager.h"
 
 DisplayProtocol DpProtocol;
 AsyncWebServer server(80);
@@ -52,11 +51,10 @@ void Task_WiFiMonitor(void *pvParameters)
         // sadece bağlantı kontrolü
         if (!MyEeprom.Setting.IsServerMode && !MywiFi.isConnected())
             MywiFi.connect(5000);
-
         MywiFi.ConnectFromWPS();
         MywiFi.ConnectFromWeb();
         GrowPlant.SendWifiInfo();
-
+        GrowPlant.TestAnalogPin();
         esp_task_wdt_reset();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -134,6 +132,7 @@ void setup()
     pinMode(PIN_CONFIRM_BUTTON, INPUT_PULLUP);
     pinMode(PIN_BACK_BUTTON, INPUT);
     pinMode(WIFI_LED, OUTPUT);
+    pinMode(TEST_SENSOR_VALUE, INPUT);
     digitalWrite(WIFI_LED, LOW);
 
     MywiFi.attachWpsHandler(); // event bağla
@@ -156,10 +155,6 @@ void setup()
     }
     webServer.begin();
     rtc.begin();
-    if (!SqlManager::Instance().Begin("sensor.db"))
-        Serial.println("❌ SQLite DB açılamadı!");
-    else
-        Serial.println("📌 SQLite hazır!");
 
     // Tasklar
     xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 8192, NULL, 1, NULL);

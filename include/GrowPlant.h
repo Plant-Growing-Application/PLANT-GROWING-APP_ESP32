@@ -75,6 +75,7 @@ private:
 public:
     bool IsEncoderPressed = false;
     bool PreviousPressed = false;
+    bool TimerActive = false;
 
     bool IsBackPressed = false;
     bool PrevBackPressed = false;
@@ -94,6 +95,7 @@ public:
     void ShowIP();
     void ShowMac(const String &macStr);
     void SendWifiInfo();
+    void TestAnalogPin();
 };
 extern GrowPlantClass GrowPlant;
 #endif // GROW_PLANT_H

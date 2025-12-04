@@ -19,8 +19,9 @@
 #include "Wps.h"
 #include <esp_wifi.h>
 #include <esp_wps.h>
+#include "esp_err.h"
 #include <sqlite3.h>
-#include "SqlManager.h"
+#include <LittleFS.h>
 
 #define DISPLAY_WIDTH 128
 #define DISPLAY_HEIGHT 64
@@ -41,6 +42,7 @@ extern RealTimeClock rtc;     // sadece bildir
 #define PIN_CONFIRM_BUTTON 26
 #define PIN_BACK_BUTTON 27
 #define TEST_SENSOR_VALUE 34
+#define READ_INTERVAL 10000
 #define WIFI_LED 23
 #define RELAY1 16
 #define RELAY2 17

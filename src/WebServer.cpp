@@ -1,7 +1,6 @@
 #include "define.h"
 #include <LittleFS.h>
 #include <WiFi.h>
-#include <SQLite3.h>
 
 #define FILESYSTEM LittleFS
 
@@ -25,15 +24,6 @@ void WebServerManager::begin()
     initWebSocket();
 
     // ---- HTML / API endpoints ----
-
-    _server.on("/api/get-rows", HTTP_GET, [this](AsyncWebServerRequest *request)
-               { handleDBRows(request); });
-
-    // ⭐ SENSOR VERILERINI SIFIRLAMA API ⭐
-    _server.on("/api/clear-sensor", HTTP_POST, [this](AsyncWebServerRequest *request)
-               {
-                   clearSensorTable();
-                   request->send(200, "text/plain", "CLEARED"); });
 
     _server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleRoot(request); });
@@ -154,46 +144,6 @@ void WebServerManager::handleSaveWiFi(AsyncWebServerRequest *request)
 
     request->send(200, "text/plain", "WIFI:FAIL");
 }
-
-// ---- SQLITE TABLO OKUMA ----
-void WebServerManager::handleDBRows(AsyncWebServerRequest *request)
-{
-    sqlite3 *db;
-    sqlite3_open("/littlefs/sensor.db", &db);
-
-    const char *sql = "SELECT id, sensor, value, time FROM logs;";
-    sqlite3_stmt *stmt;
-
-    DynamicJsonDocument doc(4096);
-    JsonArray arr = doc.to<JsonArray>();
-
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK)
-    {
-        while (sqlite3_step(stmt) == SQLITE_ROW)
-        {
-            JsonObject row = arr.createNestedObject();
-            row["id"] = sqlite3_column_int(stmt, 0);
-            row["sensor"] = (const char *)sqlite3_column_text(stmt, 1);
-            row["value"] = sqlite3_column_double(stmt, 2);
-            row["time"] = (const char *)sqlite3_column_text(stmt, 3);
-        }
-    }
-
-    sqlite3_finalize(stmt);
-    sqlite3_close(db);
-
-    String json;
-    serializeJson(arr, json);
-
-    request->send(200, "application/json", json);
-}
-
-// ---- SQLITE TABLO TEMİZLEME ⭐⭐ ----
-void WebServerManager::clearSensorTable()
-{
-    SqlManager::Instance().ClearTable(); // Tek noktadan temizleme
-}
-
 // ---- WIFI TARAMA ----
 void WebServerManager::handleScan(AsyncWebServerRequest *request)
 {

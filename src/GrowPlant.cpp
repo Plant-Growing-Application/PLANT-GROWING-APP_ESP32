@@ -7,6 +7,9 @@ extern String currentTime;
 extern String currentIP;
 extern String currentMAC;
 
+unsigned long CurrenMillis = 0;
+unsigned long PreviousMillis = 0;
+
 extern WebServerManager webServer;
 extern MyWiFi wifi;
 
@@ -402,5 +405,20 @@ void GrowPlantClass::SendWifiInfo()
         ShowClock(currentTime);
         ShowIP();
         ShowMac(currentMAC);
+    }
+}
+
+void GrowPlantClass::TestAnalogPin()
+{
+    CurrenMillis = millis();
+
+    if (CurrenMillis - PreviousMillis > READ_INTERVAL)
+    {
+        PreviousMillis = CurrenMillis;
+
+        int rawValue = analogRead(TEST_SENSOR_VALUE); // 0-4095
+        int scaledValue = map(rawValue, 0, 4095, 1, 10);
+
+        Serial.printf("📥 Sensor inserted: raw=%d scaled=%d\n", rawValue, scaledValue);
     }
 }

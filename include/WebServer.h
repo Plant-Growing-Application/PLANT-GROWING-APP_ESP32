@@ -19,7 +19,6 @@ private:
 
     void initWebSocket();
     void handleWebSocketMessage(void *arg, uint8_t *data, size_t len);
-    void handleDBRows(AsyncWebServerRequest *request);
     void handleRoot(AsyncWebServerRequest *request);
     void handleWiFi(AsyncWebServerRequest *request);
     void handleStyle(AsyncWebServerRequest *request);
@@ -27,7 +26,6 @@ private:
     void handleSaveWiFi(AsyncWebServerRequest *request);
     void handleScan(AsyncWebServerRequest *request);
     void handleNotFound(AsyncWebServerRequest *request);
-    void clearSensorTable();
 };
 extern WebServerManager WebServer;
 
