@@ -137,6 +137,8 @@ void setup()
 
     MywiFi.attachWpsHandler(); // event bağla
     bool connected = MywiFi.connect(4000);
+    WiFi.setSleep(false);
+    esp_wifi_set_ps(WIFI_PS_NONE);
     if (!connected)
     {
         Serial.println("⚠️ WiFi yok → Server Mod başlatılıyor...");

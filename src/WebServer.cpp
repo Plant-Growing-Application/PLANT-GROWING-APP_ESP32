@@ -37,15 +37,6 @@ void WebServerManager::begin()
     _server.on("/script.js", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleScript(request); });
 
-    // DB indir
-    _server.on("/download_db", HTTP_GET, [](AsyncWebServerRequest *request)
-               {
-        if (LittleFS.exists("/sensor.db")) {
-            request->send(LittleFS, "/sensor.db", "application/octet-stream");
-        } else {
-            request->send(404, "text/plain", "DB Not Found");
-        } });
-
     // WiFi kaydet
     _server.on("/saveWiFi", HTTP_POST, [this](AsyncWebServerRequest *request)
                { handleSaveWiFi(request); });
@@ -93,7 +84,9 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
         String json = "{\"id\":" + String(id) + ",\"state\":\"" +
                       (newState ? "ON" : "OFF") + "\"}";
 
-        _ws.textAll(json);
+        AsyncWebSocketMessageBuffer *buffer = _ws.makeBuffer(json.length());
+        memcpy(buffer->get(), json.c_str(), json.length());
+        _ws.textAll(buffer);
     }
 }
 
@@ -136,7 +129,7 @@ void WebServerManager::handleSaveWiFi(AsyncWebServerRequest *request)
         MyEeprom.Setting.IsWpsActive = false;
         MyEeprom.SaveSettings(MyEeprom.Setting);
 
-        MywiFi.wifiShouldReconnect = true;
+        _wifi.wifiShouldReconnect = true;
 
         request->send(200, "text/plain", "WIFI:OK");
         return;
@@ -147,7 +140,6 @@ void WebServerManager::handleSaveWiFi(AsyncWebServerRequest *request)
 // ---- WIFI TARAMA ----
 void WebServerManager::handleScan(AsyncWebServerRequest *request)
 {
-    WiFi.mode(WIFI_MODE_AP);
     int n = WiFi.scanNetworks(false, true);
 
     String json = "[";
