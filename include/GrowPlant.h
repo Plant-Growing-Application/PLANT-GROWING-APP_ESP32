@@ -96,6 +96,7 @@ public:
     void ShowMac(const String &macStr);
     void SendWifiInfo();
     void TestAnalogPin();
+    void TestPins();
 };
 extern GrowPlantClass GrowPlant;
 #endif // GROW_PLANT_H

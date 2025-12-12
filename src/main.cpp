@@ -54,7 +54,7 @@ void Task_WiFiMonitor(void *pvParameters)
         MywiFi.ConnectFromWPS();
         MywiFi.ConnectFromWeb();
         GrowPlant.SendWifiInfo();
-        GrowPlant.TestAnalogPin();
+        // GrowPlant.TestAnalogPin();
         esp_task_wdt_reset();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -169,4 +169,5 @@ void setup()
 void loop()
 {
     ws.cleanupClients();
+    // GrowPlant.TestPins();
 }

@@ -12,6 +12,12 @@ unsigned long PreviousMillis = 0;
 
 extern WebServerManager webServer;
 extern MyWiFi wifi;
+/////////////////////////////////////////////TEST/////////////////////////////////////////////////
+
+unsigned long previousMillis = 0;
+const unsigned long interval = 1000; // 200 ms
+
+/////////////////////////////////////////////TEST/////////////////////////////////////////////////
 
 // Sayfa değiştirme
 void GrowPlantClass::ChangePage(int encoderValue)
@@ -410,15 +416,28 @@ void GrowPlantClass::SendWifiInfo()
 
 void GrowPlantClass::TestAnalogPin()
 {
-    CurrenMillis = millis();
+    // CurrenMillis = millis();
 
-    if (CurrenMillis - PreviousMillis > READ_INTERVAL)
+    // if (CurrenMillis - PreviousMillis > READ_INTERVAL)
+    // {
+    //     PreviousMillis = CurrenMillis;
+
+    //     int rawValue = analogRead(TEST_SENSOR_VALUE); // 0-4095
+    //     int scaledValue = map(rawValue, 0, 4095, 1, 10);
+
+    //     Serial.printf("📥 Sensor inserted: raw=%d scaled=%d\n", rawValue, scaledValue);
+    // }
+}
+void GrowPlantClass::TestPins()
+{
+    unsigned long currentMillis = millis();
+
+    if (currentMillis - previousMillis >= interval)
     {
-        PreviousMillis = CurrenMillis;
+        previousMillis = currentMillis;
 
-        int rawValue = analogRead(TEST_SENSOR_VALUE); // 0-4095
-        int scaledValue = map(rawValue, 0, 4095, 1, 10);
-
-        Serial.printf("📥 Sensor inserted: raw=%d scaled=%d\n", rawValue, scaledValue);
+        int value = analogRead(TEST_SENSOR_VALUE);
+        Serial.print("Analog deger: ");
+        Serial.println(value);
     }
 }

@@ -46,4 +46,4 @@ extern RealTimeClock rtc;     // sadece bildir
 #define WIFI_LED 23
 #define RELAY1 16
 #define RELAY2 17
-#endif // DEFINE_H
+#endif // DEFINE_H   
