@@ -1,7 +1,9 @@
 #include "define.h"
 #include "MyEeproom.h"
 #include <LittleFS.h>
+#include "SqlManager.h"
 
+SqlManager &DB = SqlManager::Instance();
 DisplayProtocol DpProtocol;
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
@@ -54,7 +56,6 @@ void Task_WiFiMonitor(void *pvParameters)
         MywiFi.ConnectFromWPS();
         MywiFi.ConnectFromWeb();
         GrowPlant.SendWifiInfo();
-        // GrowPlant.TestAnalogPin();
         esp_task_wdt_reset();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -80,35 +81,49 @@ void Task_WifiLed(void *pvParameters)
         esp_task_wdt_reset();
     }
 }
+void Task_SensorLogger(void *pvParameters)
+{
+    for (;;)
+    {
+        if (DB.GetDB() == nullptr)
+        {
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            continue;
+        }
+
+        int sensorValue = random(20, 99);
+        DB.InsertSensor(sensorValue);
+
+        Serial.print("💾 Kaydedildi: ");
+        Serial.println(sensorValue);
+
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
 
 void setup()
 {
     Serial.begin(115200);
     Wire.begin(21, 22);
     MyEeprom.Begin();
-    if (!MyEeprom.GetSettings(MyEeprom.Setting))
+    // 🔥 LittleFS
+    if (!LittleFS.begin(true))
     {
-        Serial.println("EEPROM boş → varsayılan ayarlar");
-        memset(&MyEeprom.Setting, 0, sizeof(Settings));
+        Serial.println("❌ LittleFS mount failed");
+        return;
     }
-    if (!MyEeprom.Setting.LittleFSFormatted)
+    Serial.println("✔ LittleFS hazır");
+
+    // 🔥 SQLITE MUTLAKA BURADA
+    if (!SqlManager::Instance().Begin())
     {
-        Serial.println("📌 İlk kurulum → LittleFS formatlanıyor...");
-        LittleFS.begin(true);
-        MyEeprom.Setting.LittleFSFormatted = true;
-        MyEeprom.SaveSettings(MyEeprom.Setting);
+        Serial.println("❌ SQLite başlatılamadı!");
     }
     else
     {
-        if (!LittleFS.begin(false))
-        {
-            Serial.println("❌ LittleFS mount hatası!");
-        }
-        else
-        {
-            Serial.println("✔ LittleFS hazır");
-        }
+        Serial.println("✔ SQLite hazır");
     }
+
     // EEPROM’dan ayarları oku
     if (!MyEeprom.GetSettings(MyEeprom.Setting))
     {
@@ -162,6 +177,7 @@ void setup()
     xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 8192, NULL, 1, NULL);
     xTaskCreate(Task_Display, "DisplayTask", 4096, NULL, 2, NULL);
     xTaskCreate(Task_WifiLed, "WifiLed", 2048, NULL, 3, NULL);
+    xTaskCreate(Task_SensorLogger, "SensorLogger", 4096, NULL, 4, NULL);
 
     esp_task_wdt_init(WDT_TIMEOUT, true);
     Serial.println("✅ Setup tamamlandı!");

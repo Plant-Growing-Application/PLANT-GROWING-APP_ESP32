@@ -85,6 +85,31 @@ function scanNetworks() {
     })
     .catch(() => alert("Ağ taraması yapılamadı!"));
 }
+// 🧹 Sensor kayıtlarını temizle
+function clearSensors() {
+  if (!confirm("Tüm sensör kayıtları silinsin mi?")) return;
+
+  fetch("/api/clear-sensor", {
+    method: "POST"
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.ok) {
+        alert("✅ Sensör kayıtları temizlendi");
+
+        // tablo varsa yenile
+        if (typeof loadData === "function") {
+          loadData();
+        }
+      } else {
+        alert("❌ Kayıtlar silinemedi");
+      }
+    })
+    .catch(err => {
+      console.error("Clear hatası:", err);
+      alert("❌ Sunucu hatası");
+    });
+}
 
 
 

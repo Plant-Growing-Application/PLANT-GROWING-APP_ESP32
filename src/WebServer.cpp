@@ -1,6 +1,7 @@
 #include "define.h"
 #include <LittleFS.h>
 #include <WiFi.h>
+#include "SqlManager.h"
 
 #define FILESYSTEM LittleFS
 
@@ -31,6 +32,9 @@ void WebServerManager::begin()
     _server.on("/wifi", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleWiFi(request); });
 
+    _server.on("/db.html", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { request->send(FILESYSTEM, "/db.html", "text/html"); });
+
     _server.on("/style.css", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleStyle(request); });
 
@@ -44,6 +48,23 @@ void WebServerManager::begin()
     // Tarama
     _server.on("/scan", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleScan(request); });
+    // 🔥 SQLITE API
+    _server.on("/api/sensor", HTTP_GET,
+               [](AsyncWebServerRequest *request)
+               {
+                   String json = SqlManager::Instance().GetAllSensorsJson();
+                   //    Serial.println(json);
+                   request->send(200, "application/json", json);
+               });
+
+    _server.on("/api/clear-sensor", HTTP_POST, [](AsyncWebServerRequest *request)
+               {
+    Serial.println("🔥 CLEAR endpoint çağrıldı");
+
+    bool ok = SqlManager::Instance().ClearSensors();
+
+    request->send(200, "application/json",
+                  ok ? "{\"ok\":true}" : "{\"ok\":false}"); });
 
     _server.onNotFound([this](AsyncWebServerRequest *request)
                        { handleNotFound(request); });

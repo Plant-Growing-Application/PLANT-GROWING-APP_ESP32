@@ -350,24 +350,13 @@ void GrowPlantClass::StateWifi(bool wfState)
         // SoftAP başlat (ESP kendi ağı)
         WiFi.softAP("ESP32_SERVER", "12345678");
 
-        IPAddress apIP = WiFi.softAPIP();
         Serial.print("🌐 AP IP: ");
-        Serial.println(apIP);
-        webServer.begin();
+        Serial.println(WiFi.softAPIP());
     }
     else
     {
         Serial.println("💻 CLIENT MODE aktif (STA)");
-        WiFi.mode(WIFI_STA); // Sadece Station olarak ayarla
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            Serial.println("✅ WiFi bağlandı");
-            webServer.begin();
-        }
-        else
-        {
-            Serial.println("❌ WiFi bağlanamadı");
-        }
+        WiFi.mode(WIFI_STA);
     }
 }
 void GrowPlantClass::StateWPS(bool wpsState)
@@ -411,33 +400,5 @@ void GrowPlantClass::SendWifiInfo()
         ShowClock(currentTime);
         ShowIP();
         ShowMac(currentMAC);
-    }
-}
-
-void GrowPlantClass::TestAnalogPin()
-{
-    // CurrenMillis = millis();
-
-    // if (CurrenMillis - PreviousMillis > READ_INTERVAL)
-    // {
-    //     PreviousMillis = CurrenMillis;
-
-    //     int rawValue = analogRead(TEST_SENSOR_VALUE); // 0-4095
-    //     int scaledValue = map(rawValue, 0, 4095, 1, 10);
-
-    //     Serial.printf("📥 Sensor inserted: raw=%d scaled=%d\n", rawValue, scaledValue);
-    // }
-}
-void GrowPlantClass::TestPins()
-{
-    unsigned long currentMillis = millis();
-
-    if (currentMillis - previousMillis >= interval)
-    {
-        previousMillis = currentMillis;
-
-        int value = analogRead(TEST_SENSOR_VALUE);
-        Serial.print("Analog deger: ");
-        Serial.println(value);
     }
 }

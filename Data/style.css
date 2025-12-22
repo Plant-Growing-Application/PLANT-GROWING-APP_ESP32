@@ -161,11 +161,11 @@ body {
   background: var(--card-bg);
   border-radius: 20px;
   border: 1px solid var(--border);
-  box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.12);
 }
 
 /* Form Elemanları */
-.form-control, 
+.form-control,
 .form-select {
   background: var(--card-bg);
   color: var(--text);
@@ -192,7 +192,7 @@ body {
 }
 
 /* Focus */
-.form-control:focus, 
+.form-control:focus,
 .form-select:focus {
   border-color: var(--green);
   box-shadow: 0 0 5px rgba(72, 189, 91, 0.4);
@@ -230,10 +230,77 @@ body {
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
   transition: 0.25s;
 }
 
 .theme-btn:hover {
   transform: scale(1.1);
+}
+
+/* Genel stil düzenlemeleri */
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+  background: #f4f4f9;
+  color: #333;
+}
+
+.db-container {
+  margin-top: 25px;
+  background: #fff;
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+th,
+td {
+  padding: 8px 6px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+}
+
+th {
+  background: #f4f4f4;
+  font-weight: bold;
+}
+
+.refresh-btn {
+  margin-top: 8px;
+  background: #4caf50;
+  color: white;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.refresh-btn:hover {
+  background: #45a049;
+}
+
+button {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:hover {
+  background-color: #0056b3;
 }
