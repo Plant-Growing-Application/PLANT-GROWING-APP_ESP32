@@ -33,22 +33,28 @@ ws.onclose = () => {
 
 // Röleye komut gönder
 function sendCmd(id) {
+  const isPump = (id === 1);
+
+  const cardId = isPump ? 'pumpCard' : 'oxyCard';
+  const statusId = isPump ? 'pumpStatus' : 'oxyStatus';
+
+  const card = document.getElementById(cardId);
+  const status = document.getElementById(statusId);
+
+  const isOff = card.classList.contains('off');
+
+  if (isOff) {
+    card.classList.replace('off', 'on');
+    status.innerText = "ÇALIŞIYOR";
+    console.log((isPump ? "PUMP" : "OXY") + " Komutu: ON");
+  } else {
+    card.classList.replace('on', 'off');
+    status.innerText = "KAPALI";
+    console.log((isPump ? "PUMP" : "OXY") + " Komutu: OFF");
+  }
   ws.send(JSON.stringify({ id }));
 }
 
-// Tema değiştir
-function toggleTheme() {
-  const html = document.documentElement;
-  const icon = document.getElementById("themeIcon");
-
-  if (html.getAttribute("data-theme") === "light") {
-    html.setAttribute("data-theme", "dark");
-    icon.classList.replace("bi-moon-stars", "bi-brightness-high");
-  } else {
-    html.setAttribute("data-theme", "light");
-    icon.classList.replace("bi-brightness-high", "bi-moon-stars");
-  }
-}
 
 // Parola göster/gizle
 function togglePass() {

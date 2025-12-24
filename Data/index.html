@@ -2,40 +2,96 @@
 <html lang="tr">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ESP32 Kontrol Paneli</title>
-  <link rel="stylesheet" href="/style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SALIXUS | Sera Kontrol</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600&family=Poppins:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-  <div class="wifi-card control-card">
+    <nav class="navbar navbar-dark shadow-sm">
+        <div class="container">
+            <a class="navbar-brand brand-logo" href="index.html">SALIXUS</a>
+            <div class="d-flex gap-2">
+                <a class="btn btn-success btn-sm rounded-pill px-3 text-dark fw-bold" href="wifi.html">WiFi</a>
+                <a href="login.html" class="btn btn-success btn-sm rounded-pill px-3 text-dark fw-bold">
+                    Giriş Yap
+                </a>
+            </div>
+        </div>
+    </nav>
 
-    <header class="panel-header">
-      <h2>🌱 ESP32 Kontrol Paneli</h2>
-      <div>
-        <button id="wifi-btn" onclick="window.location.href='/wifi'">
-          📶 Wi-Fi
-        </button>
-
+    <div class="container mt-4">
+        <div class="row g-3 mb-4">
+            <div class="col-6">
+                <div class="sensor-card big-card">
+                    <span class="sensor-icon">🧪</span>
+                    <div class="sensor-title">Besin (EC)</div>
+                    <div class="sensor-value" id="ec-val">1.2 <small>mS</small></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="sensor-card big-card">
+                    <span class="sensor-icon">💧</span>
+                    <div class="sensor-title">pH Değeri</div>
+                    <div class="sensor-value" id="ph-val">6.5</div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="sensor-card big-card">
+                    <span class="sensor-icon">🌡️</span>
+                    <div class="sensor-title">Su Isısı</div>
+                    <div class="sensor-value" id="temp-val">24.5 <small>°C</small></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="sensor-card big-card">
+                    <span class="sensor-icon">🌊</span>
+                    <div class="sensor-title">Su Akışı</div>
+                    <div class="sensor-value" id="flow-val">2.8 <small>L/d</small></div>
+                </div>
+            </div>
+        </div>
         <button id="db-btn" onclick="window.location.href='/db.html'">
-          📊 Kayıtlar
+            📊 Kayıtlar
         </button>
-      </div>
+    </div>
     </header>
 
-    <div id="wifi-mode" class="status-text">Bağlanıyor...</div>
+    <!-- NEW CODE  -->
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="control-btn off" id="pumpCard" onclick="sendCmd(1)">
+                <div class="btn-body">
+                    <h3>Su Pompası</h3>
+                    <div class="status-box">
+                        <span class="status-dot"></span>
+                        <span id="pumpStatus">KAPALI</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-    <div class="relay-container">
-      <button id="r1" class="btn off" onclick="sendCmd(1)">Röle 1</button>
-      <button id="r2" class="btn off" onclick="sendCmd(2)">Röle 2</button>
+        <div class="col-md-6">
+            <div class="control-btn off" id="oxyCard" onclick="sendCmd(2)">
+                <div class="btn-body">
+                    <h3>Oksijen Sensörü</h3>
+                    <div class="status-box">
+                        <span class="status-dot"></span>
+                        <span id="oxyStatus">KAPALI</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
 
-    <footer>
-      <p>IP: <span id="ip">Yükleniyor...</span></p>
-    </footer>
-  </div>
-  <script src="/script.js"></script>
+    <!-- NEW CODE  -->
+    </div>
+    <script src="/script.js"></script>
 </body>
 
 

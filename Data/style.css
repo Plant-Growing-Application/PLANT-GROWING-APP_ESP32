@@ -1,306 +1,265 @@
-/* Genel gövde */
+:root {
+    --bg-dark: #0a0a0a;
+    --card-bg: #161616;
+    --neon-green: #00ff88;
+    --danger-red: #ff4d4d;
+    --gray-text: #999;
+}
+
 body {
-  font-family: "Poppins", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: linear-gradient(135deg, #1d3557, #457b9d);
-  color: #333;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  min-height: 100vh;
+    background-color: var(--bg-dark);
+    color: white;
+    font-family: 'Poppins', sans-serif;
+    user-select: none;
 }
 
-/* Kart tasarımı (wifi sayfası + kontrol sayfası + DB sayfası) */
-.wifi-card,
-.control-card,
-.db-card {
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  padding: 28px 24px;
-  width: 90%;
-  max-width: 480px;
-  text-align: center;
-  animation: fadeIn 0.4s ease-in-out;
+/* Navbar */
+.navbar {
+    background-color: var(--card-bg);
+    border-bottom: 2px solid var(--neon-green);
+    padding: 15px 0;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.brand-logo {
+    font-family: 'Orbitron', sans-serif;
+    color: var(--neon-green) !important;
+    letter-spacing: 2px;
 }
 
-/* Üst bar */
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* SENSÖR KARTLARI (BÜYÜTÜLDÜ) */
+.sensor-card {
+    background: var(--card-bg);
+    border-radius: 20px;
+    padding: 35px 20px; /* Daha fazla dikey boşluk */
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
 }
 
-.panel-header h2 {
-  margin: 0;
-  font-size: 1.4rem;
-  color: #007bff;
-  font-weight: 700;
+.sensor-icon { font-size: 2.8rem; margin-bottom: 15px; display: block; }
+.sensor-title { color: var(--gray-text); font-size: 0.9rem; text-transform: uppercase; font-weight: 600; }
+.sensor-value { font-size: 2.5rem; font-weight: 700; color: var(--neon-green); margin-top: 10px; }
+.sensor-value small { font-size: 1rem; color: var(--gray-text); }
+
+/* KOMPAKT BUTONLAR (KARTLAR) */
+.control-btn {
+    background: var(--card-bg);
+    border-radius: 20px;
+    padding: 25px; /* Boyutu biraz küçültüldü */
+    cursor: pointer;
+    transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 2px solid #222;
+    text-align: left;
+    position: relative;
 }
 
-#wifi-btn,
-#db-btn {
-  background: #007bff;
-  color: #fff;
-  font-weight: 600;
-  border: none;
-  border-radius: 25px;
-  padding: 8px 16px;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.15s;
+.control-btn.off { border-left: 6px solid var(--danger-red); }
+.control-btn.on { 
+    border-color: var(--neon-green); 
+    border-left: 6px solid var(--neon-green);
+    background: #1a2a22; 
 }
 
-#wifi-btn:hover,
-#db-btn:hover {
-  background: #005fcc;
-  transform: scale(1.05);
+.control-btn:active { transform: scale(0.97); }
+
+.btn-body h3 { font-size: 1.4rem; font-weight: 700; margin-bottom: 5px; }
+
+/* Durum Belirteci */
+.status-box {
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+    font-weight: bold;
+    letter-spacing: 1px;
 }
 
-/* Röle butonları */
-.relay-container {
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  margin-top: 40px;
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
 }
 
-.btn {
-  padding: 15px 30px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: bold;
-  transition: all 0.3s;
+.off .status-dot { background: var(--danger-red); box-shadow: 0 0 8px var(--danger-red); }
+.on .status-dot { background: var(--neon-green); box-shadow: 0 0 8px var(--neon-green); }
+.on span { color: var(--neon-green); }
+.off span { color: var(--gray-text); }      
+
+/* WIFI SCANNNG CODES */
+:root {
+    --bg-dark: #0d0d0d;
+    --card-bg: #1a1a1a;
+    --neon-green: #00ff88;
+    --gray-text: #888;
 }
 
-.btn.off {
-  background: #e63946;
-  color: #fff;
-  box-shadow: 0 4px 8px rgba(230, 57, 70, 0.4);
-}
-
-.btn.on {
-  background: #28a745;
-  color: #fff;
-  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.4);
-}
-
-.btn:hover {
-  transform: scale(1.05);
-}
-
-/* Bağlantı Durumu */
-.status-text {
-  font-size: 1rem;
-  color: #555;
-  margin-top: 20px;
-  font-style: italic;
-}
-
-/* Footer */
-footer {
-  margin-top: 30px;
-  text-align: center;
-  color: #666;
-  font-size: 0.9em;
-}
-
-/* Genel Sayfa Ayarı */
 body {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  transition: background 0.3s, color 0.3s;
+    background-color: var(--bg-dark);
+    color: white;
+    font-family: 'Poppins', sans-serif;
 }
 
-/* Light Mode */
-[data-theme="light"] {
-  --bg: #f4fdf7;
-  --card-bg: #ffffff;
-  --text: #1b1b1b;
-  --placeholder: #7a8b7a;
-  --border: #d8e3d8;
-  --green: #28a745;
-  --desc: #465646;
+.wifi-setup-card {
+    background: var(--card-bg);
+    width: 100%;
+    max-width: 400px;
+    padding: 40px 30px;
+    border-radius: 30px;
+    border: 1px solid rgba(0, 255, 136, 0.1);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
 }
 
-/* Dark Mode */
-[data-theme="dark"] {
-  --bg: #0f1710;
-  --card-bg: #1a2a1b;
-  --text: #eafaea;
-  --placeholder: #9bb99b;
-  --border: #355d38;
-  --green: #4cd36c;
-  --desc: #b6d3b6;
+.wifi-brand {
+    font-family: 'Orbitron', sans-serif;
+    color: var(--neon-green);
+    letter-spacing: 4px;
+    font-size: 1.2rem;
+    margin-bottom: 20px;
 }
 
-/* Kart */
-.wifi-card {
-  width: 92%;
-  max-width: 420px;
-  padding: 25px;
-  background: var(--card-bg);
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.12);
+.wifi-icon-circle {
+    width: 80px;
+    height: 80px;
+    background: rgba(0, 255, 136, 0.05);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    font-size: 2.5rem;
+    border: 1px dashed var(--neon-green);
 }
 
-/* Form Elemanları */
-.form-control,
-.form-select {
-  background: var(--card-bg);
-  color: var(--text);
-  border: 1px solid var(--border);
+/* Custom Select & Input */
+.custom-select, .custom-input {
+    background-color: #222 !important;
+    border: 2px solid #333 !important;
+    color: white !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
 }
 
-/* --- PLACEHOLDER TÜM TARAYICILAR İÇİN --- */
-.form-control::placeholder,
-.form-select::placeholder {
-  color: var(--placeholder) !important;
-  opacity: 1;
+.custom-select:focus, .custom-input:focus {
+    border-color: var(--neon-green) !important;
+    box-shadow: none !important;
 }
 
-.form-control::-webkit-input-placeholder {
-  color: var(--placeholder) !important;
+/* Scan Button */
+.btn-scan {
+    background: #333;
+    color: var(--neon-green);
+    border: 2px solid #333;
+    border-radius: 12px;
+    font-weight: 700;
+    padding: 0 20px;
+    transition: 0.3s;
 }
 
-.form-control:-ms-input-placeholder {
-  color: var(--placeholder) !important;
+.btn-scan:hover {
+    background: var(--neon-green);
+    color: var(--bg-dark);
 }
 
-.form-control::-ms-input-placeholder {
-  color: var(--placeholder) !important;
+/* Password Wrapper */
+.password-wrapper {
+    position: relative;
 }
 
-/* Focus */
-.form-control:focus,
-.form-select:focus {
-  border-color: var(--green);
-  box-shadow: 0 0 5px rgba(72, 189, 91, 0.4);
+.pass-icon {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-text);
 }
 
-/* Butonlar */
-.btn-green {
-  background: var(--green);
-  color: #fff;
-  border: none;
+/* Connect Button */
+.btn-connect {
+    background: var(--neon-green);
+    color: var(--bg-dark);
+    font-weight: 700;
+    padding: 15px;
+    border-radius: 15px;
+    letter-spacing: 1px;
+    margin-top: 10px;
+    transition: 0.3s;
 }
 
-.btn-green:hover {
-  background: #24963d;
-  color: #fff;
+.btn-connect:hover {
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+    transform: translateY(-2px);
 }
 
-/* Açıklama Yazıları */
-.text-description {
-  color: var(--desc);
+.back-link {
+    color: var(--gray-text);
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: 0.3s;
 }
 
-/* Tema Butonu (Floating Action Button) */
-.theme-btn {
-  position: fixed;
-  bottom: 22px;
-  right: 22px;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  color: var(--green);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-  transition: 0.25s;
+.back-link:hover { color: var(--neon-green); }
+
+/* LOGIN PAGE  */
+/* Giriş Kartı Özel Stilleri */
+.login-card {
+    background: var(--card-bg);
+    width: 100%;
+    max-width: 380px;
+    padding: 40px 30px;
+    border-radius: 30px;
+    border: 1px solid rgba(0, 255, 136, 0.1);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
 }
 
-.theme-btn:hover {
-  transform: scale(1.1);
+.brand-name {
+    font-family: 'Orbitron', sans-serif;
+    color: var(--neon-green);
+    letter-spacing: 4px;
+    font-size: 1.5rem;
+    margin-bottom: 20px;
 }
 
-/* Genel stil düzenlemeleri */
-body {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  margin: 0;
-  background: #f4f4f9;
-  color: #333;
+.user-icon-circle {
+    width: 70px;
+    height: 70px;
+    background: rgba(0, 255, 136, 0.05);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    font-size: 2rem;
+    border: 1px solid var(--neon-green);
 }
 
-.db-container {
-  margin-top: 25px;
-  background: #fff;
-  padding: 15px;
-  border-radius: 10px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+/* Input ve İkon Yerleşimi */
+.input-wrapper {
+    position: relative;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 10px;
-  font-size: 14px;
+.input-icon {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.1rem;
+    filter: grayscale(1);
 }
 
-th,
-td {
-  padding: 8px 6px;
-  border-bottom: 1px solid #ddd;
-  text-align: left;
+/* Giriş Butonu */
+.btn-login-action {
+    background: var(--neon-green);
+    color: var(--bg-dark);
+    font-weight: 700;
+    padding: 14px;
+    border-radius: 12px;
+    letter-spacing: 1px;
+    border: none;
+    transition: 0.3s;
 }
 
-th {
-  background: #f4f4f4;
-  font-weight: bold;
-}
-
-.refresh-btn {
-  margin-top: 8px;
-  background: #4caf50;
-  color: white;
-  padding: 7px 14px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.refresh-btn:hover {
-  background: #45a049;
-}
-
-button {
-  padding: 10px 20px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-button:hover {
-  background-color: #0056b3;
+.btn-login-action:hover {
+    box-shadow: 0 0 25px rgba(0, 255, 136, 0.5);
+    transform: translateY(-2px);
+    background: #00e67a;
 }
