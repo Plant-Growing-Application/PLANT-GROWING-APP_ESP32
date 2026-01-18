@@ -2,15 +2,13 @@
 #define WEBSEVER_MANEGER_H
 
 #pragma once
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#include "MyWiFi.h"
 
 class WebServerManager
 {
 public:
     WebServerManager(AsyncWebServer &server, AsyncWebSocket &ws, MyWiFi &wifiRef);
     void begin();
+    // void sendFlowSensorData(int flowRate);
 
 private:
     AsyncWebServer &_server;
@@ -26,6 +24,8 @@ private:
     void handleSaveWiFi(AsyncWebServerRequest *request);
     void handleScan(AsyncWebServerRequest *request);
     void handleNotFound(AsyncWebServerRequest *request);
+    void handleBootstrap(AsyncWebServerRequest *request);
+    void handleLogin(AsyncWebServerRequest *request);
 };
 extern WebServerManager WebServer;
 

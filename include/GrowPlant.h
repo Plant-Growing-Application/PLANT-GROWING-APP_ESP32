@@ -87,6 +87,7 @@ public:
     void GoToPageBluetooth();
     void GoToPageWifi();
     void GoToPageWPS();
+    void GoToPageSensors();
     void StateBluetooth(bool btState);
     void StateWifi(bool wfState);
     void StateWPS(bool wpsState);

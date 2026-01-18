@@ -1,72 +1,82 @@
 <!DOCTYPE html>
-<html lang="tr" data-theme="light">
+<html lang="tr">
+
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>ESP32 Wi-Fi Kurulum</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SALIXUS | WiFi Kurulumu</title>
 
-  <!-- Bootstrap -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Local Bootstrap -->
+  <link rel="stylesheet" href="/bootstrap.min.css">
 
-  <!-- Bootstrap Icons -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600&family=Poppins:wght@400;600&display=swap"
+    rel="stylesheet">
 
-  <!-- Harici CSS -->
+  <!-- Icons -->
+  <link rel="stylesheet" href="/bootstrap-icons.css">
+
+  <!-- Custom CSS -->
   <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
 
-  <div class="wifi-card text-center">
-    <h3 class="mb-2">
-      <i class="bi bi-wifi"></i> Wi-Fi Kurulum
-    </h3>
-    <p class="small text-description">
-      Telefonunu <b>ESP32_Setup</b> ağına bağla ve aşağıya Wi-Fi bilgilerini gir.
-    </p>
+  <div class="container d-flex align-items-center justify-content-center min-vh-100">
+    <div class="wifi-setup-card">
 
-    <!-- WiFi Scan -->
-    <label class="fw-semibold mt-3 text-description">Bulunan Ağlar</label>
-    <div class="input-group mb-3">
-      <select id="networks" class="form-select">
-        <option value="">— Tarama yap —</option>
-      </select>
-      <button class="btn btn-green" onclick="scanNetworks()">
-        <i class="bi bi-search"></i>
-      </button>
-    </div>
-
-    <!-- Form -->
-    <form id="wifiForm" method="POST" action="/saveWiFi">
-
-      <label class="fw-semibold text-description">SSID</label>
-      <input type="text" id="ssid" name="ssid"
-             class="form-control mb-3"
-             placeholder="Ağ adı (SSID)" required>
-
-      <label class="fw-semibold text-description">Parola</label>
-      <div class="input-group mb-4">
-        <input type="password" id="pass" name="pass"
-               class="form-control"
-               placeholder="Parola (WPA/WPA2)">
-        <button class="btn btn-outline-secondary" type="button" onclick="togglePass()">
-          <i id="passIcon" class="bi bi-eye-slash"></i>
-        </button>
+      <div class="text-center mb-4">
+        <div class="wifi-brand">SALIXUS</div>
+        <div class="wifi-icon-circle">
+          <span>🌐</span>
+        </div>
+        <h4 class="mt-3 fw-bold">WiFi Bağlantısı</h4>
       </div>
 
-      <button type="submit" class="btn btn-green w-100 py-2 fw-semibold">
-        <i class="bi bi-save"></i> Kaydet ve Bağlan
-      </button>
-    </form>
+      <!-- FORM BAŞLANGIÇ -->
+      <form id="wifiForm" method="POST" action="/saveWiFi">
 
-    <p id="status" class="text-center mt-2 small"></p>
+        <!-- WiFi Scan -->
+        <div class="mb-4">
+          <label class="form-label text-grey small fw-bold">AĞ SEÇİN (SSID)</label>
+
+          <div class="d-flex gap-2">
+            <select id="networks" name="ssid" class="form-select">
+              <option value="">-- Tarama yap --</option>
+            </select>
+
+            <button type="button" class="btn btn-scan" onclick="scanNetworks()">
+              TARA
+            </button>
+          </div>
+        </div>
+
+        <!-- PASSWORD -->
+        <div class="mb-4">
+          <label class="form-label text-grey small fw-bold">WIFI ŞİFRESİ</label>
+
+          <div class="password-wrapper position-relative">
+            <input type="password" id="pass" name="pass" class="form-control custom-input" placeholder="••••••••">
+
+            <!-- Göster / Gizle -->
+            <button type="button" class="pass-toggle-btn" onclick="togglePass()">
+              👁️
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-connect w-100">
+          SİSTEMİ BAĞLA
+        </button>
+
+      </form>
+      <!-- FORM BİTİŞ -->
+
+    </div>
   </div>
 
-  <!-- Tema butonu (FAB) -->
-  <button class="theme-btn" onclick="toggleTheme()">
-    <i id="themeIcon" class="bi bi-moon-stars"></i>
-  </button>
-
+  <!-- JS -->
   <script src="/script.js"></script>
+
 </body>
 </html>

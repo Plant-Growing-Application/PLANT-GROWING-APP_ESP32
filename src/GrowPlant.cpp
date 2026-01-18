@@ -10,7 +10,6 @@ extern String currentMAC;
 unsigned long CurrenMillis = 0;
 unsigned long PreviousMillis = 0;
 
-extern WebServerManager webServer;
 extern MyWiFi wifi;
 /////////////////////////////////////////////TEST/////////////////////////////////////////////////
 
@@ -24,7 +23,6 @@ void GrowPlantClass::ChangePage(int encoderValue)
 {
     if (encoderValue != previousEncoderState && !isInPage)
     {
-
         previousEncoderState = encoderValue;
         if (encoderValue > 0)
         {
@@ -47,6 +45,9 @@ void GrowPlantClass::ChangePage(int encoderValue)
             break;
         case PAGE_WPS:
             GoToPageWPS(); // Varsayılan olarak WIFI kapalı
+            break;
+        case PAGE_SENSORS:
+            GoToPageSensors();
             break;
             // Diğer sayfalar için ekle
         }
@@ -198,20 +199,57 @@ void GrowPlantClass::GoToPageBluetooth()
 
     oled.display();
 }
+void GrowPlantClass::GoToPageSensors()
+{
+    CurrentPage = PAGE_SENSORS;
+    oled.clearDisplay();
 
+    // Üst başlık
+    oled.setTextSize(2);
+    oled.setTextColor(SSD1306_WHITE);
+
+    // Yazının boyutlarını al
+    int16_t x1, y1;
+    uint16_t w, h;
+    String title = "SENSORS";
+    oled.getTextBounds(title, 0, 0, &x1, &y1, &w, &h);
+
+    // Ortalamayı hesapla
+    int centerX = (oled.width() - w) / 2;
+    oled.setCursor(centerX, 0);
+    oled.print(title);
+
+    // Ortada bilgi
+    oled.setTextSize(1);
+    oled.setCursor(0, 28);
+    oled.print("WaterFlow: ");
+    oled.print(SpeedSensor.GetWaterFlowRate());
+
+    // Alt çizgi (metnin altına)
+    int lineY = 38; // Yazı yüksekliğinin hemen altı
+    oled.drawLine(0, lineY, 60, lineY, SSD1306_WHITE);
+
+    // Ortada bilgi
+    oled.setTextSize(1);
+    oled.setCursor(0, 48);
+    oled.print("WaterTemp: ");
+    oled.print(TempratureSensor.WaterTemprature());
+
+    // Alt çizgi (metnin altına)
+    int lineY1 = 58; // Yazı yüksekliğinin hemen altı
+    oled.drawLine(0, lineY1, 60, lineY1, SSD1306_WHITE);
+
+    oled.display();
+}
 void GrowPlantClass::ShowIP()
 {
     // 🖥️ IP stringi güncelle
     String ipStr;
-    if (MyEeprom.Setting.IsServerMode)
-        ipStr = WiFi.softAPIP().toString(); // Server mod
-    if (!MyEeprom.Setting.IsServerMode)
-    {
-        if (WiFi.status() == WL_CONNECTED)
-            ipStr = WiFi.localIP().toString(); // Client mod
-        else
-            ipStr = "Connecting...";
-    }
+
+    if (WiFi.status() == WL_CONNECTED)
+        ipStr = currentIP; // Client mod
+    else
+        ipStr = "Connecting...";
 
     // OLED güncelle
     oled.setTextSize(1);
@@ -339,6 +377,7 @@ void GrowPlantClass::StateWifi(bool wfState)
 
         // oled.print(MyEeprom.Setting.IsServerMode ? "CLIENT" : "SERVER");
         oled.display();
+        MyEeprom.SaveSettings(MyEeprom.Setting);
     }
 
     if (MyEeprom.Setting.IsServerMode)
@@ -377,20 +416,25 @@ void GrowPlantClass::StateWPS(bool wpsState)
 }
 void GrowPlantClass::SendWifiInfo()
 {
-    // 🔹 Wi-Fi modunu al (STA = client, AP = server)
-    wifi_mode_t mode = WiFi.getMode();
 
     // ⏰ Saat her zaman güncellensin (bağlantı olmasa bile)
     currentTime = rtc.getFormattedTime();
 
     // 🌐 IP ve MAC sadece AP veya STA moddaysa alınsın
-    if (mode == WIFI_AP || mode == WIFI_STA)
+    if (MyEeprom.Setting.IsServerMode)
     {
-        String ipNow = (mode == WIFI_AP) ? WiFi.softAPIP().toString()
-                                         : WiFi.localIP().toString();
+        String ipSta = WiFi.softAPIP().toString();
+        if (currentIP != ipSta)
+            currentIP = ipSta;
 
-        if (currentIP != ipNow)
-            currentIP = ipNow;
+        if (currentMAC.isEmpty())
+            currentMAC = WiFi.macAddress();
+    }
+    else
+    {
+        String ipLocal = WiFi.localIP().toString();
+        if (currentIP != ipLocal)
+            currentIP = ipLocal;
 
         if (currentMAC.isEmpty())
             currentMAC = WiFi.macAddress();

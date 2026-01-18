@@ -11,9 +11,11 @@ ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
 
     // Röle durumu güncelle
-    const btn = document.getElementById(`r${data.id}`);
-    if (btn) {
-      btn.className = `btn ${data.state === "ON" ? "on" : "off"}`;
+    if (data.id !== undefined) {
+      const btn = document.getElementById(`r${data.id}`);
+      if (btn) {
+        btn.className = `btn ${data.state === "ON" ? "on" : "off"}`;
+      }
     }
 
     // IP adresini göster
@@ -41,6 +43,8 @@ function sendCmd(id) {
   const card = document.getElementById(cardId);
   const status = document.getElementById(statusId);
 
+  if (!card || !status) return;
+
   const isOff = card.classList.contains('off');
 
   if (isOff) {
@@ -52,21 +56,18 @@ function sendCmd(id) {
     status.innerText = "KAPALI";
     console.log((isPump ? "PUMP" : "OXY") + " Komutu: OFF");
   }
+
   ws.send(JSON.stringify({ id }));
 }
 
-
-// Parola göster/gizle
+// Şifre göster/gizle
 function togglePass() {
   const pass = document.getElementById("pass");
-  const icon = document.getElementById("passIcon");
 
   if (pass.type === "password") {
     pass.type = "text";
-    icon.classList.replace("bi-eye-slash", "bi-eye");
   } else {
     pass.type = "password";
-    icon.classList.replace("bi-eye", "bi-eye-slash");
   }
 }
 
@@ -76,6 +77,8 @@ function scanNetworks() {
     .then(res => res.json())
     .then(list => {
       const select = document.getElementById("networks");
+      if (!select) return;
+
       select.innerHTML = "";
 
       list.forEach(n => {
@@ -85,31 +88,24 @@ function scanNetworks() {
         select.appendChild(opt);
       });
 
-      select.addEventListener("change", () => {
-        document.getElementById("ssid").value = select.value;
-      });
+      // Burada da yazıyoruz (ilk yöntem)
+      select.onchange = () => {
+        const ssidInput = document.getElementById("ssid");
+        if (ssidInput) ssidInput.value = select.value;
+      };
     })
     .catch(() => alert("Ağ taraması yapılamadı!"));
 }
+
 // 🧹 Sensor kayıtlarını temizle
 function clearSensors() {
   if (!confirm("Tüm sensör kayıtları silinsin mi?")) return;
 
-  fetch("/api/clear-sensor", {
-    method: "POST"
-  })
+  fetch("/api/clear-sensor", { method: "POST" })
     .then(res => res.json())
     .then(data => {
-      if (data.ok) {
-        alert("✅ Sensör kayıtları temizlendi");
-
-        // tablo varsa yenile
-        if (typeof loadData === "function") {
-          loadData();
-        }
-      } else {
-        alert("❌ Kayıtlar silinemedi");
-      }
+      if (data.ok) alert("✅ Sensör kayıtları temizlendi");
+      else alert("❌ Kayıtlar silinemedi");
     })
     .catch(err => {
       console.error("Clear hatası:", err);
@@ -117,5 +113,28 @@ function clearSensors() {
     });
 }
 
+// 🌊 Potansiyometre (Su Akışı)
+function readFlow() {
+  fetch("/api/pot")
+    .then(res => res.json())
+    .then(data => {
+      const flowVal = document.getElementById("flow-val");
+      // console.log("🟢 POT:", data.pot);
+      if (flowVal) {
+        flowVal.innerText = data.pot;
+      }
+    })
+    .catch(err => {
+      console.error("❌ Su akışı okunamadı:", err);
+    });
+}
+// ⏱️ 600 ms
+setInterval(readFlow, 600);
 
-
+function setSSID(val) {
+  const ssidInput = document.getElementById("ssid");
+  if (ssidInput) {
+    ssidInput.value = val;
+    console.log("SSID yazıldı:", val);
+  }
+}

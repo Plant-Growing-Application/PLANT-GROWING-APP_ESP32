@@ -30,22 +30,44 @@ body {
 .sensor-card {
     background: var(--card-bg);
     border-radius: 20px;
-    padding: 35px 20px; /* Daha fazla dikey boşluk */
+    padding: 35px 20px;
+    /* Daha fazla dikey boşluk */
     text-align: center;
-    border: 1px solid rgba(255,255,255,0.05);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
 }
 
-.sensor-icon { font-size: 2.8rem; margin-bottom: 15px; display: block; }
-.sensor-title { color: var(--gray-text); font-size: 0.9rem; text-transform: uppercase; font-weight: 600; }
-.sensor-value { font-size: 2.5rem; font-weight: 700; color: var(--neon-green); margin-top: 10px; }
-.sensor-value small { font-size: 1rem; color: var(--gray-text); }
+.sensor-icon {
+    font-size: 2.8rem;
+    margin-bottom: 15px;
+    display: block;
+}
+
+.sensor-title {
+    color: var(--gray-text);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.sensor-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--neon-green);
+    margin-top: 10px;
+}
+
+.sensor-value small {
+    font-size: 1rem;
+    color: var(--gray-text);
+}
 
 /* KOMPAKT BUTONLAR (KARTLAR) */
 .control-btn {
     background: var(--card-bg);
     border-radius: 20px;
-    padding: 25px; /* Boyutu biraz küçültüldü */
+    padding: 25px;
+    /* Boyutu biraz küçültüldü */
     cursor: pointer;
     transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     border: 2px solid #222;
@@ -53,16 +75,25 @@ body {
     position: relative;
 }
 
-.control-btn.off { border-left: 6px solid var(--danger-red); }
-.control-btn.on { 
-    border-color: var(--neon-green); 
-    border-left: 6px solid var(--neon-green);
-    background: #1a2a22; 
+.control-btn.off {
+    border-left: 6px solid var(--danger-red);
 }
 
-.control-btn:active { transform: scale(0.97); }
+.control-btn.on {
+    border-color: var(--neon-green);
+    border-left: 6px solid var(--neon-green);
+    background: #1a2a22;
+}
 
-.btn-body h3 { font-size: 1.4rem; font-weight: 700; margin-bottom: 5px; }
+.control-btn:active {
+    transform: scale(0.97);
+}
+
+.btn-body h3 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
 
 /* Durum Belirteci */
 .status-box {
@@ -80,10 +111,23 @@ body {
     margin-right: 8px;
 }
 
-.off .status-dot { background: var(--danger-red); box-shadow: 0 0 8px var(--danger-red); }
-.on .status-dot { background: var(--neon-green); box-shadow: 0 0 8px var(--neon-green); }
-.on span { color: var(--neon-green); }
-.off span { color: var(--gray-text); }      
+.off .status-dot {
+    background: var(--danger-red);
+    box-shadow: 0 0 8px var(--danger-red);
+}
+
+.on .status-dot {
+    background: var(--neon-green);
+    box-shadow: 0 0 8px var(--neon-green);
+}
+
+.on span {
+    color: var(--neon-green);
+}
+
+.off span {
+    color: var(--gray-text);
+}
 
 /* WIFI SCANNNG CODES */
 :root {
@@ -106,7 +150,7 @@ body {
     padding: 40px 30px;
     border-radius: 30px;
     border: 1px solid rgba(0, 255, 136, 0.1);
-    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
 }
 
 .wifi-brand {
@@ -131,7 +175,8 @@ body {
 }
 
 /* Custom Select & Input */
-.custom-select, .custom-input {
+.custom-select,
+.custom-input {
     background-color: #222 !important;
     border: 2px solid #333 !important;
     color: white !important;
@@ -139,7 +184,8 @@ body {
     padding: 12px !important;
 }
 
-.custom-select:focus, .custom-input:focus {
+.custom-select:focus,
+.custom-input:focus {
     border-color: var(--neon-green) !important;
     box-shadow: none !important;
 }
@@ -185,6 +231,17 @@ body {
     transition: 0.3s;
 }
 
+.pass-toggle-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+}
+
 .btn-connect:hover {
     box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
     transform: translateY(-2px);
@@ -197,7 +254,9 @@ body {
     transition: 0.3s;
 }
 
-.back-link:hover { color: var(--neon-green); }
+.back-link:hover {
+    color: var(--neon-green);
+}
 
 /* LOGIN PAGE  */
 /* Giriş Kartı Özel Stilleri */
@@ -208,7 +267,7 @@ body {
     padding: 40px 30px;
     border-radius: 30px;
     border: 1px solid rgba(0, 255, 136, 0.1);
-    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
 }
 
 .brand-name {

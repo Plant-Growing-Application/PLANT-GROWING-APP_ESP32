@@ -1,8 +1,4 @@
 #include "define.h"
-#include <LittleFS.h>
-#include <WiFi.h>
-#include "SqlManager.h"
-
 #define FILESYSTEM LittleFS
 
 WebServerManager::WebServerManager(AsyncWebServer &server, AsyncWebSocket &ws, MyWiFi &wifiRef)
@@ -15,28 +11,26 @@ void WebServerManager::begin()
         Serial.println("❌ LittleFS başlatılamadı!");
         return;
     }
-
-    // Röle pinleri
-    pinMode(RELAY1, OUTPUT);
-    pinMode(RELAY2, OUTPUT);
-    digitalWrite(RELAY1, LOW);
-    digitalWrite(RELAY2, LOW);
-
     initWebSocket();
 
     // ---- HTML / API endpoints ----
-
     _server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleRoot(request); });
 
     _server.on("/wifi", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleWiFi(request); });
 
+    _server.on("/login", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleLogin(request); });
+
     _server.on("/db.html", HTTP_GET, [this](AsyncWebServerRequest *request)
                { request->send(FILESYSTEM, "/db.html", "text/html"); });
 
     _server.on("/style.css", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleStyle(request); });
+
+    _server.on("/bootstrap.min.css", HTTP_GET, [this](AsyncWebServerRequest *request)
+               { handleBootstrap(request); });
 
     _server.on("/script.js", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleScript(request); });
@@ -66,11 +60,21 @@ void WebServerManager::begin()
     request->send(200, "application/json",
                   ok ? "{\"ok\":true}" : "{\"ok\":false}"); });
 
-    _server.onNotFound([this](AsyncWebServerRequest *request)
-                       { handleNotFound(request); });
+    _server.on("/api/pot", HTTP_GET, [](AsyncWebServerRequest *request)
+               {
+                      String json = "{";
+                      json += "\"pot\":";
+                      json += Sensor.potValue;
+                      json += "}";
+                      
+                      request->send(200, "application/json", json); });
 
     _server.begin();
     Serial.println("🌐 Web Server başladı!");
+
+    // THIS EVERY TIME SHOULD BE AT THE END OF BEGIN FUNCTION
+    _server.onNotFound([this](AsyncWebServerRequest *request)
+                       { handleNotFound(request); });
 }
 
 void WebServerManager::initWebSocket()
@@ -118,9 +122,19 @@ void WebServerManager::handleRoot(AsyncWebServerRequest *request)
     request->send(FILESYSTEM, "/index.html", "text/html");
 }
 
+void WebServerManager::handleBootstrap(AsyncWebServerRequest *request)
+{
+    request->send(FILESYSTEM, "/bootstrap.min.css", "text/css");
+}
+
 void WebServerManager::handleWiFi(AsyncWebServerRequest *request)
 {
     request->send(FILESYSTEM, "/wifi.html", "text/html");
+}
+
+void WebServerManager::handleLogin(AsyncWebServerRequest *request)
+{
+    request->send(FILESYSTEM, "/login.html", "text/html");
 }
 
 void WebServerManager::handleStyle(AsyncWebServerRequest *request)
@@ -168,8 +182,7 @@ void WebServerManager::handleScan(AsyncWebServerRequest *request)
     {
         if (i)
             json += ",";
-        json += "{\"ssid\":\"" + WiFi.SSID(i) +
-                "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
+        json += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
     }
     json += "]";
 

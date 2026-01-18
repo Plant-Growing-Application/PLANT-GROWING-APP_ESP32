@@ -1,7 +1,4 @@
 #include "define.h"
-#include "MyEeproom.h"
-#include <LittleFS.h>
-#include "SqlManager.h"
 
 SqlManager &DB = SqlManager::Instance();
 DisplayProtocol DpProtocol;
@@ -14,6 +11,8 @@ unsigned long lastSave = 0;
 String currentIP = "";
 String currentMAC = "";
 String currentTime = "";
+unsigned long nowTime = 0;
+unsigned long previousTime = 0;
 
 void Task_Display(void *pvParameters)
 {
@@ -90,14 +89,25 @@ void Task_SensorLogger(void *pvParameters)
             vTaskDelay(pdMS_TO_TICKS(2000));
             continue;
         }
-
-        int sensorValue = random(20, 99);
-        DB.InsertSensor(sensorValue);
-
-        Serial.print("💾 Kaydedildi: ");
-        Serial.println(sensorValue);
-
-        vTaskDelay(pdMS_TO_TICKS(10000));
+        nowTime = millis();
+        if (nowTime - previousTime >= 600)
+        {
+            previousTime = nowTime;
+            Sensor.potValue = analogRead(POT_PIN);
+            Serial.println(Sensor.potValue);
+            if (GrowPlant.CurrentPage == PAGE_SENSORS)
+            {
+                Sensor.SensorValues();
+            }
+        }
+        else if (nowTime - previousTime >= 10000)
+        {
+            float tempValue = TempratureSensor.WaterTemprature();
+            DB.InsertSensor(tempValue);
+            Serial.print("💾 Kaydedildi: ");
+            Serial.println(tempValue);
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
@@ -147,8 +157,13 @@ void setup()
     pinMode(PIN_CONFIRM_BUTTON, INPUT_PULLUP);
     pinMode(PIN_BACK_BUTTON, INPUT);
     pinMode(WIFI_LED, OUTPUT);
-    pinMode(TEST_SENSOR_VALUE, INPUT);
     digitalWrite(WIFI_LED, LOW);
+    // Röle pinleri
+    pinMode(RELAY1, OUTPUT);
+    pinMode(RELAY2, OUTPUT);
+    digitalWrite(RELAY1, LOW);
+    digitalWrite(RELAY2, LOW);
+    pinMode(POT_PIN, INPUT);
 
     MywiFi.attachWpsHandler(); // event bağla
     bool connected = MywiFi.connect(4000);
@@ -157,8 +172,8 @@ void setup()
     if (!connected)
     {
         Serial.println("⚠️ WiFi yok → Server Mod başlatılıyor...");
-        WiFi.mode(WIFI_AP);
-        // SoftAP başlat (ESP kendi ağı)
+        WiFi.mode(WIFI_AP); // 🔥 KRİTİK SATIR
+        WiFi.disconnect(true);
         WiFi.softAP("ESP32_SERVER", "12345678");
         currentIP = WiFi.softAPIP().toString();
         Serial.println("🌐 SoftAP IP: " + currentIP);
@@ -170,9 +185,10 @@ void setup()
         currentIP = WiFi.localIP().toString();
         MyEeprom.Setting.IsServerMode = false;
     }
+    SpeedSensor.SetupSpeedSensor();
     webServer.begin();
     rtc.begin();
-
+    
     // Tasklar
     xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 8192, NULL, 1, NULL);
     xTaskCreate(Task_Display, "DisplayTask", 4096, NULL, 2, NULL);

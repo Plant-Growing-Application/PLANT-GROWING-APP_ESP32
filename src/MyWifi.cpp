@@ -214,8 +214,9 @@ void MyWiFi::ConnectFromWeb()
         WiFi.disconnect(true);
         WiFi.mode(WIFI_STA);
         WiFi.begin(MyEeprom.Setting.SSID, MyEeprom.Setting.Password);
-
-        Serial.print("Connecting to SSID: ");
+        MyEeprom.Setting.IsServerMode = false;
+        MyEeprom.SaveSettings(MyEeprom.Setting);
+        GrowPlant.GoToPageIntro();
         Serial.println(MyEeprom.Setting.SSID);
 
         // Opsiyonel: WiFi bağlanana kadar bekle
