@@ -93,12 +93,11 @@ void Task_SensorLogger(void *pvParameters)
         if (nowTime - previousTime >= 600)
         {
             previousTime = nowTime;
-            Sensor.potValue = analogRead(POT_PIN);
-            Serial.println(Sensor.potValue);
+            Sensor.WaterFlow = SpeedSensor.GetWaterFlowRate();
+            Sensor.WaterTemprature = TempratureSensor.WaterTemprature();
+            Serial.println(Sensor.WaterFlow);
             if (GrowPlant.CurrentPage == PAGE_SENSORS)
-            {
                 Sensor.SensorValues();
-            }
         }
         else if (nowTime - previousTime >= 10000)
         {
@@ -157,13 +156,13 @@ void setup()
     pinMode(PIN_CONFIRM_BUTTON, INPUT_PULLUP);
     pinMode(PIN_BACK_BUTTON, INPUT);
     pinMode(WIFI_LED, OUTPUT);
+    pinMode(PIN_WATER_TEMPRATURE, INPUT);
     digitalWrite(WIFI_LED, LOW);
     // Röle pinleri
     pinMode(RELAY1, OUTPUT);
     pinMode(RELAY2, OUTPUT);
     digitalWrite(RELAY1, LOW);
     digitalWrite(RELAY2, LOW);
-    pinMode(POT_PIN, INPUT);
 
     MywiFi.attachWpsHandler(); // event bağla
     bool connected = MywiFi.connect(4000);
@@ -188,7 +187,7 @@ void setup()
     SpeedSensor.SetupSpeedSensor();
     webServer.begin();
     rtc.begin();
-    
+
     // Tasklar
     xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 8192, NULL, 1, NULL);
     xTaskCreate(Task_Display, "DisplayTask", 4096, NULL, 2, NULL);

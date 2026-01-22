@@ -113,21 +113,27 @@ function clearSensors() {
     });
 }
 
-// 🌊 Potansiyometre (Su Akışı)
 function readFlow() {
-  fetch("/api/pot")
+  fetch("/api/sensors")
     .then(res => res.json())
     .then(data => {
       const flowVal = document.getElementById("flow-val");
-      // console.log("🟢 POT:", data.pot);
-      if (flowVal) {
-        flowVal.innerText = data.pot;
+      const tempVal = document.getElementById("temp-val");
+
+      if (flowVal && data.waterFlow !== undefined) {
+        flowVal.firstChild.nodeValue = data.waterFlow; // INTEGER
+      }
+
+      if (tempVal && data.temperature !== undefined) {
+        tempVal.firstChild.nodeValue = data.temperature; // INTEGER
       }
     })
     .catch(err => {
-      console.error("❌ Su akışı okunamadı:", err);
+      console.error("❌ Sensorler okunamadı:", err);
     });
 }
+
+
 // ⏱️ 600 ms
 setInterval(readFlow, 600);
 

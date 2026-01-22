@@ -49,7 +49,6 @@ extern RealTimeClock rtc;     // sadece bildir
 #define WIFI_LED 23
 #define RELAY1 16
 #define RELAY2 17
-#define PIN_WATER_TEMPRATURE 34
-#define PIN_WATER_FLOW 999
-#define POT_PIN 35
+#define PIN_WATER_TEMPRATURE 39
+#define PIN_WATER_FLOW 34
 #endif // DEFINE_H

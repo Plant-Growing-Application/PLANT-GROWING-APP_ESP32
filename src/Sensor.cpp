@@ -20,15 +20,15 @@ void SensorClass::SensorValues()
         oled.print(waterFlow);
         oled.display();
     }
-    if (waterTemp != prevWaterTemp)
-    {
-        prevWaterTemp = waterTemp;
-        // Ortada bilgi
-        oled.fillRect(0, 48, 128, 10, SSD1306_BLACK);
-        oled.setTextSize(1);
-        oled.setCursor(0, 48);
-        oled.print("WaterTemp: ");
-        oled.print(waterTemp);
-        oled.display();
-    }
+    // if (waterTemp != prevWaterTemp)
+    // {
+    //     prevWaterTemp = waterTemp;
+    //     // Ortada bilgi
+    //     oled.fillRect(0, 48, 128, 10, SSD1306_BLACK);
+    //     oled.setTextSize(1);
+    //     oled.setCursor(0, 48);
+    //     oled.print("WaterTemp: ");
+    //     oled.print(waterTemp);
+    //     oled.display();
+    // }
 }

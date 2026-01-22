@@ -6,7 +6,8 @@ class SensorClass
 private:
 public:
     void SensorValues();
-    int potValue;
+    int WaterFlow = 0;
+    int WaterTemprature = 0;
 };
 extern SensorClass Sensor;
 

@@ -60,14 +60,29 @@ void WebServerManager::begin()
     request->send(200, "application/json",
                   ok ? "{\"ok\":true}" : "{\"ok\":false}"); });
 
-    _server.on("/api/pot", HTTP_GET, [](AsyncWebServerRequest *request)
+    _server.on("/api/sensors", HTTP_GET, [](AsyncWebServerRequest *request)
                {
-                      String json = "{";
-                      json += "\"pot\":";
-                      json += Sensor.potValue;
-                      json += "}";
-                      
-                      request->send(200, "application/json", json); });
+        String json = "{";
+
+        json += "\"waterFlow\":";
+        json += Sensor.WaterFlow;
+        json += ",";
+
+        json += "\"temperature\":";
+        json += Sensor.WaterTemprature;
+        json += ",";
+
+        // THESE ARE FOR FUTURE USE 
+        // json += "\"sensorNutrient\":";
+        // json += Sensor.Pressure;
+        // json += ",";
+
+        // json += "\"sensorPH\":";
+        // json += Sensor.Level;
+
+        json += "}";
+
+        request->send(200, "application/json", json); });
 
     _server.begin();
     Serial.println("🌐 Web Server başladı!");

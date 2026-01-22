@@ -18,8 +18,13 @@ void SpeedSensorClass::SetupSpeedSensor()
 int SpeedSensorClass::GetWaterFlowRate()
 {
     noInterrupts();
-    uint32_t speedValue = pulseCount;
+    uint32_t pulses = pulseCount;
     pulseCount = 0;
     interrupts();
-    return speedValue;
+
+    // YF-S401
+    // L/dk = pulses * 100 / 450
+    int litersPerMinute = (pulses * 100) / 450;
+
+    return litersPerMinute;
 }
