@@ -211,30 +211,25 @@ void MyWiFi::ConnectFromWeb()
     {
         wifiShouldReconnect = false;
 
+        Serial.println("🌐 Web üzerinden bağlantı isteği alındı...");
+        // Mevcut bağlantıları temizle ve modu ayarla
         WiFi.disconnect(true);
         WiFi.mode(WIFI_STA);
+
+        // Kritik: begin() komutunu verip hemen çıkıyoruz, bağlanmasını BEKLEMİYORUZ.
         WiFi.begin(MyEeprom.Setting.SSID, MyEeprom.Setting.Password);
+
         MyEeprom.Setting.IsServerMode = false;
         MyEeprom.SaveSettings(MyEeprom.Setting);
+
+        // LCD/OLED ekranı güncelle (bekleme yapmadan)
         GrowPlant.GoToPageIntro();
+
+        Serial.print("🔄 Bağlanılıyor: ");
         Serial.println(MyEeprom.Setting.SSID);
 
-        // Opsiyonel: WiFi bağlanana kadar bekle
-        unsigned long start = millis();
-        while (WiFi.status() != WL_CONNECTED && millis() - start < 10000)
-        {
-            delay(100); // küçük delay → WDT tetiklemez
-        }
-
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            Serial.print("Connected! IP: ");
-            Serial.println(WiFi.localIP());
-        }
-        else
-        {
-            Serial.println("Failed to connect.");
-        }
+        // Not: Bağlantı durumunu bu fonksiyonun içinde değil,
+        // Task_WiFiMonitor veya WiFi Event içinde kontrol edeceğiz.
     }
 }
 

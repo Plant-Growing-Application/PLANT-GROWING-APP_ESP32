@@ -29,104 +29,100 @@ bool SqlManager::Begin()
 
 bool SqlManager::CreateTables()
 {
-    if (!db)
+    if (!Execute(SQL_CREATE_USERS_TABLE))
+        return false;
+    if (!Execute(SQL_CREATE_SYSTEM_TABLE))
         return false;
 
-    char *errMsg = nullptr;
-    int rc = sqlite3_exec(db, SQL_CREATE_SENSOR_TABLE, nullptr, nullptr, &errMsg);
+    // 👇 TEK SATIR GARANTİ
+    Execute("INSERT OR IGNORE INTO system (id, configured) VALUES (1, 0);");
 
-    if (rc != SQLITE_OK)
-    {
-        Serial.printf("[SQL] ❌ Tablo hatası: %s\n", errMsg);
-        sqlite3_free(errMsg);
-        return false;
-    }
-
-    Serial.println("[SQL] ✔ Tablolar hazır");
+    Serial.println("[SQL] ✔ System + Users hazır");
     return true;
 }
 
 bool SqlManager::Execute(const char *sql)
 {
-    char *errorMsg = nullptr;
-    int rc = sqlite3_exec(db, sql, NULL, NULL, &errorMsg);
+    char *err = nullptr;
+    int rc = sqlite3_exec(db, sql, nullptr, nullptr, &err);
 
     if (rc != SQLITE_OK)
     {
-        Serial.printf("[SQL] ❌ SQL hata: %s\n", errorMsg);
-        sqlite3_free(errorMsg);
+        Serial.printf("[SQL] ❌ SQL hata: %s\n", err);
+        sqlite3_free(err);
         return false;
     }
     return true;
 }
 
-bool SqlManager::InsertSensor(float value)
+// ---------------- AUTH ----------------
+
+int SqlManager::GetUserCount()
 {
-    if (!IsReady())
-        return false;
+    const char *sql = "SELECT COUNT(*) FROM users;";
+    sqlite3_stmt *stmt;
 
-    String sql = "INSERT INTO sensor (value) VALUES (";
-    sql += String(value, 2);
-    sql += ");";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+        return 0;
 
-    return Execute(sql.c_str());
+    int count = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        count = sqlite3_column_int(stmt, 0);
+
+    sqlite3_finalize(stmt);
+    return count;
 }
-String SqlManager::GetAllSensorsJson()
+
+bool SqlManager::CheckUser(const String &username, const String &password)
 {
-    if (!db)
-    {
-        Serial.println("[SQL] DB açık değil");
-        return "[]";
-    }
     const char *sql =
-        "SELECT id, value, created "
-        "FROM sensor "
-        "ORDER BY id DESC;";
+        "SELECT id FROM users WHERE username=? AND password=?;";
 
     sqlite3_stmt *stmt;
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK)
-    {
-        Serial.print("[SQL] ❌ SELECT prepare hatası: ");
-        Serial.println(sqlite3_errmsg(db));
-        return "[]";
-    }
+        return false;
 
-    String json = "[";
-    bool first = true;
+    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, password.c_str(), -1, SQLITE_STATIC);
 
-    while (sqlite3_step(stmt) == SQLITE_ROW)
-    {
-        if (!first)
-            json += ",";
-        first = false;
-
-        json += "{";
-        json += "\"id\":" + String(sqlite3_column_int(stmt, 0)) + ",";
-        json += "\"value\":" + String(sqlite3_column_double(stmt, 1)) + ",";
-        json += "\"created\":" + String(sqlite3_column_int(stmt, 2));
-        json += "}";
-    }
-
-    json += "]";
+    bool ok = (sqlite3_step(stmt) == SQLITE_ROW);
     sqlite3_finalize(stmt);
-
-    return json;
+    return ok;
 }
-bool SqlManager::ClearSensors()
+
+bool SqlManager::CreateUser(const String &username, const String &password)
 {
-    if (!db)
-    {
-        Serial.println("[SQL] ❌ DB açık değil");
-        return false;
-    }
+    const char *sql =
+        "INSERT INTO users (username, password) VALUES (?, ?);";
 
-    const char *sql = "DELETE FROM sensor;";
-    if (!Execute(sql))
-    {
-        Serial.println("[SQL] ❌ Sensor verileri silinemedi");
+    sqlite3_stmt *stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK)
         return false;
-    }
 
-    Serial.println("[SQL] 🧹 Sensor verileri temizlendi");
-    return true;
+    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, password.c_str(), -1, SQLITE_STATIC);
+
+    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return ok;
+}
+bool SqlManager::IsConfigured()
+{
+    const char *sql = "SELECT configured FROM system WHERE id=1;";
+    sqlite3_stmt *stmt;
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+        return false;
+
+    bool configured = false;
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        configured = sqlite3_column_int(stmt, 0) == 1;
+
+    sqlite3_finalize(stmt);
+    return configured;
+}
+
+void SqlManager::SetConfigured()
+{
+    Execute("UPDATE system SET configured=1 WHERE id=1;");
 }

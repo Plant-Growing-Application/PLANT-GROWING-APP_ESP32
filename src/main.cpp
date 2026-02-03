@@ -95,14 +95,13 @@ void Task_SensorLogger(void *pvParameters)
             previousTime = nowTime;
             Sensor.WaterFlow = SpeedSensor.GetWaterFlowRate();
             Sensor.WaterTemprature = TempratureSensor.WaterTemprature();
-            Serial.println(Sensor.WaterFlow);
+            // Serial.println(Sensor.WaterFlow);
             if (GrowPlant.CurrentPage == PAGE_SENSORS)
                 Sensor.SensorValues();
         }
         else if (nowTime - previousTime >= 10000)
         {
             float tempValue = TempratureSensor.WaterTemprature();
-            DB.InsertSensor(tempValue);
             Serial.print("💾 Kaydedildi: ");
             Serial.println(tempValue);
         }

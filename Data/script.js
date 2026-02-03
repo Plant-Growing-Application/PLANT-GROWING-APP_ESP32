@@ -1,4 +1,36 @@
-const ws = new WebSocket(`ws://${window.location.hostname}/ws`);
+/* ================= BOOT CHECK ================= */
+
+const page = document.body.dataset.page || "";
+
+if (page === "main") {
+  fetch("/api/status")
+    .then(r => r.json())
+    .then(s => {
+      if (!s.internet) {
+        window.location.href = "/wifi";
+        return;
+      }
+
+      if (!s.configured) {
+        window.location.href = "/setup.html";
+        return;
+      }
+    })
+    .catch(() => {
+      document.body.innerHTML = "Sunucuya ulaşılamadı";
+    });
+}
+
+if (page === "main") {
+  const ws = new WebSocket(`ws://${window.location.hostname}/ws`);
+
+  ws.onopen = () => {
+    console.log("✅ WebSocket bağlı");
+  };
+
+  ws.onmessage = (event) => {
+  };
+}
 
 ws.onopen = () => {
   console.log("✅ WebSocket bağlı");
@@ -135,7 +167,9 @@ function readFlow() {
 
 
 // ⏱️ 600 ms
-setInterval(readFlow, 600);
+if (page === "main") {
+  setInterval(readFlow, 600);
+}
 
 function setSSID(val) {
   const ssidInput = document.getElementById("ssid");
@@ -143,4 +177,63 @@ function setSSID(val) {
     ssidInput.value = val;
     console.log("SSID yazıldı:", val);
   }
+}
+/* ================= LOGIN ================= */
+if (page === "login") {
+  function performLogin() {
+    const usernameEl = document.getElementById("username");
+    const passwordEl = document.getElementById("loginPass");
+
+    // Login sayfasında değilsek çık
+    if (!usernameEl || !passwordEl) return;
+
+    const username = usernameEl.value.trim();
+    const password = passwordEl.value;
+
+    if (!username || !password) {
+      alert("Kullanıcı adı ve şifre gerekli");
+      return;
+    }
+
+    fetch("/api/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        username: username,
+        password: password
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.ok) {
+          alert(data.msg || "Giriş başarısız");
+          return;
+        }
+
+        // 🟡 İlk kurulum (admin / 12345)
+        if (data.setup === true) {
+          window.location.href = "/setup.html";
+          return;
+        }
+
+        // 🟢 Normal kullanıcı girişi
+        window.location.href = "/";
+      })
+      .catch(err => {
+        console.error("Login hatası:", err);
+        alert("Sunucuya ulaşılamıyor");
+      });
+  }
+}
+/* ENTER ile login (opsiyonel ama güzel) */
+if (page === "login") {
+
+  function performLogin() {
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") performLogin();
+  });
 }

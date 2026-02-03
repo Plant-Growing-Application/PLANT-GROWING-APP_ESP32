@@ -1,12 +1,13 @@
 #include "define.h"
 #define FILESYSTEM LittleFS
+SqlManager &sql = SqlManager::Instance();
 
 WebServerManager::WebServerManager(AsyncWebServer &server, AsyncWebSocket &ws, MyWiFi &wifiRef)
     : _server(server), _ws(ws), _wifi(wifiRef) {}
 
 void WebServerManager::begin()
 {
-    if (!FILESYSTEM.begin(true))
+    if (!FILESYSTEM.begin(false))
     {
         Serial.println("❌ LittleFS başlatılamadı!");
         return;
@@ -42,23 +43,6 @@ void WebServerManager::begin()
     // Tarama
     _server.on("/scan", HTTP_GET, [this](AsyncWebServerRequest *request)
                { handleScan(request); });
-    // 🔥 SQLITE API
-    _server.on("/api/sensor", HTTP_GET,
-               [](AsyncWebServerRequest *request)
-               {
-                   String json = SqlManager::Instance().GetAllSensorsJson();
-                   //    Serial.println(json);
-                   request->send(200, "application/json", json);
-               });
-
-    _server.on("/api/clear-sensor", HTTP_POST, [](AsyncWebServerRequest *request)
-               {
-    Serial.println("🔥 CLEAR endpoint çağrıldı");
-
-    bool ok = SqlManager::Instance().ClearSensors();
-
-    request->send(200, "application/json",
-                  ok ? "{\"ok\":true}" : "{\"ok\":false}"); });
 
     _server.on("/api/sensors", HTTP_GET, [](AsyncWebServerRequest *request)
                {
@@ -83,13 +67,115 @@ void WebServerManager::begin()
         json += "}";
 
         request->send(200, "application/json", json); });
+    // ---- LOGIN ----
+    _server.on(
+        "/api/login",
+        HTTP_POST,
+        [](AsyncWebServerRequest *request) {},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t, size_t)
+        {
+            String body;
+            for (size_t i = 0; i < len; i++)
+                body += (char)data[i];
 
-    _server.begin();
-    Serial.println("🌐 Web Server başladı!");
+            StaticJsonDocument<256> doc;
+            if (deserializeJson(doc, body))
+            {
+                request->send(400, "application/json", "{\"ok\":false}");
+                return;
+            }
+
+            String username = doc["username"] | "";
+            String password = doc["password"] | "";
+
+            SqlManager &sql = SqlManager::Instance();
+
+            // 🟡 İLK KURULUM (CONFIGURED = 0)
+            if (!sql.IsConfigured())
+            {
+                if (username == "admin" && password == "12345")
+                {
+                    request->send(200, "application/json",
+                                  "{\"ok\":true,\"setup\":true}");
+                }
+                else
+                {
+                    request->send(401, "application/json", "{\"ok\":false}");
+                }
+                return;
+            }
+
+            // 🟢 NORMAL LOGIN
+            if (sql.CheckUser(username, password))
+            {
+                request->send(200, "application/json", "{\"ok\":true}");
+            }
+            else
+            {
+                request->send(401, "application/json", "{\"ok\":false}");
+            }
+        });
+
+    _server.on("/setup.html", HTTP_GET, [](AsyncWebServerRequest *request)
+               {
+ if (SqlManager::Instance().IsConfigured())
+{
+    request->redirect("/login");
+    return;
+}
+
+    request->send(LittleFS, "/setup.html", "text/html"); });
+
+    _server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request)
+               {
+    bool configured = SqlManager::Instance().IsConfigured();
+    bool internet = WiFi.status() == WL_CONNECTED;
+
+    String json = "{";
+    json += "\"configured\":" + String(configured ? "true" : "false") + ",";
+    json += "\"internet\":" + String(internet ? "true" : "false");
+    json += "}";
+
+    request->send(200, "application/json", json); });
+
+    _server.on(
+        "/api/setup-user",
+        HTTP_POST,
+        [](AsyncWebServerRequest *request) {},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t, size_t)
+        {
+            String body;
+            for (size_t i = 0; i < len; i++)
+                body += (char)data[i];
+
+            StaticJsonDocument<256> doc;
+            if (deserializeJson(doc, body))
+            {
+                request->send(400, "application/json", "{\"ok\":false}");
+                return;
+            }
+
+            String username = doc["username"];
+            String password = doc["password"];
+
+            bool ok = sql.CreateUser(username, password);
+            if (ok)
+            {
+                sql.SetConfigured(); // kurulum tamam
+            }
+
+            request->send(200, "application/json",
+                          ok ? "{\"ok\":true}" : "{\"ok\":false}");
+        });
 
     // THIS EVERY TIME SHOULD BE AT THE END OF BEGIN FUNCTION
     _server.onNotFound([this](AsyncWebServerRequest *request)
                        { handleNotFound(request); });
+
+    _server.begin();
+    Serial.println("🌐 Web Server başladı!");
 }
 
 void WebServerManager::initWebSocket()
@@ -149,6 +235,12 @@ void WebServerManager::handleWiFi(AsyncWebServerRequest *request)
 
 void WebServerManager::handleLogin(AsyncWebServerRequest *request)
 {
+    if (!SqlManager::Instance().IsConfigured())
+    {
+        request->redirect("/setup.html");
+        return;
+    }
+
     request->send(FILESYSTEM, "/login.html", "text/html");
 }
 
@@ -190,21 +282,40 @@ void WebServerManager::handleSaveWiFi(AsyncWebServerRequest *request)
 // ---- WIFI TARAMA ----
 void WebServerManager::handleScan(AsyncWebServerRequest *request)
 {
-    int n = WiFi.scanNetworks(false, true);
+    // Mevcut tarama durumunu kontrol et
+    int16_t n = WiFi.scanComplete();
 
-    String json = "[";
-    for (int i = 0; i < n; i++)
+    if (n == -1)
     {
-        if (i)
-            json += ",";
-        json += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
+        // Tarama şu an devam ediyor, meşgul yanıtı dön
+        request->send(202, "application/json", "{\"status\":\"scanning\"}");
     }
-    json += "]";
+    else if (n == -2)
+    {
+        // Tarama henüz başlatılmamış, asenkron (show_hidden=false, async=true) başlat
+        WiFi.scanNetworks(true, false);
+        request->send(202, "application/json", "{\"status\":\"started\"}");
+    }
+    else
+    {
+        // Tarama bitti, sonuçları hazırla
+        String json = "[";
+        for (int i = 0; i < n; i++)
+        {
+            if (i > 0)
+                json += ",";
+            json += "{";
+            json += "\"ssid\":\"" + WiFi.SSID(i) + "\",";
+            json += "\"rssi\":" + String(WiFi.RSSI(i));
+            json += "}";
+        }
+        json += "]";
 
-    WiFi.scanDelete();
-    request->send(200, "application/json", json);
+        // Belleği boşalt ve yanıtı gönder
+        WiFi.scanDelete();
+        request->send(200, "application/json", json);
+    }
 }
-
 void WebServerManager::handleNotFound(AsyncWebServerRequest *request)
 {
     request->send(404, "text/plain", "404 Not Found");
