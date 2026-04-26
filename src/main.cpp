@@ -122,16 +122,6 @@ void setup()
     }
     Serial.println("✔ LittleFS hazır");
 
-    // 🔥 SQLITE MUTLAKA BURADA
-    if (!SqlManager::Instance().Begin())
-    {
-        Serial.println("❌ SQLite başlatılamadı!");
-    }
-    else
-    {
-        Serial.println("✔ SQLite hazır");
-    }
-
     // EEPROM’dan ayarları oku
     if (!MyEeprom.GetSettings(MyEeprom.Setting))
     {
