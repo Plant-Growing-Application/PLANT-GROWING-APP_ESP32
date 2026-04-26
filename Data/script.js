@@ -2,20 +2,6 @@
 
 const page = document.body.dataset.page || "";
 
-if (page === "main") {
-  fetch("/api/status")
-    .then(r => r.json())
-    .then(s => {
-      if (!s.internet) {
-        window.location.href = "/wifi";
-        return;
-      }
-    })
-    .catch(() => {
-      document.body.innerHTML = "Sunucuya ulaşılamadı";
-    });
-}
-
 let ws;
 
 if (page === "main") {
@@ -144,9 +130,9 @@ function readFlow() {
     });
 }
 
-// ⏱️ 600 ms
+// ⏱️ 2000 ms
 if (page === "main") {
-  setInterval(readFlow, 600);
+  setInterval(readFlow, 2000);
 }
 
 function setSSID(val) {

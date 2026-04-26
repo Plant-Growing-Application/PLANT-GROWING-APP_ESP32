@@ -22,7 +22,6 @@ struct StoredData
 {
     uint32_t magic;
     Settings setting;
-    bool LittleFSFormatted;
 };
 
 class MyEEPROM

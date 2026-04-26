@@ -9,10 +9,12 @@ void SensorClass::SensorValues()
     waterTemp = TempratureSensor.WaterTemprature();
     waterFlow = SpeedSensor.GetWaterFlowRate();
 
+    Sensor.WaterTemprature = waterTemp;
+    Sensor.WaterFlow = waterFlow;
+
     if (waterFlow != prevWaterFlow)
     {
         prevWaterFlow = waterFlow;
-        // Ortada bilgi
         oled.fillRect(0, 28, 128, 10, SSD1306_BLACK);
         oled.setTextSize(1);
         oled.setCursor(0, 28);
@@ -20,15 +22,4 @@ void SensorClass::SensorValues()
         oled.print(waterFlow);
         oled.display();
     }
-    // if (waterTemp != prevWaterTemp)
-    // {
-    //     prevWaterTemp = waterTemp;
-    //     // Ortada bilgi
-    //     oled.fillRect(0, 48, 128, 10, SSD1306_BLACK);
-    //     oled.setTextSize(1);
-    //     oled.setCursor(0, 48);
-    //     oled.print("WaterTemp: ");
-    //     oled.print(waterTemp);
-    //     oled.display();
-    // }
 }

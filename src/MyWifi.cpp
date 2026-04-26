@@ -40,7 +40,6 @@ void MyWiFi::begin(const char *ssid, const char *password)
 
     if (!_useDHCP)
     {
-
         Serial.println("Static IP Settings loaded from EEPROM:");
     }
     else
@@ -48,16 +47,7 @@ void MyWiFi::begin(const char *ssid, const char *password)
         Serial.println("DHCP mode enabled (from EEPROM)");
     }
 
-    // Şimdi bağlantıyı başlat
-    if (_useDHCP)
-    {
-        WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
-    }
-    else
-    {
-        WiFi.config(_localIP, _gateway, _subnet, _dns);
-    }
-
+    WiFi.mode(WIFI_STA);
     WiFi.begin(_ssid, _password);
 }
 
@@ -116,26 +106,41 @@ bool MyWiFi::applyConfig()
 // Connect
 bool MyWiFi::connect(unsigned long timeoutMs)
 {
-    if (sizeof(MyEeprom.Setting.SSID) == 0)
-        MyEeprom.Setting.IsServerMode = true;
-
     if (WiFi.status() == WL_CONNECTED)
         return true;
-    if (sizeof(MyEeprom.Setting.SSID) == 0)
+
+    if (strlen(MyEeprom.Setting.SSID) == 0)
+    {
+        Serial.println("⚠️ SSID yok, bağlantı denenmiyor");
         return false;
+    }
+
+    WiFi.mode(WIFI_STA);
 
     if (!_useDHCP)
         applyConfig();
-    else
-        WiFi.mode(WIFI_STA);
 
     WiFi.begin(MyEeprom.Setting.SSID, MyEeprom.Setting.Password);
 
+    Serial.print("⏳ WiFi bağlanıyor: ");
+    Serial.println(MyEeprom.Setting.SSID);
+
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs)
-        delay(100);
+        delay(50);
 
-    return WiFi.status() == WL_CONNECTED;
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        Serial.print("✅ Bağlandı IP: ");
+        Serial.println(WiFi.localIP());
+        return true;
+    }
+    else
+    {
+        Serial.println("❌ Bağlantı başarısız");
+        WiFi.disconnect(true);
+        return false;
+    }
 }
 
 // Status / IP

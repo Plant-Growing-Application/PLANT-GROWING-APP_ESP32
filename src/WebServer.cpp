@@ -1,5 +1,7 @@
 #include "define.h"
 #define FILESYSTEM LittleFS
+#define FILE_CHUNK_SIZE 1400
+
 SqlManager &sql = SqlManager::Instance();
 
 WebServerManager::WebServerManager(AsyncWebServer &server, AsyncWebSocket &ws, MyWiFi &wifiRef)
@@ -7,7 +9,7 @@ WebServerManager::WebServerManager(AsyncWebServer &server, AsyncWebSocket &ws, M
 
 void WebServerManager::begin()
 {
-    if (!FILESYSTEM.begin(false))
+    if (!FILESYSTEM.begin(true))
     {
         Serial.println("❌ LittleFS başlatılamadı!");
         return;
@@ -40,36 +42,16 @@ void WebServerManager::begin()
 
     _server.on("/api/sensors", HTTP_GET, [](AsyncWebServerRequest *request)
                {
-        String json = "{";
-
-        json += "\"waterFlow\":";
-        json += Sensor.WaterFlow;
-        json += ",";
-
-        json += "\"temperature\":";
-        json += Sensor.WaterTemprature;
-        json += ",";
-
-        // THESE ARE FOR FUTURE USE 
-        // json += "\"sensorNutrient\":";
-        // json += Sensor.Pressure;
-        // json += ",";
-
-        // json += "\"sensorPH\":";
-        // json += Sensor.Level;
-
-        json += "}";
-
+        char json[64];
+        snprintf(json, sizeof(json), "{\"waterFlow\":%d,\"temperature\":%d}",
+                 Sensor.WaterFlow, Sensor.WaterTemprature);
         request->send(200, "application/json", json); });
 
     _server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request)
                {
-        bool internet = WiFi.status() == WL_CONNECTED;
-
-        String json = "{";
-        json += "\"internet\":" + String(internet ? "true" : "false");
-        json += "}";
-
+        char json[32];
+        snprintf(json, sizeof(json), "{\"internet\":%s}",
+                 WiFi.status() == WL_CONNECTED ? "true" : "false");
         request->send(200, "application/json", json); });
 
     // THIS EVERY TIME SHOULD BE AT THE END OF BEGIN FUNCTION
@@ -84,7 +66,7 @@ void WebServerManager::initWebSocket()
 {
     _ws.onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client,
                        AwsEventType type, void *arg, uint8_t *data, size_t len)
-                 {
+                {
         if (type == WS_EVT_DATA)
             handleWebSocketMessage(arg, data, len); });
 
@@ -122,27 +104,37 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
 
 void WebServerManager::handleRoot(AsyncWebServerRequest *request)
 {
-    request->send(FILESYSTEM, "/index.html", "text/html");
+    AsyncWebServerResponse *response = request->beginResponse(FILESYSTEM, "/index.html", "text/html");
+    response->addHeader("Cache-Control", "max-age=3600");
+    request->send(response);
 }
 
 void WebServerManager::handleBootstrap(AsyncWebServerRequest *request)
 {
-    request->send(FILESYSTEM, "/bootstrap.min.css", "text/css");
+    AsyncWebServerResponse *response = request->beginResponse(FILESYSTEM, "/bootstrap.min.css", "text/css");
+    response->addHeader("Cache-Control", "max-age=86400");
+    request->send(response);
 }
 
 void WebServerManager::handleWiFi(AsyncWebServerRequest *request)
 {
-    request->send(FILESYSTEM, "/wifi.html", "text/html");
+    AsyncWebServerResponse *response = request->beginResponse(FILESYSTEM, "/wifi.html", "text/html");
+    response->addHeader("Cache-Control", "max-age=3600");
+    request->send(response);
 }
 
 void WebServerManager::handleStyle(AsyncWebServerRequest *request)
 {
-    request->send(FILESYSTEM, "/style.css", "text/css");
+    AsyncWebServerResponse *response = request->beginResponse(FILESYSTEM, "/style.css", "text/css");
+    response->addHeader("Cache-Control", "max-age=86400");
+    request->send(response);
 }
 
 void WebServerManager::handleScript(AsyncWebServerRequest *request)
 {
-    request->send(FILESYSTEM, "/script.js", "application/javascript");
+    AsyncWebServerResponse *response = request->beginResponse(FILESYSTEM, "/script.js", "application/javascript");
+    response->addHeader("Cache-Control", "max-age=86400");
+    request->send(response);
 }
 
 // ---- WIFI KAYDET ----

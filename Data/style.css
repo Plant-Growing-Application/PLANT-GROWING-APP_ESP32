@@ -9,7 +9,7 @@
 body {
     background-color: var(--bg-dark);
     color: white;
-    font-family: 'Poppins', sans-serif;
+    font-family: system-ui, -apple-system, sans-serif;
     user-select: none;
 }
 
@@ -21,7 +21,7 @@ body {
 }
 
 .brand-logo {
-    font-family: 'Orbitron', sans-serif;
+    font-family: system-ui, -apple-system, sans-serif;
     color: var(--neon-green) !important;
     letter-spacing: 2px;
 }
@@ -129,19 +129,7 @@ body {
     color: var(--gray-text);
 }
 
-/* WIFI SCANNNG CODES */
-:root {
-    --bg-dark: #0d0d0d;
-    --card-bg: #1a1a1a;
-    --neon-green: #00ff88;
-    --gray-text: #888;
-}
-
-body {
-    background-color: var(--bg-dark);
-    color: white;
-    font-family: 'Poppins', sans-serif;
-}
+/* WIFI SCANNING CODES */
 
 .wifi-setup-card {
     background: var(--card-bg);
@@ -154,7 +142,7 @@ body {
 }
 
 .wifi-brand {
-    font-family: 'Orbitron', sans-serif;
+    font-family: system-ui, -apple-system, sans-serif;
     color: var(--neon-green);
     letter-spacing: 4px;
     font-size: 1.2rem;
@@ -282,7 +270,7 @@ body {
 }
 
 .brand-name {
-    font-family: 'Orbitron', sans-serif;
+    font-family: system-ui, -apple-system, sans-serif;
     color: var(--neon-green);
     letter-spacing: 4px;
     font-size: 1.5rem;
