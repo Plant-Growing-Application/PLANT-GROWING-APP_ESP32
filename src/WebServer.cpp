@@ -110,7 +110,7 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
         digitalWrite(pin, newState);
 
         String json = "{\"id\":" + String(id) + ",\"state\":\"" +
-                      (newState ? "ON\" : "OFF") + "\"}";
+                      (newState ? "ON" : "OFF") + "\"}";
 
         AsyncWebSocketMessageBuffer *buffer = _ws.makeBuffer(json.length());
         memcpy(buffer->get(), json.c_str(), json.length());
