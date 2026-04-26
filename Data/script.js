@@ -10,60 +10,50 @@ if (page === "main") {
         window.location.href = "/wifi";
         return;
       }
-
-      if (!s.configured) {
-        window.location.href = "/setup.html";
-        return;
-      }
     })
     .catch(() => {
       document.body.innerHTML = "Sunucuya ulaşılamadı";
     });
 }
 
+let ws;
+
 if (page === "main") {
-  const ws = new WebSocket(`ws://${window.location.hostname}/ws`);
+  ws = new WebSocket(`ws://${window.location.hostname}/ws`);
 
   ws.onopen = () => {
     console.log("✅ WebSocket bağlı");
+    const wifiMode = document.getElementById("wifi-mode");
+    if (wifiMode) wifiMode.textContent = "Bağlantı aktif!";
   };
 
   ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+
+      // Röle durumu güncelle
+      if (data.id !== undefined) {
+        const btn = document.getElementById(`r${data.id}`);
+        if (btn) {
+          btn.className = `btn ${data.state === "ON" ? "on" : "off"}`;
+        }
+      }
+
+      // IP adresini göster
+      if (data.ip) {
+        const ipSpan = document.getElementById("ip");
+        if (ipSpan) ipSpan.textContent = data.ip;
+      }
+    } catch (err) {
+      console.error("WebSocket hatası:", err);
+    }
+  };
+
+  ws.onclose = () => {
+    const wifiMode = document.getElementById("wifi-mode");
+    if (wifiMode) wifiMode.textContent = "Bağlantı koptu 😕";
   };
 }
-
-ws.onopen = () => {
-  console.log("✅ WebSocket bağlı");
-  const wifiMode = document.getElementById("wifi-mode");
-  if (wifiMode) wifiMode.textContent = "Bağlantı aktif!";
-};
-
-ws.onmessage = (event) => {
-  try {
-    const data = JSON.parse(event.data);
-
-    // Röle durumu güncelle
-    if (data.id !== undefined) {
-      const btn = document.getElementById(`r${data.id}`);
-      if (btn) {
-        btn.className = `btn ${data.state === "ON" ? "on" : "off"}`;
-      }
-    }
-
-    // IP adresini göster
-    if (data.ip) {
-      const ipSpan = document.getElementById("ip");
-      if (ipSpan) ipSpan.textContent = data.ip;
-    }
-  } catch (err) {
-    console.error("WebSocket hatası:", err);
-  }
-};
-
-ws.onclose = () => {
-  const wifiMode = document.getElementById("wifi-mode");
-  if (wifiMode) wifiMode.textContent = "Bağlantı koptu 😕";
-};
 
 // Röleye komut gönder
 function sendCmd(id) {
@@ -92,17 +82,6 @@ function sendCmd(id) {
   ws.send(JSON.stringify({ id }));
 }
 
-// Şifre göster/gizle
-function togglePass() {
-  const pass = document.getElementById("pass");
-
-  if (pass.type === "password") {
-    pass.type = "text";
-  } else {
-    pass.type = "password";
-  }
-}
-
 // WiFi tarama
 function scanNetworks() {
   fetch("/scan")
@@ -129,7 +108,7 @@ function scanNetworks() {
     .catch(() => alert("Ağ taraması yapılamadı!"));
 }
 
-// 🧹 Sensor kayıtlarını temizle
+// Sensor kayıtlarını temizle
 function clearSensors() {
   if (!confirm("Tüm sensör kayıtları silinsin mi?")) return;
 
@@ -165,7 +144,6 @@ function readFlow() {
     });
 }
 
-
 // ⏱️ 600 ms
 if (page === "main") {
   setInterval(readFlow, 600);
@@ -177,63 +155,4 @@ function setSSID(val) {
     ssidInput.value = val;
     console.log("SSID yazıldı:", val);
   }
-}
-/* ================= LOGIN ================= */
-if (page === "login") {
-  function performLogin() {
-    const usernameEl = document.getElementById("username");
-    const passwordEl = document.getElementById("loginPass");
-
-    // Login sayfasında değilsek çık
-    if (!usernameEl || !passwordEl) return;
-
-    const username = usernameEl.value.trim();
-    const password = passwordEl.value;
-
-    if (!username || !password) {
-      alert("Kullanıcı adı ve şifre gerekli");
-      return;
-    }
-
-    fetch("/api/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        username: username,
-        password: password
-      })
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (!data.ok) {
-          alert(data.msg || "Giriş başarısız");
-          return;
-        }
-
-        // 🟡 İlk kurulum (admin / 12345)
-        if (data.setup === true) {
-          window.location.href = "/setup.html";
-          return;
-        }
-
-        // 🟢 Normal kullanıcı girişi
-        window.location.href = "/";
-      })
-      .catch(err => {
-        console.error("Login hatası:", err);
-        alert("Sunucuya ulaşılamıyor");
-      });
-  }
-}
-/* ENTER ile login (opsiyonel ama güzel) */
-if (page === "login") {
-
-  function performLogin() {
-  }
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") performLogin();
-  });
 }

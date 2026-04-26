@@ -258,6 +258,17 @@ body {
     color: var(--neon-green);
 }
 
+.back-link {
+    color: var(--gray-text);
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: 0.3s;
+}
+
+.back-link:hover {
+    color: var(--neon-green);
+}
+
 /* LOGIN PAGE  */
 /* Giriş Kartı Özel Stilleri */
 .login-card {
