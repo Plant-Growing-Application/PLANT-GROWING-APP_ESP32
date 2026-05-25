@@ -204,39 +204,34 @@ void GrowPlantClass::GoToPageSensors()
     CurrentPage = PAGE_SENSORS;
     oled.clearDisplay();
 
-    // Üst başlık
     oled.setTextSize(2);
     oled.setTextColor(SSD1306_WHITE);
 
-    // Yazının boyutlarını al
     int16_t x1, y1;
     uint16_t w, h;
     String title = "SENSORS";
     oled.getTextBounds(title, 0, 0, &x1, &y1, &w, &h);
 
-    // Ortalamayı hesapla
     int centerX = (oled.width() - w) / 2;
     oled.setCursor(centerX, 0);
     oled.print(title);
 
-    // Ortada bilgi
     oled.setTextSize(1);
+
+    oled.fillRect(0, 28, 128, 10, SSD1306_BLACK);
     oled.setCursor(0, 28);
     oled.print("WaterFlow: ");
-    oled.print(SpeedSensor.GetWaterFlowRate());
+    oled.print(Sensor.WaterFlow);
 
-    // Alt çizgi (metnin altına)
-    int lineY = 38; // Yazı yüksekliğinin hemen altı
+    int lineY = 38;
     oled.drawLine(0, lineY, 60, lineY, SSD1306_WHITE);
 
-    // Ortada bilgi
-    oled.setTextSize(1);
+    oled.fillRect(0, 48, 128, 10, SSD1306_BLACK);
     oled.setCursor(0, 48);
     oled.print("WaterTemp: ");
-    oled.print(TempratureSensor.WaterTemprature());
+    oled.print(Sensor.WaterTemprature);
 
-    // Alt çizgi (metnin altına)
-    int lineY1 = 58; // Yazı yüksekliğinin hemen altı
+    int lineY1 = 58;
     oled.drawLine(0, lineY1, 60, lineY1, SSD1306_WHITE);
 
     oled.display();
@@ -341,6 +336,9 @@ void GrowPlantClass::SelectedPage()
                 break;
             case PAGE_WPS:
                 GoToPageWPS();
+                break;
+            case PAGE_SENSORS:
+                GoToPageSensors();
                 break;
             }
         }

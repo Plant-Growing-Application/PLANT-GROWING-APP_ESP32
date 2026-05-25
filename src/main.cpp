@@ -17,10 +17,23 @@ unsigned long previousTime = 0;
 void Task_Display(void *pvParameters)
 {
     esp_task_wdt_add(NULL);
+    static unsigned long lastSensorPageRefresh = 0;
+
     for (;;)
     {
         GrowPlant.ChangePage(DpProtocol.ReadEncoderDetentSteps());
         GrowPlant.SelectedPage();
+
+        if (GrowPlant.CurrentPage == PAGE_SENSORS)
+        {
+            unsigned long now = millis();
+            if (now - lastSensorPageRefresh >= 500)
+            {
+                lastSensorPageRefresh = now;
+                Sensor.SensorValues();
+            }
+        }
+
         vTaskDelay(pdMS_TO_TICKS(50));
         esp_task_wdt_reset();
     }
@@ -82,25 +95,23 @@ void Task_WifiLed(void *pvParameters)
 }
 void Task_SensorLogger(void *pvParameters)
 {
+    static unsigned long lastSensorUpdate = 0;
+    static unsigned long lastDbLog = 0;
+
     for (;;)
     {
-        if (DB.GetDB() == nullptr)
-        {
-            vTaskDelay(pdMS_TO_TICKS(2000));
-            continue;
-        }
         nowTime = millis();
-        if (nowTime - previousTime >= 600)
+
+        if (nowTime - lastSensorUpdate >= 600)
         {
-            previousTime = nowTime;
+            lastSensorUpdate = nowTime;
             Sensor.WaterFlow = SpeedSensor.GetWaterFlowRate();
             Sensor.WaterTemprature = TempratureSensor.WaterTemprature();
-            // Serial.println(Sensor.WaterFlow);
-            if (GrowPlant.CurrentPage == PAGE_SENSORS)
-                Sensor.SensorValues();
         }
-        else if (nowTime - previousTime >= 10000)
+
+        if (DB.IsReady() && nowTime - lastDbLog >= 10000)
         {
+            lastDbLog = nowTime;
             float tempValue = TempratureSensor.WaterTemprature();
             Serial.print("💾 Kaydedildi: ");
             Serial.println(tempValue);

@@ -132,7 +132,7 @@ function readFlow() {
 
 // ⏱️ 2000 ms
 if (page === "main") {
-  setInterval(readFlow, 2000);
+  setInterval(readFlow, 600);
 }
 
 function setSSID(val) {
