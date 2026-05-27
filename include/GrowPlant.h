@@ -84,11 +84,9 @@ public:
     bool isInPage = false;
     void ChangePage(int encoderValue);
     void GoToPageIntro();
-    void GoToPageBluetooth();
     void GoToPageWifi();
     void GoToPageWPS();
     void GoToPageSensors();
-    void StateBluetooth(bool btState);
     void StateWifi(bool wfState);
     void StateWPS(bool wpsState);
     void SelectedPage();

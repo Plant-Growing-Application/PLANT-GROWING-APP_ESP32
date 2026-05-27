@@ -37,9 +37,6 @@ void GrowPlantClass::ChangePage(int encoderValue)
         case PAGE_INTRO:
             GoToPageIntro();
             break;
-        case PAGE_BLUETOOTH:
-            GoToPageBluetooth();
-            break;
         case PAGE_WIFI:
             GoToPageWifi(); // Varsayılan olarak WIFI kapalı
             break;
@@ -56,9 +53,6 @@ void GrowPlantClass::ChangePage(int encoderValue)
     {
         switch (CurrentPage)
         {
-        case PAGE_BLUETOOTH:
-            StateBluetooth(!MyEeprom.Setting.IsBluetoothActive);
-            break;
         case PAGE_WIFI:
             StateWifi(!MyEeprom.Setting.IsServerMode);
             break;
@@ -167,38 +161,6 @@ void GrowPlantClass::GoToPageWPS()
     }
 }
 
-void GrowPlantClass::GoToPageBluetooth()
-{
-    CurrentPage = PAGE_BLUETOOTH;
-    oled.clearDisplay();
-
-    // Üst başlık
-    oled.setTextSize(2);
-    oled.setTextColor(SSD1306_WHITE);
-
-    // Yazının boyutlarını al
-    int16_t x1, y1;
-    uint16_t w, h;
-    String title = "BLUETOOTH";
-    oled.getTextBounds(title, 0, 0, &x1, &y1, &w, &h);
-
-    // Ortalamayı hesapla
-    int centerX = (oled.width() - w) / 2;
-    oled.setCursor(centerX, 0);
-    oled.print(title);
-
-    // Ortada bilgi
-    oled.setTextSize(1);
-    oled.setCursor(0, 28);
-    oled.print("Bluetooth: ");
-    StateBluetooth(MyEeprom.Setting.IsBluetoothActive);
-
-    // Alt çizgi (metnin altına)
-    int lineY = 38; // Yazı yüksekliğinin hemen altı
-    oled.drawLine(0, lineY, 60, lineY, SSD1306_WHITE);
-
-    oled.display();
-}
 void GrowPlantClass::GoToPageSensors()
 {
     CurrentPage = PAGE_SENSORS;
@@ -328,9 +290,6 @@ void GrowPlantClass::SelectedPage()
             case PAGE_INTRO:
                 // GoToPageIntro();
                 break;
-            case PAGE_BLUETOOTH:
-                GoToPageBluetooth();
-                break;
             case PAGE_WIFI:
                 GoToPageWifi();
                 break;
@@ -347,20 +306,6 @@ void GrowPlantClass::SelectedPage()
     PreviousPressed = IsEncoderPressed;
 }
 
-void GrowPlantClass::StateBluetooth(bool btState)
-{
-    MyEeprom.Setting.IsBluetoothActive = btState;
-
-    // Eğer şu an Bluetooth sayfasındaysak ekranı güncelle
-    if (CurrentPage == PAGE_BLUETOOTH)
-    {
-        oled.fillRect(58, 28, 30, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)
-        oled.setCursor(60, 28);                       // "ON/OFF" yazısının konumu
-        oled.setTextColor(SSD1306_WHITE);
-        oled.print(MyEeprom.Setting.IsBluetoothActive ? "ON" : "OFF");
-        oled.display();
-    }
-}
 void GrowPlantClass::StateWifi(bool wfState)
 {
     MyEeprom.Setting.IsServerMode = !MyEeprom.Setting.IsServerMode;

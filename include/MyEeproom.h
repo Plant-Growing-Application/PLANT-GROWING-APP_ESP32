@@ -13,7 +13,6 @@ typedef struct
     char IP[16];
     char MAC[16];
     bool IsServerMode;
-    bool IsBluetoothActive;
     bool IsWpsActive;
     bool LittleFSFormatted;
 } Settings;

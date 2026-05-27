@@ -32,12 +32,11 @@
 #define OLED_I2C_ADDRESS 0x3C
 extern Adafruit_SSD1306 oled; // sadece referans
 extern RealTimeClock rtc;     // sadece bildir
-#define TOTAL_PAGES 5
+#define TOTAL_PAGES 4
 #define PAGE_INTRO 0
-#define PAGE_BLUETOOTH 1
-#define PAGE_WIFI 2
-#define PAGE_WPS 3
-#define PAGE_SENSORS 4
+#define PAGE_WIFI 1
+#define PAGE_WPS 2
+#define PAGE_SENSORS 3
 #define WDT_TIMEOUT 15
 // PIN
 #define PIN_ENCODER_A 33

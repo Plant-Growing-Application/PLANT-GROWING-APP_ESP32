@@ -42,7 +42,6 @@ void MyEEPROM::ResetEeprom()
     memset(MyEeprom.Setting.MAC, 0, sizeof(MyEeprom.Setting.MAC));
     // Bool değerleri default
     MyEeprom.Setting.IsServerMode = true;
-    MyEeprom.Setting.IsBluetoothActive = false;
     MyEeprom.Setting.IsWpsActive = false;
 
     // EEPROM'a yaz ve commit et
