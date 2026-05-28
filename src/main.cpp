@@ -164,7 +164,8 @@ void setup()
     digitalWrite(RELAY1, LOW);
     digitalWrite(RELAY2, LOW);
 
-    MywiFi.attachWpsHandler(); // event bağla
+    WiFi.onEvent([](arduino_event_id_t event, arduino_event_info_t info)
+                  { MywiFi.onWiFiEvent(event); });
     bool connected = MywiFi.connect(4000);
     WiFi.setSleep(false);
     esp_wifi_set_ps(WIFI_PS_NONE);

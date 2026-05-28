@@ -15,7 +15,7 @@
 #include <SPIFFS.h>
 #include <EEPROM.h>
 #include "MyEeproom.h"
-#include "Wps.h"
+// #include "Wps.h"
 #include <esp_wifi.h>
 #include <esp_wps.h>
 #include "esp_err.h"

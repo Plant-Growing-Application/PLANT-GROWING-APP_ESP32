@@ -346,7 +346,7 @@ void GrowPlantClass::StateWPS(bool wpsState)
     MyEeprom.Setting.IsWpsActive = wpsState;
     if (CurrentPage == PAGE_WPS)
     {
-        if (!WiFi.status() == WL_CONNECTED)
+        if (WiFi.status() == WL_CONNECTED)
         {
             oled.setTextSize(1);
             oled.fillRect(30, 28, 40, 10, SSD1306_BLACK); // Eski yazıyı sil (sadece o bölge)

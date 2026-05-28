@@ -33,19 +33,22 @@ bool MyEEPROM::GetSettings(Settings &outSetting)
 // Ayarları temizle
 void MyEEPROM::ResetEeprom()
 {
+    StoredData sd;
     // EEPROM başlat
-    EEPROM.begin(sizeof(MyEeprom.Setting));
+    EEPROM.begin(sizeof(StoredData));
     // String alanları temizle
-    memset(MyEeprom.Setting.SSID, 0, sizeof(MyEeprom.Setting.SSID));
-    memset(MyEeprom.Setting.Password, 0, sizeof(MyEeprom.Setting.Password));
-    memset(MyEeprom.Setting.IP, 0, sizeof(MyEeprom.Setting.IP));
-    memset(MyEeprom.Setting.MAC, 0, sizeof(MyEeprom.Setting.MAC));
+    memset(sd.setting.SSID, 0, sizeof(sd.setting.SSID));
+    memset(sd.setting.Password, 0, sizeof(sd.setting.Password));
+    memset(sd.setting.IP, 0, sizeof(sd.setting.IP));
+    memset(sd.setting.MAC, 0, sizeof(sd.setting.MAC));
     // Bool değerleri default
-    MyEeprom.Setting.IsServerMode = true;
-    MyEeprom.Setting.IsWpsActive = false;
+    sd.setting.IsServerMode = true;
+    sd.setting.IsWpsActive = false;
+    // Magic numarası
+    sd.magic = MAGIC;
 
     // EEPROM'a yaz ve commit et
-    EEPROM.put(0, MyEeprom.Setting);
+    EEPROM.put(_address, sd);
     EEPROM.commit();
 
     Serial.println("✅ EEPROM resetlendi");

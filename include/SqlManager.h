@@ -20,7 +20,7 @@ private:
     sqlite3 *db = nullptr;
     bool ready = false;
 
-    const char *DB_PATH = "/littlefs/system.db";
+    const char *DB_PATH = "/system.db";
 
     bool CreateTables();
     bool Execute(const char *sql);

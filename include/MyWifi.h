@@ -25,17 +25,16 @@ public:
     bool applyConfig();
 
     // WPS / event handler
-    void attachWpsHandler(); // WiFi.onEvent(...) bağlar — setup içinde çağır
+    void onWiFiEvent(WiFiEvent_t event);
+    void StartWps(); // WPS PBC başlatır
     void ConnectFromWeb();
-    void ConnectFromWPS(); // WPS PBC başlatır
+    void ConnectFromWPS(); // WPS buton kontrolü
     bool isWpsActive() const { return _wpsActive; }
     bool wifiShouldReconnect = false;
 
 private:
     unsigned long backPressTime = 0;
     bool wpsRunning = false;
-    // event callback (member function)
-    void onWiFiEvent(WiFiEvent_t event);
 
     // helper
     bool parseIP(const char *ipStr, IPAddress &out);
@@ -44,8 +43,7 @@ private:
     bool _useDHCP;
     IPAddress _localIP, _gateway, _subnet, _dns;
 
-    // static WPS state + config
+    // static WPS state
     static bool _wpsActive;
-    static esp_wps_config_t _wps_config;
 };
 extern MyWiFi MywiFi;

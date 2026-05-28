@@ -3,7 +3,6 @@
 Settings Setting;
 // statikler tanımla
 bool MyWiFi::_wpsActive = false;
-esp_wps_config_t MyWiFi::_wps_config;
 String _ssidStr;
 String _passwordStr;
 const char *_ssid;
@@ -149,13 +148,6 @@ bool MyWiFi::isConnected() const { return WiFi.status() == WL_CONNECTED; }
 String MyWiFi::getLocalIPString() const { return WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "0.0.0.0"; }
 IPAddress MyWiFi::getLocalIP() const { return WiFi.localIP(); }
 
-// WPS
-void MyWiFi::attachWpsHandler()
-{
-    WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t info)
-                 { this->onWiFiEvent(event); });
-}
-
 void MyWiFi::onWiFiEvent(WiFiEvent_t event)
 {
     switch (event)
@@ -174,12 +166,10 @@ void MyWiFi::onWiFiEvent(WiFiEvent_t event)
         wifi_config_t cfg;
         if (esp_wifi_get_config(WIFI_IF_STA, &cfg) == ESP_OK)
         {
-            // WPS ile alınan SSID ve Password
             String ssid = String((char *)cfg.sta.ssid);
             String pass = String((char *)cfg.sta.password);
 
-            // EEPROM’a kaydet
-            MyEeprom.Setting.IsWpsActive = true; // flag
+            MyEeprom.Setting.IsWpsActive = true;
             strncpy(MyEeprom.Setting.SSID, ssid.c_str(), sizeof(MyEeprom.Setting.SSID));
             strncpy(MyEeprom.Setting.Password, pass.c_str(), sizeof(MyEeprom.Setting.Password));
 
@@ -192,7 +182,7 @@ void MyWiFi::onWiFiEvent(WiFiEvent_t event)
         }
 
         esp_wifi_wps_disable();
-        WiFi.begin(); // kaydedilmiş credential ile bağlan
+        WiFi.begin();
         break;
     }
 
@@ -200,14 +190,24 @@ void MyWiFi::onWiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WPS_ER_TIMEOUT:
         Serial.println("WPS BAŞARISIZ veya TIMEOUT ❌");
         _wpsActive = false;
-        MyEeprom.Setting.IsWpsActive = false;    // flag
-        MyEeprom.SaveSettings(MyEeprom.Setting); // EEPROM’a kaydet
+        MyEeprom.Setting.IsWpsActive = false;
+        MyEeprom.SaveSettings(MyEeprom.Setting);
         esp_wifi_wps_disable();
         break;
 
     default:
         break;
     }
+}
+
+void MyWiFi::StartWps()
+{
+    Serial.println("WPS Başlatılıyor...");
+
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+    esp_wifi_wps_enable(NULL);
+    esp_wifi_wps_start(0);
 }
 
 void MyWiFi::ConnectFromWeb()
@@ -252,8 +252,7 @@ void MyWiFi::ConnectFromWPS()
     {
         if (!wpsStarted)
         {
-            // WPS başlat
-            wpsManager.StartWps();
+            StartWps();
             wpsStarted = true;
             wpsStartTime = millis(); // zamanlayıcı başlat
 
