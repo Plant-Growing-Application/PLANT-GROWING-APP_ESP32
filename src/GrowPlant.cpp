@@ -11,6 +11,12 @@ unsigned long CurrenMillis = 0;
 unsigned long PreviousMillis = 0;
 
 extern MyWiFi wifi;
+
+// Extern functions for WiFiMonitor task control
+extern void pauseWiFiMonitor();
+extern void resumeWiFiMonitor();
+// Extern function for setting WiFi mode
+extern void setWiFiMode(wifi_mode_t mode, bool isServerMode);
 /////////////////////////////////////////////TEST/////////////////////////////////////////////////
 
 unsigned long previousMillis = 0;
@@ -308,38 +314,27 @@ void GrowPlantClass::SelectedPage()
 
 void GrowPlantClass::StateWifi(bool wfState)
 {
-    MyEeprom.Setting.IsServerMode = !MyEeprom.Setting.IsServerMode;
+    // Pause the WiFiMonitor task to prevent interference while changing mode
+    pauseWiFiMonitor();
 
-    // Görsel kısım
+    // Toggle the server mode and set the WiFi mode accordingly
+    bool newServerMode = !MyEeprom.Setting.IsServerMode;
+    wifi_mode_t newMode = newServerMode ? WIFI_AP_STA : WIFI_STA;
+    setWiFiMode(newMode, newServerMode);
+
+    // Update the OLED display if we are on the WIFI page
     if (CurrentPage == PAGE_WIFI)
     {
         oled.fillRect(33, 18, 60, 10, SSD1306_BLACK);
         oled.setCursor(33, 18);
         oled.setTextColor(SSD1306_WHITE);
         oled.print(MyEeprom.Setting.IsServerMode ? "SERVER" : "CLIENT");
-
-        // oled.print(MyEeprom.Setting.IsServerMode ? "CLIENT" : "SERVER");
         oled.display();
-        MyEeprom.SaveSettings(MyEeprom.Setting);
+        // Settings are already saved by setWiFiMode, so no need to save again
     }
 
-    if (MyEeprom.Setting.IsServerMode)
-    {
-        // 🔹 SERVER + CLIENT aynı anda aktif olsun
-        Serial.println("📡 SERVER MODE aktif (AP + STA)");
-        WiFi.mode(WIFI_AP_STA); // 👈 kritik değişiklik
-
-        // SoftAP başlat (ESP kendi ağı)
-        WiFi.softAP("ESP32_SERVER", "12345678");
-
-        Serial.print("🌐 AP IP: ");
-        Serial.println(WiFi.softAPIP());
-    }
-    else
-    {
-        Serial.println("💻 CLIENT MODE aktif (STA)");
-        WiFi.mode(WIFI_STA);
-    }
+    // Resume the WiFiMonitor task
+    resumeWiFiMonitor();
 }
 void GrowPlantClass::StateWPS(bool wpsState)
 {

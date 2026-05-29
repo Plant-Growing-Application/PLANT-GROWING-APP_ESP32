@@ -1,4 +1,6 @@
 #include "define.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 SqlManager &DB = SqlManager::Instance();
 DisplayProtocol DpProtocol;
@@ -13,6 +15,34 @@ String currentMAC = "";
 String currentTime = "";
 unsigned long nowTime = 0;
 unsigned long previousTime = 0;
+
+// Global handle for WiFiMonitor task
+TaskHandle_t xWiFiMonitorHandle = NULL;
+
+// Function to set WiFi mode and state
+void setWiFiMode(wifi_mode_t mode, bool isServerMode) {
+    WiFi.mode(mode);
+    MyEeprom.Setting.IsServerMode = isServerMode;
+    MyEeprom.SaveSettings(MyEeprom.Setting);
+    // Start softAP if in AP or AP_STA mode
+    if (mode == WIFI_AP || mode == WIFI_AP_STA) {
+        WiFi.softAP("ESP32_SERVER", "12345678");
+    }
+    // Note: For WIFI_STA mode, the softAP is turned off by the WiFi.mode() call.
+}
+
+// Function to pause and resume WiFiMonitor task
+void pauseWiFiMonitor() {
+    if (xWiFiMonitorHandle != NULL) {
+        vTaskSuspend(xWiFiMonitorHandle);
+    }
+}
+
+void resumeWiFiMonitor() {
+    if (xWiFiMonitorHandle != NULL) {
+        vTaskResume(xWiFiMonitorHandle);
+    }
+}
 
 void Task_Display(void *pvParameters)
 {
@@ -49,10 +79,8 @@ void Task_WiFiMonitor(void *pvParameters)
         if (!connected)
         {
             Serial.println("⚠️ WiFi bağlanamadı, Server Mod aktif");
-            WiFi.mode(WIFI_AP);
-            WiFi.softAP("ESP32_SERVER");
+            setWiFiMode(WIFI_AP, true);
             currentIP = WiFi.softAPIP().toString();
-            MyEeprom.Setting.IsServerMode = true;
         }
         else
         {
@@ -172,25 +200,22 @@ void setup()
     if (!connected)
     {
         Serial.println("⚠️ WiFi yok → Server Mod başlatılıyor...");
-        WiFi.mode(WIFI_AP); // 🔥 KRİTİK SATIR
-        WiFi.disconnect(true);
-        WiFi.softAP("ESP32_SERVER", "12345678");
+        setWiFiMode(WIFI_AP, true);
         currentIP = WiFi.softAPIP().toString();
         Serial.println("🌐 SoftAP IP: " + currentIP);
-        MyEeprom.Setting.IsServerMode = true;
     }
     else
     {
         Serial.println("✅ Kayıtlı bilgiler ile bağlandı");
+        setWiFiMode(WIFI_STA, false);
         currentIP = WiFi.localIP().toString();
-        MyEeprom.Setting.IsServerMode = false;
     }
     SpeedSensor.SetupSpeedSensor();
     webServer.begin();
     rtc.begin();
 
     // Tasklar
-    xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 8192, NULL, 1, NULL);
+    xTaskCreate(Task_WiFiMonitor, "WiFiMonitor", 8192, NULL, 1, &xWiFiMonitorHandle);
     xTaskCreate(Task_Display, "DisplayTask", 4096, NULL, 2, NULL);
     xTaskCreate(Task_WifiLed, "WifiLed", 2048, NULL, 3, NULL);
     xTaskCreate(Task_SensorLogger, "SensorLogger", 4096, NULL, 4, NULL);
