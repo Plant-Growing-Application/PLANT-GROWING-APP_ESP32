@@ -95,7 +95,6 @@ void Task_WiFiMonitor(void *pvParameters)
             MywiFi.connect(5000);
         MywiFi.ConnectFromWPS();
         MywiFi.ConnectFromWeb();
-        GrowPlant.SendWifiInfo();
         esp_task_wdt_reset();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }

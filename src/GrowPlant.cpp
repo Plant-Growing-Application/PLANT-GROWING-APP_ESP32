@@ -76,11 +76,6 @@ void GrowPlantClass::GoToPageIntro()
     CurrentPage = PAGE_INTRO;
     oled.clearDisplay();
     oled.drawBitmap(0, 0, myLogo, 128, 64, SSD1306_WHITE);
-
-    oled.setTextSize(1);
-    oled.setTextColor(SSD1306_WHITE);
-    oled.setCursor(0, 28);
-    oled.setCursor(0, 41);
     oled.display();
     SendWifiInfo();
 }
@@ -91,38 +86,33 @@ void GrowPlantClass::GoToPageWifi()
     oled.clearDisplay();
     oled.setTextColor(SSD1306_WHITE);
 
-    // 🔸 Başlık
     oled.setTextSize(2);
-    oled.setCursor((128 - 6 * 2 * 4) / 2, 0); // "WIFI" ortala
+    oled.setCursor((128 - 6 * 2 * 4) / 2, 0);
     oled.print("WIFI");
 
-    // 🔸 Mod (SERVER / CLIENT)
     oled.setTextSize(1);
     oled.setCursor(0, 18);
     oled.print("MODE: ");
     oled.print(MyEeprom.Setting.IsServerMode ? "SERVER" : "CLIENT");
 
-    // 🔸 Ayrım çizgisi
     oled.drawLine(0, 28, 127, 28, SSD1306_WHITE);
 
-    // 🔸 SSID
     oled.setCursor(0, 34);
-    if (MyEeprom.Setting.IsServerMode) // Server modu
+    if (MyEeprom.Setting.IsServerMode)
     {
-        oled.print("SSID: ESP32_SERVER"); // SoftAP SSID
+        oled.print("SSID: ESP32_SERVER");
         oled.setCursor(0, 44);
-        oled.print("PASS: 12345678"); // SoftAP şifre
+        oled.print("PASS: 12345678");
     }
-    else if (!MyEeprom.Setting.IsServerMode) // Client modu
+    else if (!MyEeprom.Setting.IsServerMode)
     {
-        // 🔸 SSID ve Password
         oled.setCursor(0, 34);
         oled.print("SSID: ");
-        oled.print(MyEeprom.Setting.SSID); // EEPROM’dan al
+        oled.print(MyEeprom.Setting.SSID);
 
         oled.setCursor(0, 44);
         oled.print("PASS: ");
-        oled.print(MyEeprom.Setting.Password); // EEPROM’dan al
+        oled.print(MyEeprom.Setting.Password);
     }
 
     ShowIP();
@@ -206,18 +196,15 @@ void GrowPlantClass::GoToPageSensors()
 }
 void GrowPlantClass::ShowIP()
 {
-    // 🖥️ IP stringi güncelle
     String ipStr;
 
     if (WiFi.status() == WL_CONNECTED)
-        ipStr = currentIP; // Client mod
+        ipStr = currentIP;
     else
         ipStr = "Connecting...";
 
-    // OLED güncelle
     oled.setTextSize(1);
     oled.setTextColor(SSD1306_WHITE);
-    // Her sayfa dönüşünde sıfırdan çiz
     if (CurrentPage == PAGE_INTRO)
     {
         oled.fillRect(0, 28, 128, 10, SSD1306_BLACK);
@@ -226,22 +213,21 @@ void GrowPlantClass::ShowIP()
     }
     else if (CurrentPage == PAGE_WIFI)
     {
-        oled.fillRect(30, 58, 98, 8, SSD1306_BLACK); // IP alanını temizle
+        oled.fillRect(30, 54, 98, 8, SSD1306_BLACK);
         oled.setCursor(0, 54);
         oled.print("IP: " + ipStr);
     }
-
-    oled.display();
 }
 
 void GrowPlantClass::ShowMac(const String &macStr)
 {
     if (macStr.isEmpty())
         return;
+    oled.setTextSize(1);
+    oled.setTextColor(SSD1306_WHITE);
     oled.fillRect(0, 39, 128, 10, SSD1306_BLACK);
     oled.setCursor(0, 39);
     oled.print("MAC:" + macStr);
-    oled.display();
 }
 void GrowPlantClass::ShowClock(const String &timeStr)
 {
@@ -249,12 +235,13 @@ void GrowPlantClass::ShowClock(const String &timeStr)
         return;
     int16_t x1, y1;
     uint16_t w, h;
+    oled.setTextSize(1);
     oled.getTextBounds(timeStr, 0, 0, &x1, &y1, &w, &h);
     int rightX = oled.width() - w - 2;
+    oled.setTextColor(SSD1306_WHITE);
     oled.fillRect(rightX, 0, w + 2, h + 2, SSD1306_BLACK);
     oled.setCursor(rightX, 0);
     oled.print(timeStr);
-    oled.display();
 }
 
 void GrowPlantClass::SelectedPage()
@@ -354,11 +341,8 @@ void GrowPlantClass::StateWPS(bool wpsState)
 }
 void GrowPlantClass::SendWifiInfo()
 {
-
-    // ⏰ Saat her zaman güncellensin (bağlantı olmasa bile)
     currentTime = rtc.getFormattedTime();
 
-    // 🌐 IP ve MAC sadece AP veya STA moddaysa alınsın
     if (MyEeprom.Setting.IsServerMode)
     {
         String ipSta = WiFi.softAPIP().toString();
@@ -382,5 +366,6 @@ void GrowPlantClass::SendWifiInfo()
         ShowClock(currentTime);
         ShowIP();
         ShowMac(currentMAC);
+        oled.display();
     }
 }
