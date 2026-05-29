@@ -65,7 +65,7 @@ int DisplayProtocol::ReadEncoderDetentSteps()
     if (!delta)
         return 0;
     accumulatedSteps += delta;
-    const int stepsPerDetent = 2; // Bu değer enkoderin kalitesine göre 4 olabilir.
+    const double stepsPerDetent = 1.5; // Bu değer enkoderin kalitesine göre 4 olabilir.
     int detentCount = 0;
     while (accumulatedSteps >= stepsPerDetent)
     {
