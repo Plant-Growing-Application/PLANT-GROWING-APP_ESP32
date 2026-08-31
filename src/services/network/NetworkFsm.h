@@ -60,6 +60,12 @@ void tick(core::Millis now);
 /// zorunda kalmamalı.
 void requestRetryNow();
 
+/// "Ağı unut" isteği — bayrak koyar, işi `net` task'ı kendi bağlamında yapar.
+///
+/// `app_core` radyoya DOKUNAMAZ (P2) ve AsyncTCP callback'i flash yazamaz
+/// (§14.6); bu yüzden komut bir bayrağa çevrilir.
+void requestForget();
+
 /// Yeni credential girildi: kimlik hatası sayacı ve durdurma sıfırlanır.
 ///
 /// Aksi hâlde kullanıcı şifreyi düzeltir ama sistem hâlâ durmuş olur — ve

@@ -1,6 +1,7 @@
 #include "InputDevices.h"
 
 #include <Arduino.h>
+#include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
@@ -24,7 +25,8 @@ std::atomic<uint32_t> g_dropped{0};
 uint8_t g_stepsPerDetent = 4;
 
 // --- Encoder durumu (ISR tarafından güncellenir) ----------------------------
-volatile uint8_t g_encState    = 0;
+volatile uint8_t  g_encState  = 0;
+volatile uint32_t g_lastEncUs = 0;   ///< son KABUL EDILEN gecisin zamani (us)
 volatile int8_t  g_encSteps    = 0;  ///< detente henüz dönüşmemiş adımlar
 volatile bool    g_ready       = false;
 
@@ -34,6 +36,17 @@ volatile bool    g_ready       = false;
 ///
 /// NEDEN TABLO: mevcut sistemde ISR içinde uzun bir `if/else if` zinciri vardı.
 /// Tablo hem daha kısa hem sabit süreli — ISR'de olması gereken budur.
+/// ISR seviyesinde gurultu reddi.
+///
+/// Mekanik encoder kontaklari sicrar (bounce) ve sicrama, quadrature
+/// tablosunda GECERLI GORUNEN gecisler uretir (00→01→00→01…). Tablo bunlari
+/// +1/-1 olarak sayar; sonuc titrek ve kacan detentlerdir.
+///
+/// Elle cevrilen bir EC11'de detentler >10 ms arayla gelir; sicrama
+/// tipik olarak 100-300 us surer. 600 us'lik bir kapi sicramayi eler ve
+/// el hizini SINIRLAMAZ.
+constexpr uint32_t ENCODER_GLITCH_US = 600u;
+
 const int8_t kQuadTable[16] = {
     0, -1, +1,  0,
    +1,  0,  0, -1,
@@ -74,6 +87,14 @@ void IRAM_ATTR encoderIsr()
         return;
     }
 
+    // Sicrama reddi: son KABUL EDILEN gecisten bu yana yeterli sure gecmediyse
+    // bu kesme gurultudur.
+    const uint32_t nowUs = static_cast<uint32_t>(esp_timer_get_time());
+    if ((nowUs - g_lastEncUs) < ENCODER_GLITCH_US)
+    {
+        return;
+    }
+
     const uint8_t a  = static_cast<uint8_t>(digitalRead(board::ENCODER_A));
     const uint8_t b  = static_cast<uint8_t>(digitalRead(board::ENCODER_B));
     const uint8_t st = static_cast<uint8_t>((a << 1) | b);
@@ -86,7 +107,8 @@ void IRAM_ATTR encoderIsr()
         return;  // geçersiz geçiş (gürültü) — yok sayılır
     }
 
-    g_encSteps = static_cast<int8_t>(g_encSteps + delta);
+    g_lastEncUs = nowUs;
+    g_encSteps  = static_cast<int8_t>(g_encSteps + delta);
 
     // Detent normalizasyonu TAMSAYI aritmetiğiyle. Mevcut sistemdeki
     // `1.5` (double) değeri int sayaçla karşılaştırılıyordu.

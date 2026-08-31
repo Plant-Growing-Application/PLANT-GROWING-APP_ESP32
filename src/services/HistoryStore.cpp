@@ -158,6 +158,20 @@ core::ErrCode begin()
         return ErrCode::STORAGE_FS_MOUNT_FAILED;
     }
 
+    // Dosya henuz yoksa arama YAPILMAZ.
+    //
+    // Olmayan bir dosyayi acmaya calismak LittleFS katmaninda gurultulu bir
+    // hata satiri uretiyordu:
+    //     `open(): /littlefs/hist.bin does not exist, no permits for creation`
+    // Bu bir HATA DEGIL, ilk boot'un normal durumu — log'u kirletmemeli.
+    if (!hal::fs::exists(FILE_PATH))
+    {
+        g_ready = true;
+        core::diag::log(core::LogLevel::INFO, ErrCode::OK, 0,
+                        "gecmis deposu bos - ilk kullanim");
+        return ErrCode::OK;
+    }
+
     // ── HALKA KONUMU: iki ikili arama, ~30 okuma ───────────────────────────
     const uint32_t v = findValidCount();
     g_stored         = v;

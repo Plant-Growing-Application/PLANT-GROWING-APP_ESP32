@@ -75,8 +75,19 @@ constexpr uint8_t ADC_SPARE      = 39;  ///< yedek: analog seviye / 4. sensör
 constexpr uint8_t FLOW_PULSE       = 4;   ///< PCNT ile sayılır (TASK-019)
 constexpr uint8_t LEVEL_FLOAT_LOW  = 13;  ///< şamandıra: düşük seviye
 constexpr uint8_t LEVEL_FLOAT_CRIT = 14;  ///< şamandıra: kritik seviye
-constexpr uint8_t ENCODER_A        = 18;
-constexpr uint8_t ENCODER_B        = 19;
+// ── ENCODER: MEVCUT DONANIMA GERI ALINDI (ISSUE-001 kapatilmadi, KABUL EDILDI)
+//
+// TASK-002'de analog butceyi korumak icin 18/19'a tasinmisti. Ilk sahada
+// donanimin hala 33/32'ye kablolu oldugu goruldu ve kullanici kodun geri
+// alinmasini tercih etti.
+//
+// BEDELI ACIKCA KABUL EDILIYOR: GPIO 32/33 ADC1_CH4 ve CH5'tir. Bu iki
+// kanal artik encoder tarafindan isgal ediliyor; mevcut 4 analog sensor
+// (34/35/36/39) ETKILENMIYOR ama BESINCI/ALTINCI analog sensor icin yer
+// KALMADI. Yeni bir analog sensor gerekirse ya encoder tasinacak ya harici
+// bir ADC (ADS1115 vb.) eklenecek.
+constexpr uint8_t ENCODER_A        = 33;
+constexpr uint8_t ENCODER_B        = 32;
 constexpr uint8_t ENCODER_PUSH     = 25;
 constexpr uint8_t BUTTON_BACK      = 27;
 
@@ -137,8 +148,26 @@ static_assert(isSafePullupInput(ENCODER_B),        "ENCODER_B dahili pull-up ger
 static_assert(isSafePullupInput(ENCODER_PUSH),     "ENCODER_PUSH dahili pull-up gerektirir");
 static_assert(isSafePullupInput(BUTTON_BACK),      "BUTTON_BACK dahili pull-up gerektirir");
 
-// ISSUE-001: encoder ADC1 kanallarını işgal etmemeli — analog bütçe korunmalı
-static_assert(!isAdc1(ENCODER_A), "ENCODER_A ADC1 kanalini isgal etmemeli (ISSUE-001)");
-static_assert(!isAdc1(ENCODER_B), "ENCODER_B ADC1 kanalini isgal etmemeli (ISSUE-001)");
+// ISSUE-001 — encoder ADC1 kanallarini isgal ediyor.
+//
+// Bu kisit BILINCLI OLARAK GEVSETILDI (mevcut donanim 33/32'ye kablolu).
+// Yerine ANALOG SENSORLERLE CAKISMA yasagi konuldu: encoder pinleri bir
+// analog sensor pini ile AYNI olamaz. Boyle bir cakisma sessiz bir ariza
+// olurdu — sensor okumasi encoder darbeleriyle bozulurdu.
+static_assert(ENCODER_A != ADC_WATER_TEMP && ENCODER_A != ADC_PH &&
+                  ENCODER_A != ADC_EC && ENCODER_A != ADC_SPARE,
+              "ENCODER_A bir analog sensor pini ile CAKISIYOR");
+static_assert(ENCODER_B != ADC_WATER_TEMP && ENCODER_B != ADC_PH &&
+                  ENCODER_B != ADC_EC && ENCODER_B != ADC_SPARE,
+              "ENCODER_B bir analog sensor pini ile CAKISIYOR");
+
+// Encoder ADC1 isgal ediyorsa, KALAN analog butce sifirdir. Yeni bir analog
+// sensor eklenirse bu iddia BOZULUR ve derleme durur — sessiz cakisma yok.
+static_assert(!(isAdc1(ENCODER_A) && isAdc1(ENCODER_B)) ||
+                  (ADC_WATER_TEMP != 32 && ADC_WATER_TEMP != 33 &&
+                   ADC_PH != 32 && ADC_PH != 33 &&
+                   ADC_EC != 32 && ADC_EC != 33 &&
+                   ADC_SPARE != 32 && ADC_SPARE != 33),
+              "encoder ADC1'de: 32/33 analog olarak KULLANILAMAZ");
 
 } // namespace board

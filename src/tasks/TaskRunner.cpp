@@ -87,10 +87,24 @@ void TaskRunner::endCycle()
 
     // --- 3) Periyodik bekleme ---
     //
-    // Mutlak uyanma zamanı: iş süresi periyoda EKLENMEZ, kayma birikmez.
-    TickType_t lastWake = static_cast<TickType_t>(_lastWakeTicks);
-    vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(_period.ms));
-    _lastWakeTicks = static_cast<uint32_t>(lastWake);
+    // OLAY GUDUMLU MOD (periyot 0): burada BEKLENMEZ.
+    //
+    // FreeRTOS `xTaskDelayUntil` `xTimeIncrement > 0` iddiasi tasir
+    // (`tasks.c:1474`); 0 tick ile cagrilirsa PANIK atar. Bu, ISSUE-023'te
+    // "dogrulanmadi" diye kaydettigim belirsizlikti ve ilk gercek
+    // calistirmada `store` task'inda dogrulandi.
+    //
+    // SOZLESME: periyot 0 veren task, dongusunde KENDISI BLOKLAMAK
+    // ZORUNDADIR (`store` bunu `xQueueReceive` zaman asimiyla yapar).
+    // Aksi halde bu dongu CPU'yu doldurur ve IDLE task'i ac birakip
+    // watchdog tetikler.
+    if (_period.ms > 0u)
+    {
+        // Mutlak uyanma zamani: is suresi periyoda EKLENMEZ, kayma birikmez.
+        TickType_t lastWake = static_cast<TickType_t>(_lastWakeTicks);
+        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(_period.ms));
+        _lastWakeTicks = static_cast<uint32_t>(lastWake);
+    }
 
     _cycleStartUs = static_cast<uint32_t>(esp_timer_get_time());
 }

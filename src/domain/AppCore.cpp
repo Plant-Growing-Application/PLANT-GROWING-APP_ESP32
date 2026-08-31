@@ -14,6 +14,7 @@
 #include "domain/SafetyMonitor.h"
 #include "domain/SystemSupervisor.h"
 #include "services/ConfigService.h"
+#include "services/network/NetworkFsm.h"
 
 namespace domain {
 namespace appcore {
@@ -104,6 +105,13 @@ void applyCommand(const Command& c, const core::SystemState& snap, Millis now)
             supervisor::requestRestart(ErrCode::OK);
             break;
 
+        case CommandType::NETWORK_FORGET:
+            // Radyoya ve flash'a `net` task'i dokunur; burada yalnizca istek
+            // iletilir. Bu komut daha once SESSIZCE DUSUYORDU: kullanici
+            // "Agi unut" der, `{"ok":true}` alir, hicbir sey olmazdi.
+            services::net::fsm::requestForget();
+            break;
+
         case CommandType::FACTORY_RESET:
             // Uç nokta `confirm=FACTORY_RESET` ister ve yetki arar (TASK-043);
             // buraya ulaşan bir komut ONAYLANMIŞ demektir.
@@ -125,7 +133,6 @@ void applyCommand(const Command& c, const core::SystemState& snap, Millis now)
         case CommandType::CONFIG_RELOAD:
         case CommandType::NETWORK_SCAN:
         case CommandType::NETWORK_RETRY_NOW:
-        case CommandType::NETWORK_FORGET:
             // Bu komutların sahibi başka modüllerdir (TASK-015 fabrika
             // ayarları, TASK-036 ağ). P7 gereği burada boş gövde YAZILMAZ —
             // sahibi uygulandığında bu satırlar oraya taşınır.

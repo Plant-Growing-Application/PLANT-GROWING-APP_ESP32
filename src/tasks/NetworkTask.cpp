@@ -20,7 +20,9 @@
 #include "hal/WifiRadio.h"
 #include "interfaces/web/AuthService.h"
 #include "interfaces/web/WebService.h"
+#include "interfaces/ui/UiService.h"
 #include "services/network/NetworkFsm.h"
+#include "services/network/SoftApManager.h"
 
 namespace tasks {
 
@@ -70,6 +72,19 @@ void networkTaskEntry(void*)
             hal::wifi::mode() != hal::wifi::RadioMode::OFF)
         {
             (void)interfaces::web::start();
+        }
+
+        // Kurulum AP bilgisini arayuze BILDIR.
+        //
+        // `ui` radyoya dokunamaz (P2); bu degerler `net` tarafindan
+        // dolduruluyor. Bu cagri EKSIKTI: `setApInfo()` tanimliydi ama
+        // HICBIR YERDEN cagrilmiyordu, dolayisiyla OLED'de kurulum SSID'si
+        // ve sifresi HIC gorunmuyordu — kullanicinin cihaza girmesinin tek
+        // yolu buydu.
+        if (services::net::softap::active())
+        {
+            interfaces::ui::setApInfo(services::net::softap::ssid(),
+                                      services::net::softap::password());
         }
 
         services::timesvc::tick(now, services::net::fsm::state() == core::NetState::CONNECTED);

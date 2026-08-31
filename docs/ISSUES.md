@@ -123,7 +123,7 @@ Recommended: TASK-002'de karara bağlanmalı.
 | Issue | Durum | Nerede çözüldü | Nasıl |
 |---|---|---|---|
 | ISSUE-000 | OPEN | TASK-026 | Su seviyesi topolojisi — pin planında iki şamandıra için yer ayrıldı (13, 14), donanım kararı bekliyor |
-| ISSUE-001 | **RESOLVED** | TASK-002 | Encoder 33/32 → 18/19; ADC1_CH4 ve CH5 boşaltıldı |
+| ISSUE-001 | **KABUL EDİLDİ** | TASK-002 → geri alındı | Encoder 33/32'de KALDI; ADC1_CH4/CH5 işgal — analog genişleme payı YOK (bkz. aşağı) |
 | ISSUE-002 | **RESOLVED** | TASK-002 | Akış sensörü 34 → 4; `static_assert` ile derleme zamanında zorlanıyor |
 | ISSUE-003 | OPEN | TASK-017 | Röle aktif seviyesi — ölçüm gerektirir |
 | ISSUE-004 | OPEN | TASK-028 | RELAY2 gerçek yükü — mantıksal/fiziksel ayrım hazır |
@@ -553,25 +553,45 @@ HTTP handler yalnızca hazır tampondan serileştirir. Altyapı hazır —
 
 ---
 
-## ISSUE-023 — `store` task'ı `TaskRunner` ile 0 ms periyot kullanıyor
+## ISSUE-023 — `store` task'ı 0 ms periyotla `vTaskDelayUntil` çağırıyordu
 
-**Bulunduğu yer:** `tasks/StoreTask.cpp`
-**Öncelik:** P3 · **Durum:** Açık
+**Bulunduğu yer:** `tasks/TaskRunner.cpp` / `tasks/StoreTask.cpp`
+**Öncelik:** **P0** · **Durum:** ✅ **ÇÖZÜLDÜ**
 
-`store` task'ı olay güdümlüdür: gerçek bekleme `storage::tick()` içindeki
-`xQueueReceive(..., 1000 ms)` çağrısıdır. `TaskRunner` periyodu bu yüzden
-0 ms verildi.
+Bu madde ilk yazıldığında bir **belirsizlik** olarak kaydedilmişti:
 
-**Belirsizlik:** `TaskRunner::endCycle()` `vTaskDelayUntil` kullanıyor ve
-0 tick'lik bir periyotta davranışı doğrulanmadı — sıfır gecikmeyle geri
-dönüp dönmediği, yoksa bir tick beklediği ölçülmedi. Kuyruk beklemesi
-zaten CPU'yu serbest bıraktığı için işlevsel bir sorun beklenmiyor, ancak
-**varsayım doğrulanmadı**.
+> "`vTaskDelayUntil` 0 tick'lik bir periyotta davranışı DOĞRULANMADI."
 
-**Önerilen çözüm:** TASK-063 (bellek/zamanlama doğrulama) sırasında
-`store` task'ının CPU kullanımı ölçülmeli. Gerekirse `TaskRunner`'a
-"olay güdümlü" bir kip eklenmeli (periyodik bekleme yok, yalnızca
-heartbeat + watchdog).
+İlk gerçek çalıştırmada **doğrulandı — panik atıyor**:
+
+```text
+assert failed: xTaskDelayUntil tasks.c:1474 (( xTimeIncrement > 0U ))
+  TaskRunner::endCycle()   ← TaskRunner.cpp:92
+  storeTaskEntry()         ← StoreTask.cpp:41
+```
+
+Boot tamamlanıyor, tüm aşamalar geçiyor, web sunucusu dinlemeye başlıyor —
+sonra `store` task'ı ilk `endCycle()`'da cihazı düşürüyordu.
+
+**Düzeltme — `TaskRunner`'a olay güdümlü kip:**
+
+```cpp
+if (_period.ms > 0u) { vTaskDelayUntil(...); }
+```
+
+**Sözleşme:** periyot 0 veren task, döngüsünde **kendisi bloklamak
+zorundadır**. `store` bunu `xQueueReceive(..., 1000 ms)` ile yapıyor.
+
+**İkinci tuzak da kapatıldı:** `storage::tick()` hazır değilken hemen
+dönüyordu. Periyot 0 ile bu, %100 CPU tüketen boş bir döngü olurdu; IDLE
+task aç kalır ve watchdog cihazı resetlerdi. Artık o yol da
+`vTaskDelay(1000 ms)` ile blokluyor.
+
+Marjlar: TWDT 8 sn · `STORAGE` yumuşak son tarih 5 sn · besleme aralığı
+≤ 1 sn.
+
+**Ders:** "Doğrulanmadı" diye kaydedilen bir varsayım, er ya da geç
+doğrulanır — genellikle sahada.
 
 ---
 
@@ -692,3 +712,171 @@ Bölüm adı **değiştirilmedi** — açıklayıcı adı korumak, etiketi bir y
 vermekten daha değerli. PlatformIO `uploadfs` bölümü **alt tipe** göre
 bulduğu için (`builder/main.py:207`) ad serbesttir; `partitions.csv`'ye bu
 ilişkiyi anlatan bir uyarı bloğu eklendi.
+
+---
+
+## ISSUE-001 (yeniden açıldı ve KABUL EDİLDİ) — encoder ADC1 kanallarını işgal ediyor
+
+**Durum:** ⚠️ **BİLİNÇLİ KABUL** — çözülmedi, bedeli kabul edildi
+
+TASK-002'de encoder analog bütçeyi korumak için `33/32 → 18/19` taşınmıştı.
+**İlk saha denemesinde** donanımın hâlâ 33/32'ye kablolu olduğu görüldü:
+encoder çevirisi hiçbir olay üretmiyordu (18/19 boşta, pull-up ile sabit).
+
+Kullanıcı kodun geri alınmasını tercih etti. `BoardPins.h` 33/32'ye döndü.
+
+**Kabul edilen bedel:**
+
+```text
+GPIO 32 = ADC1_CH4   ← artik encoder
+GPIO 33 = ADC1_CH5   ← artik encoder
+
+Mevcut 4 analog sensor (34/35/36/39) ETKILENMIYOR.
+BESINCI/ALTINCI analog sensor icin YER KALMADI.
+```
+
+Yeni bir analog sensör gerekirse iki yol var: encoder'ı taşımak veya harici
+bir ADC (ADS1115 vb.) eklemek.
+
+**Kısıt gevşetildi ama boşluk bırakılmadı.** Eski `static_assert` (encoder
+ADC1'de olamaz) kaldırıldı; yerine iki yeni iddia kondu:
+
+1. Encoder pinleri bir **analog sensör piniyle çakışamaz** — böyle bir
+   çakışma sessiz bir arıza olurdu (sensör okuması encoder darbeleriyle
+   bozulur).
+2. Encoder ADC1'deyken **32/33 analog olarak kullanılamaz** — ileride
+   biri oraya bir sensör koymaya kalkarsa derleme durur.
+
+Yani kısıt kaybolmadı, **gerçeğe uyarlandı**.
+
+---
+
+## ISSUE-028 — `setApInfo()` tanımlıydı ama HİÇ ÇAĞRILMIYORDU
+
+**Bulunduğu yer:** `interfaces/ui/UiService.cpp` · `tasks/NetworkTask.cpp`
+**Öncelik:** **P0** · **Durum:** ✅ **ÇÖZÜLDÜ**
+
+**Belirti:** Kullanıcı cihaza giremiyordu. Kurulum AP'sinin SSID'si ve
+şifresi **hiçbir yerde görünmüyordu** — ne OLED'de ne seri portta.
+
+**Kök neden:** `interfaces::ui::setApInfo()` tanımlıydı, `softap::ssid()` ve
+`softap::password()` tanımlıydı — ama **üçü de hiçbir yerden
+çağrılmıyordu**. `UiModel.apSsid` / `apPassword` boş string kalıyor, OLED
+`NETWORK` ekranı boş satır çiziyordu.
+
+**P7 taramamın kör noktası:** "bildirilip TANIMLANMAMIŞ fonksiyon" arıyordum
+ve 0 buldum. Bu fonksiyonlar **tanımlıydı, sadece hiç çağrılmıyordu** —
+farklı ve burada çok daha zararlı bir ölü kod türü. Tarama genişletildi:
+46 aday çıktı, ikisi (`setApInfo`, `conn::forget`) gerçek işlevsel boşluktu.
+
+**Düzeltme — üç katman:**
+
+1. `NetworkTask` her döngüde AP aktifken `setApInfo()` çağırıyor
+2. **HOME ekranı** kurulum modunda SSID + şifre + `192.168.4.1` gösteriyor
+   (bilgiyi `NETWORK` ekranına saklamak, kullanıcıyı önce gezinmeye zorlar —
+   encoder çalışmıyorsa cihaza girmenin yolu kalmaz)
+3. **Seri porta** da yazılıyor: OLED yoksa/bozuksa/encoder ölüyse tek yol
+
+**Güvenlik notu:** seri porta yazılan, cihazın KENDİ ÜRETTİĞİ kurulum
+şifresidir — kullanıcının ev ağı şifresi veya arayüz parolası değil. Zaten
+OLED'de gösterilmek üzere tasarlandı (TASK-038) ve seri port en az OLED
+kadar fiziksel erişim gerektirir.
+
+---
+
+## ISSUE-029 — `NETWORK_FORGET` komutu sessizce yok sayılıyordu
+
+**Bulunduğu yer:** `domain/AppCore.cpp`
+**Öncelik:** P1 · **Durum:** ✅ **ÇÖZÜLDÜ**
+
+`FACTORY_RESET` ile **aynı sınıf hata**: uç nokta komutu kuyruğa koyuyor,
+`{"ok":true}` dönüyor, `app_core` komutu "sahipsiz" listesinde bırakıp
+hiçbir şey yapmıyordu. Kullanıcı "Ağı unut" der, onay alır, ağ silinmez.
+
+**Düzeltme:** komut `fsm::requestForget()` bayrağına çevriliyor; işi `net`
+task'ı kendi bağlamında yapıyor (`conn::forget()` + AP'ye dönüş).
+
+Bayrak yolu bilinçli: `app_core` radyoya dokunamaz (P2) ve AsyncTCP
+callback'i flash yazamaz (§14.6).
+
+---
+
+## ISSUE-030 — OLED I2C 100 kHz'de kalmış (ekran geçişlerinde takılma)
+
+**Bulunduğu yer:** `hal/OledPanel.cpp`
+**Öncelik:** P1 · **Durum:** ✅ **ÇÖZÜLDÜ**
+
+**Belirti:** Encoder ile ekran geçişleri akıcı değil, takılmalar oluyor.
+
+**Kök neden:** `Wire.begin()` çağrılıyordu ama **`Wire.setClock()` hiç
+çağrılmamıştı** → Arduino varsayılanı olan 100 kHz'de kalınıyordu.
+
+```text
+SSD1306 tam karesi          : 1024 bayt
+100 kHz'de (~10 us/bayt)    : ~105 ms
+`ui` task periyodu          :   50 ms
+                              ────────
+Her ekran degisimi arayuzu IKI PERIYOT boyunca blokluyordu.
+```
+
+**Düzeltme:** `Wire.setClock(400000)` — I2C fast mode. Aynı kare **~26 ms**,
+yani periyodun yarısından az. 400 kHz SSD1306 modüllerinin standart hızıdır.
+
+**Not:** Bu, kod incelemesiyle yakalanabilecek bir eksiklikti ama
+yakalanmadı — "eksik olan çağrı" aramak, "yanlış olan çağrı" aramaktan
+zordur. Sahada tek bir cümlelik geri bildirimle ortaya çıktı.
+
+---
+
+## ISSUE-031 — Encoder ISR'ında sıçrama (bounce) reddi yoktu
+
+**Bulunduğu yer:** `hal/InputDevices.cpp`
+**Öncelik:** P1 · **Durum:** ✅ **ÇÖZÜLDÜ**
+
+Quadrature tablosu geçersiz geçişleri eliyordu, ancak mekanik kontak
+sıçraması tabloda **geçerli görünen** geçişler üretir (`00→01→00→01…`).
+Tablo bunları `+1, -1, +1` olarak sayar; sonuç titrek gezinme ve kaçan
+detentlerdir.
+
+**Düzeltme:** ISR'a zaman kapısı eklendi.
+
+```text
+ENCODER_GLITCH_US = 600
+Sicrama tipik olarak 100-300 us  → ELENIR
+Elle cevirmede detentler >10 ms  → ETKILENMEZ
+```
+
+---
+
+## ISSUE-032 — OLED'de uzun değerler ekrandan taşıyordu (IP okunamıyor)
+
+**Bulunduğu yer:** `interfaces/ui/screens/Screens.cpp`
+**Öncelik:** P1 · **Durum:** ✅ **ÇÖZÜLDÜ**
+
+**Belirti:** "Küçük ekranın ağ sayfasında IP doğru değil ya da ekrana
+sığmıyor."
+
+**Kök neden:** `row()` değeri sabit `COL_VALUE = 62`'den başlatıyordu.
+
+```text
+"192.168.1.100" = 13 karakter × 6 px = 78 px
+62 + 78 = 140 px   >   128 px ekran   → SON 2 HANE KESILIYORDU
+```
+
+IP değerinin kendisi doğruydu; **çizim taşıyordu**. Kullanıcının "doğru
+değil" demesi bu yüzden — kesilmiş bir IP yanlış görünür.
+
+**Düzeltme:** değerler artık **sağa yaslanıyor** (`x = 128 - textWidth`).
+Değer etiketin üzerine binecek kadar uzunsa etiketin hemen sağından başlar,
+böylece etiket her zaman okunur kalır.
+
+`hal::oled::textWidth()` bu düzeltmeye kadar **hiç çağrılmıyordu** —
+"tanımlı ama çağrılmayan" listesindeydi ve tam da bu iş için yazılmıştı.
+
+**Aynı sınıf ikinci hata:** durum çubuğunda mod yazısı sabit `x=64`'ten,
+hata rozeti sabit `x=114`'ten başlıyordu. `"CALISIYOR"` (54 px) 118'e kadar
+uzanıp rozetin üzerine biniyordu. Rozet artık sağa yaslanıp yerini önce
+ayırıyor, mod yazısı kalan alana sığdırılıyor.
+
+**Doğrulama:** 9 tipik etiket/değer çifti hesaplandı — en uzunu
+`255.255.255.255` dahil **hepsi 128 px'e tam oturuyor**.

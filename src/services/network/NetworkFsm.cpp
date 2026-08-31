@@ -1,6 +1,7 @@
 #include "services/network/NetworkFsm.h"
 
 #include <esp_random.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "core/Diagnostics.h"
@@ -25,6 +26,7 @@ constexpr uint32_t RSSI_PERIOD_MS = 1000u;   ///< her döngüde okumak gereksiz
 const core::Config* g_cfg = nullptr;
 NetworkRuntime      g_rt;
 bool                g_ready = false;
+uint8_t             g_forgetRequested = 0;
 
 const char* nameOf(NetState s)
 {
@@ -113,6 +115,19 @@ void handleDisconnect(uint16_t reasonRaw, Millis now)
 void handleGotIp(Millis now)
 {
     conn::onConnected(now);
+
+    // Cihazin adresini SERI PORTA yaz. Kullanicinin bunu router arayuzunden
+    // aramasi gerekmemeli; OLED yoksa veya okunmuyorsa tek kaynak burasi.
+    {
+        const uint32_t ip = hal::wifi::localIp();
+        char line[64];
+        snprintf(line, sizeof(line), "BAGLANDI  ->  http://%u.%u.%u.%u",
+                 static_cast<unsigned>(ip & 0xFFu),
+                 static_cast<unsigned>((ip >> 8) & 0xFFu),
+                 static_cast<unsigned>((ip >> 16) & 0xFFu),
+                 static_cast<unsigned>((ip >> 24) & 0xFFu));
+        core::diag::log(core::LogLevel::INFO, ErrCode::OK, 0, line);
+    }
     g_rt.connectedSince = now;
     g_rt.lastError      = ErrCode::OK;
     core::diag::clear(ErrCode::NET_DISCONNECTED);
@@ -228,6 +243,18 @@ void tick(Millis now)
     consumeEvents(now);
     scan::tick(now);
 
+    // "Agi unut" — komut yolundan gelen bayrak. Is BURADA yapilir: radyo ve
+    // flash bu task'a ait. Eski hali komut yolunda SESSIZCE DUSUYORDU.
+    if (g_forgetRequested != 0u)
+    {
+        g_forgetRequested = 0u;
+        (void)conn::forget();
+        onCredentialsChanged();
+        g_rt.disconnectedSince = now;
+        openAp(now);
+        enter(NetState::AP_ONLY, now);
+    }
+
     switch (g_rt.state)
     {
         case NetState::BOOT:
@@ -331,6 +358,11 @@ void tick(Millis now)
         g_rt.lastRssiAt = now;
         publish(now);
     }
+}
+
+void requestForget()
+{
+    g_forgetRequested = 1u;
 }
 
 void requestRetryNow()

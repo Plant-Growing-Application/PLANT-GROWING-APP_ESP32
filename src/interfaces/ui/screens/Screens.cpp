@@ -37,10 +37,31 @@ namespace L = layout;
 void text(int16_t x, int16_t y, const char* s) { hal::oled::drawText(x, y, s); }
 
 /// Bir satırı "etiket ......... değer" olarak yazar.
+///
+/// DEGER SAGA YASLANIR ve ekrandan TASMAZ.
+///
+/// Onceki hali degeri sabit `COL_VALUE = 62`'den basliyordu. Bir IP adresi
+/// ("192.168.1.100" = 13 karakter × 6 px = 78 px) 62 + 78 = 140 px eder ve
+/// 128 px'lik ekranin DISINA tasar — sahada "IP ekrana sigmiyor" olarak
+/// goruldu.
+///
+/// Saga yaslama ile ayni IP x=50'den baslar ve tam oturur. Deger etiketin
+/// uzerine binecek kadar uzunsa etiketin hemen sagindan baslar (kirpilir
+/// ama etiket okunur kalir).
 void row(int16_t y, const char* label, const char* value)
 {
     text(L::COL_LABEL, y, label);
-    text(L::COL_VALUE, y, value);
+
+    if (value == nullptr || *value == 0) { return; }
+
+    const int16_t labelEnd = static_cast<int16_t>(
+        L::COL_LABEL + hal::oled::textWidth(label, 1) + 4);
+    const int16_t valueW = static_cast<int16_t>(hal::oled::textWidth(value, 1));
+
+    int16_t x = static_cast<int16_t>(L::W - valueW);
+    if (x < labelEnd) { x = labelEnd; }
+
+    text(x, y, value);
 }
 
 /// Seçilebilir satır. İmleç `>` ile gösterilir; onay bekleniyorsa `?`.
@@ -77,22 +98,38 @@ void drawStatusBar(const UiModel& m)
     drawBars(34, L::STATUS_Y, m.wifiBars);
     if (m.apActive != 0u) { text(48, L::STATUS_Y, "AP"); }
 
-    // ACİL rozeti KALICIDIR: kullanıcı hangi ekranda olursa olsun görür.
-    if (m.emergency != 0u)
-    {
-        hal::oled::drawRect(64, L::STATUS_Y - 1, 34, 10, true);
-        text(66, L::STATUS_Y, "ACIL");
-    }
-    else
-    {
-        text(64, L::STATUS_Y, m.modeText);
-    }
+    // Hata rozeti SAĞA YASLANIR ve yerini önce ayırır; mod yazısı kalan
+    // alana sığdırılır.
+    //
+    // Önceki hâlde mod yazısı sabit x=64'ten başlıyor, hata rozeti sabit
+    // x=114'e yazılıyordu: "CALISIYOR" (54 px) 64+54 = 118'e kadar uzanıp
+    // rozetin üzerine biniyordu.
+    int16_t rightEdge = L::W;
 
     if (m.faultCount > 0u)
     {
         char b[8];
         snprintf(b, sizeof(b), "!%u", m.faultCount);
-        text(114, L::STATUS_Y, b);
+        const int16_t bw = static_cast<int16_t>(hal::oled::textWidth(b, 1));
+        rightEdge = static_cast<int16_t>(L::W - bw);
+        text(rightEdge, L::STATUS_Y, b);
+        rightEdge = static_cast<int16_t>(rightEdge - 3);   // ayırıcı boşluk
+    }
+
+    // ACİL rozeti KALICIDIR: kullanıcı hangi ekranda olursa olsun görür.
+    if (m.emergency != 0u)
+    {
+        const int16_t w = 34;
+        const int16_t x = static_cast<int16_t>(rightEdge - w);
+        hal::oled::drawRect(x, L::STATUS_Y - 1, w, 10, true);
+        text(static_cast<int16_t>(x + 2), L::STATUS_Y, "ACIL");
+    }
+    else
+    {
+        const int16_t mw = static_cast<int16_t>(hal::oled::textWidth(m.modeText, 1));
+        int16_t       x  = static_cast<int16_t>(rightEdge - mw);
+        if (x < 62) { x = 62; }   // "AP" göstergesinin üzerine binmesin
+        text(x, L::STATUS_Y, m.modeText);
     }
 
     hal::oled::drawLine(0, L::SEP_Y, L::W - 1, L::SEP_Y);
@@ -101,6 +138,20 @@ void drawStatusBar(const UiModel& m)
 // ── HOME: özet ──────────────────────────────────────────────────────────────
 void drawHome(const UiModel& m)
 {
+    // ── KURULUM MODU: bağlantı bilgisi HOME'DA ─────────────────────────────
+    //
+    // AP açıkken kullanıcının tek ihtiyacı bu bilgidir. Onu yalnızca NETWORK
+    // ekranına koymak, kullanıcıyı önce gezinmeye zorlar — encoder çalışmıyorsa
+    // cihaza girmenin HİÇBİR YOLU KALMAZ. İlk sahada tam olarak bu yaşandı.
+    if (m.apActive != 0u && m.apSsid[0] != '\0')
+    {
+        text(L::COL_LABEL, L::ROW0, "KURULUM MODU");
+        row(L::ROW1, "Ag", m.apSsid);
+        row(L::ROW2, "Sifre", m.apPassword);
+        text(L::COL_LABEL, L::ROW3, "192.168.4.1");
+        return;
+    }
+
     // Kritik olanlar önce: seviye ve pompa. 128×64'te "ne gösterilmeyeceği"
     // de bir tasarım kararıdır.
     const SensorLine* level = nullptr;

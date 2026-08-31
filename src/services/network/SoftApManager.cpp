@@ -74,8 +74,19 @@ core::ErrCode start(Millis now)
     if (rc == ErrCode::OK)
     {
         g_active = true;
-        // Log satırında ŞİFRE YOK — yalnızca SSID.
-        core::diag::log(core::LogLevel::INFO, ErrCode::OK, 0, "softap acildi");
+
+        // ── KURULUM BİLGİSİ SERİ PORTA DA YAZILIR ──────────────────────────
+        // Bu, cihazın KENDİ ÜRETTİĞİ kurulum şifresidir — kullanıcının ev ağı
+        // şifresi veya arayüz parolası DEĞİL. Zaten OLED'de gösterilmek üzere
+        // tasarlandı (TASK-038); seri port da en az OLED kadar fiziksel
+        // erişim gerektirir (USB kablosu).
+        //
+        // Gerekçe: OLED yoksa, bozuksa veya encoder çalışmıyorsa kullanıcının
+        // cihaza girmenin BAŞKA HİÇBİR YOLU KALMAZ.
+        char line[160];
+        snprintf(line, sizeof(line), "KURULUM AP: %s  sifre: %s  ->  http://192.168.4.1",
+                 g_ssid, g_pass);
+        core::diag::log(core::LogLevel::INFO, ErrCode::OK, 0, line);
     }
     else
     {
@@ -111,6 +122,18 @@ bool canCloseNow(Millis now, bool staConnected)
         g_staWasUp   = true;
         g_staUpSince = now;
         return false;
+    }
+
+    // KESIN KAPANMA: istemci bagli olsa BILE bu sureden sonra AP kapanir.
+    //
+    // Aksi halde kurulum AP'sinde kalan bir telefon AP'yi sonsuza kadar
+    // acik tutar ve kullanici cihazin EV AGINDAKI adresine erisemez.
+    if (core::hasElapsed(now, g_staUpSince, core::millisecs(HARD_LINGER_MS)))
+    {
+        core::diag::log(core::LogLevel::INFO, ErrCode::OK,
+                        static_cast<int32_t>(hal::wifi::apClientCount()),
+                        "kurulum AP kapaniyor - cihaz artik ev aginda");
+        return true;
     }
 
     // Bağlı istemci varsa AP AÇIK KALIR — kullanıcı tam da ayarları

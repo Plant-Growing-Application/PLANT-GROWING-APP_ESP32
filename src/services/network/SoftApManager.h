@@ -42,6 +42,20 @@ constexpr uint32_t FALLBACK_AFTER_MS = 90000u;
 /// ayarları kaydettiği anda** ortada bırakır.
 constexpr uint32_t LINGER_MS = 30000u;
 
+/// STA ayaga kalktiktan sonra AP'nin KESIN kapanma suresi.
+///
+/// `LINGER_MS` yalnizca "bagli istemci yokken" gecerlidir. Istemci bagli
+/// kaldigi surece AP'yi acik tutmak SURESIZ olamaz:
+///
+///   kullanici telefonuyla kurulum AP'sine baglanir → Wi-Fi'yi kaydeder
+///   → cihaz ev agina gecer → AMA telefon hala kurulum AP'sinde
+///   → AP hic kapanmaz → telefon 192.168.4.x agında kalir
+///   → kullanici cihazin EV AGINDAKI IP'sine ERISEMEZ
+///
+/// Sahada tam olarak bu yasandi: "IP'ye giriyorum, ariyor ariyor hata
+/// veriyor". Kesin kapanma, kullaniciyi kendi agina geri iter.
+constexpr uint32_t HARD_LINGER_MS = 90000u;
+
 /// AP ağ aralığı: `192.168.4.1/24`.
 ///
 /// Ev ağlarında yaygın `192.168.0.x` ve `192.168.1.x` ile ÇAKIŞMAZ —

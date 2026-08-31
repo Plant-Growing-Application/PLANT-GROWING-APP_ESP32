@@ -57,6 +57,10 @@ public:
 
     /// Döngü sonu: heartbeat → watchdog besleme → periyodik bekleme.
     /// Döngünün EN SON ifadesi olmalıdır.
+    ///
+    /// **PERİYOT 0 = OLAY GÜDÜMLÜ:** bu durumda burada beklenmez ve
+    /// task'ın kendi döngüsünde BLOKLAMASI ZORUNLUDUR. `vTaskDelayUntil`
+    /// 0 tick ile çağrılırsa FreeRTOS panik atar (`tasks.c:1474`).
     void endCycle();
 
     /// Bu task'ın kaç döngü periyodu aştığı.

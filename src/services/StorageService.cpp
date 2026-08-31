@@ -2,6 +2,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <freertos/task.h>
 
 #include "core/Diagnostics.h"
 #include "core/StateStore.h"
@@ -123,7 +124,15 @@ bool post(WriteKind kind, uint32_t param)
 
 void tick(Millis now)
 {
-    if (!g_ready) { return; }
+    // OLAY GUDUMLU SOZLESME (TaskRunner periyot 0): bu fonksiyon HER
+    // CAGRIDA BLOKLAMAK ZORUNDA. Hazir degilken hemen donmek, task'i
+    // %100 CPU tuketen bos bir donguye sokar; IDLE task ac kalir ve
+    // watchdog cihazi resetler.
+    if (!g_ready)
+    {
+        vTaskDelay(pdMS_TO_TICKS(WAKE_TIMEOUT_MS));
+        return;
+    }
 
     // ── KİRLİ CONFIG'İ YAZ ─────────────────────────────────────────────────
     // `ConfigService` güncellemeleri yalnızca RAM'i değiştirip config'i
