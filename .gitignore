@@ -3,3 +3,7 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# TASK-047: uretilen varliklar surum kontrolunde tutulmaz;
+# kaynak `frontend/` altindadir. `python tools/build_assets.py` uretir.
+/data/

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sera Kontrol</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<!-- Bağlantı bandı: WS kopukken KALICI olarak görünür.
+     Eski projede kopuk bağlantıda eski değerler canlıymış gibi duruyordu;
+     kullanıcı 10 dakika önceki pH'a bakıp gübre ekleyebilirdi. -->
+<div id="linkBar" class="linkbar hidden" role="status" aria-live="polite">
+  <span id="linkText">Bağlantı yok — gösterilen veriler eski</span>
+</div>
+
+<!-- Giriş ekranı -->
+<section id="loginView" class="view hidden">
+  <div class="card auth">
+    <h1>Sera Kontrol</h1>
+    <p id="loginHint" class="muted"></p>
+    <label for="pw">Parola</label>
+    <input id="pw" type="password" autocomplete="current-password">
+    <label for="pw2" id="pw2Label" class="hidden">Parola (tekrar)</label>
+    <input id="pw2" type="password" class="hidden" autocomplete="new-password">
+    <button id="loginBtn" class="primary">Giriş</button>
+    <p id="loginErr" class="err"></p>
+    <p class="muted small">
+      Bu cihaz HTTPS kullanmaz. Yalnızca güvendiğiniz yerel ağda kullanın;
+      internete açmayın.
+    </p>
+  </div>
+</section>
+
+<!-- Ana uygulama -->
+<section id="appView" class="view hidden">
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-view="dashboard" role="tab">Panel</button>
+    <button class="tab" data-view="control" role="tab">Kontrol</button>
+    <button class="tab" data-view="network" role="tab">Ağ</button>
+    <button class="tab" data-view="settings" role="tab">Ayarlar</button>
+    <button class="tab" data-view="diagnostics" role="tab">Teşhis</button>
+  </nav>
+
+  <!-- Güvenlik bandı: acil durum mandalı veya kilit varken -->
+  <div id="safetyBar" class="safetybar hidden"></div>
+
+  <main>
+    <!-- PANEL -->
+    <div id="v-dashboard" class="page">
+      <div class="row" id="statusRow">
+        <div class="card stat"><span class="lbl">Mod</span><b id="sMode">—</b></div>
+        <div class="card stat"><span class="lbl">Çalışma süresi</span><b id="sUptime">—</b></div>
+        <div class="card stat"><span class="lbl">Saat</span><b id="sClock">—</b></div>
+        <div class="card stat"><span class="lbl">Boş bellek</span><b id="sHeap">—</b></div>
+      </div>
+      <h2>Sensörler</h2>
+      <div class="grid" id="sensorGrid">
+        <p class="muted" id="sensorLoading">Yükleniyor…</p>
+      </div>
+    </div>
+
+    <!-- KONTROL -->
+    <div id="v-control" class="page hidden">
+      <h2>Aktüatörler</h2>
+      <div class="grid" id="actuatorGrid">
+        <p class="muted" id="actLoading">Yükleniyor…</p>
+      </div>
+      <div class="card danger">
+        <h3>Acil durdurma</h3>
+        <p class="muted small">
+          Tüm aktüatörleri anında keser ve mandallar. Yalnızca operatör onayıyla
+          temizlenir; koşullar düzelmeden onay reddedilir.
+        </p>
+        <button id="estopBtn" class="danger">ACİL DURDUR</button>
+        <button id="eclearBtn">Acil durumu temizle</button>
+      </div>
+    </div>
+
+    <!-- AĞ -->
+    <div id="v-network" class="page hidden">
+      <h2>Ağ durumu</h2>
+      <div class="card" id="netCard"><p class="muted">Yükleniyor…</p></div>
+      <h2>Ağ seç</h2>
+      <div class="card">
+        <button id="scanBtn">Tara</button>
+        <span id="scanStatus" class="muted small"></span>
+        <ul id="scanList" class="list"></ul>
+        <label for="ssid">SSID</label>
+        <input id="ssid" type="text" autocomplete="off">
+        <label for="wifiPw">Şifre</label>
+        <input id="wifiPw" type="password" autocomplete="off">
+        <button id="saveWifi" class="primary">Kaydet ve bağlan</button>
+        <button id="forgetWifi">Ağı unut</button>
+        <button id="retryNow">Şimdi dene</button>
+        <p id="netMsg" class="msg"></p>
+      </div>
+    </div>
+
+    <!-- AYARLAR -->
+    <div id="v-settings" class="page hidden">
+      <h2>Güvenlik</h2>
+      <div class="card" id="safetyForm"><p class="muted">Yükleniyor…</p></div>
+      <h2>Sistem</h2>
+      <div class="card" id="systemForm"><p class="muted">Yükleniyor…</p></div>
+      <div class="card danger">
+        <h3>Fabrika ayarları</h3>
+        <p class="muted small">Tüm yapılandırma, ağ bilgileri ve parola silinir.</p>
+        <button id="factoryBtn" class="danger">Fabrika ayarlarına dön</button>
+      </div>
+    </div>
+
+    <!-- TEŞHİS -->
+    <div id="v-diagnostics" class="page hidden">
+      <h2>Aktif hatalar</h2>
+      <div class="card" id="faultCard"><p class="muted">Yükleniyor…</p></div>
+      <h2>Son olaylar</h2>
+      <div class="card"><table class="log"><tbody id="logBody"></tbody></table></div>
+      <button id="refreshDiag">Yenile</button>
+    </div>
+  </main>
+</section>
+
+<script src="/app.js"></script>
+</body>
+</html>

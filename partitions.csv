@@ -1,0 +1,23 @@
+# Topraksız Tarım Sistemi — 4 MB flash bölümleme
+# Karar gerekçesi: docs/HARDWARE.md · TASK-002 · ISSUE-006
+#
+# app0/app1 : 1.5 MB × 2  → OTA etkin
+# littlefs  : 896 KB      → web varlıkları (gzip'li) + geçmiş halka dosyası
+#
+# DIKKAT — bolum ADI ile Arduino etiketi:
+#   Arduino `LittleFS.begin()` varsayilan olarak "spiffs" ADLI bolumu arar.
+#   Buradaki bolumun ADI "littlefs" oldugu icin `hal/FileStore.cpp` etiketi
+#   ACIKCA veriyor (`PARTITION_LABEL`). Etiket verilmezse mount
+#   `partition "spiffs" could not be found` ile basarisiz olur.
+#
+#   PlatformIO `uploadfs` bolumu ALT TIPE gore bulur (subtype=spiffs),
+#   adiyla degil — bu yuzden ad serbesttir.
+# coredump  : 64 KB       → çökme dökümü (ARCHITECTURE §16.3)
+#
+# Name,     Type, SubType,  Offset,   Size,     Flags
+nvs,        data, nvs,      0x9000,   0x5000,
+otadata,    data, ota,      0xE000,   0x2000,
+app0,       app,  ota_0,    0x10000,  0x180000,
+app1,       app,  ota_1,    0x190000, 0x180000,
+littlefs,   data, spiffs,   0x310000, 0xE0000,
+coredump,   data, coredump, 0x3F0000, 0x10000,

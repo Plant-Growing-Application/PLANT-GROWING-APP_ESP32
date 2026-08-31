@@ -1,0 +1,157 @@
+/* Sera Kontrol — TASK-047
+ *
+ * ÇERÇEVESİZ. Eski projede tam Bootstrap (298 KB) gömülüydü ve %95'i
+ * kullanılmıyordu. LittleFS bölümü 896 KB; üçte birini kullanılmayan bir
+ * CSS çerçevesine vermek savunulamaz.
+ *
+ * Harici font/CDN YOK: cihaz AP modunda internetsiz çalışır.
+ */
+
+:root {
+  --bg: #101418;
+  --card: #182028;
+  --line: #2a3540;
+  --fg: #e6edf3;
+  --muted: #8b98a5;
+  --accent: #3fb950;
+  --warn: #d29922;
+  --err: #f85149;
+  --pending: #58a6ff;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.hidden { display: none !important; }
+.muted  { color: var(--muted); }
+.small  { font-size: 13px; }
+
+h1 { font-size: 20px; margin: 0 0 12px; }
+h2 { font-size: 16px; margin: 20px 12px 8px; color: var(--muted); font-weight: 600; }
+h3 { font-size: 15px; margin: 0 0 8px; }
+
+/* --- Bağlantı bandı ------------------------------------------------------
+ * KALICI ve belirgin. Kullanıcı gördüğü verinin eski olduğunu anlamalı. */
+.linkbar {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--err); color: #fff;
+  padding: 8px 12px; text-align: center; font-weight: 600; font-size: 14px;
+}
+
+/* Bağlantı yokken TÜM veri solar — "canlı" görünmemeli. */
+body.stale main { opacity: .45; }
+
+.safetybar {
+  background: var(--warn); color: #1b1200;
+  padding: 10px 12px; font-weight: 600; margin: 0 0 4px;
+}
+.safetybar.critical { background: var(--err); color: #fff; }
+
+/* --- Sekmeler ------------------------------------------------------------ */
+.tabs {
+  display: flex; gap: 2px; overflow-x: auto;
+  background: var(--card); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 5;
+}
+.tab {
+  flex: 1 0 auto; padding: 12px 14px; min-height: 44px;
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  color: var(--muted); font-size: 14px; cursor: pointer;
+}
+.tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+
+/* --- Kartlar ------------------------------------------------------------- */
+main { padding: 4px 0 32px; }
+
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px; margin: 8px 12px;
+}
+.card.danger { border-color: #5a2a2a; }
+.card.auth { max-width: 380px; margin: 15vh auto; }
+
+.row, .grid { display: grid; gap: 8px; padding: 0 4px; }
+.row  { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+.stat { text-align: center; }
+.stat .lbl { display: block; font-size: 12px; color: var(--muted); }
+.stat b { font-size: 18px; }
+
+/* --- Sensör kartı -------------------------------------------------------- */
+.sensor .name { color: var(--muted); font-size: 13px; }
+.sensor .val  { font-size: 26px; font-weight: 600; }
+.sensor .unit { font-size: 14px; color: var(--muted); margin-left: 3px; }
+
+/* Kalite OK değilse değer GÜVENİLMEZ olarak işaretlenir (§9.2).
+ * STALE / OUT_OF_RANGE: değer gösterilir (bir zamanlar gerçek bir okumaydı)
+ * ama canlı bir ölçüm gibi görünmez — üstü çizili ve kırmızı. */
+.sensor.bad .val { color: var(--err); text-decoration: line-through; }
+
+/* FAULT / NOT_PRESENT: SAYI YOK. Üstü çizili bir çöp değer bile operatörün
+ * kafasına bir sayı sokar. OLED ile birebir aynı davranış (TASK-050 Karar 3). */
+.sensor.novalue .val { text-decoration: none; color: var(--muted); font-size: 20px; }
+.badge {
+  display: inline-block; padding: 1px 7px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; margin-left: 6px;
+}
+.badge.ok    { background: #12341c; color: var(--accent); }
+.badge.warn  { background: #3a2f0d; color: var(--warn); }
+.badge.bad   { background: #3d1418; color: var(--err); }
+
+/* --- Aktüatör kartı ------------------------------------------------------ */
+.act .state { font-size: 18px; font-weight: 600; }
+.act.on  .state { color: var(--accent); }
+.act.off .state { color: var(--muted); }
+/* BEKLİYOR: komut gönderildi, cihazdan onay/state gelmedi.
+ * Kart bu durumda AÇIK göstermez — iyimser güncelleme yasak. */
+.act.pending .state { color: var(--pending); }
+.act .why { font-size: 12px; color: var(--warn); min-height: 16px; }
+
+/* --- Formlar ------------------------------------------------------------- */
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+
+input, select {
+  width: 100%; padding: 10px; min-height: 44px;
+  background: #0d1217; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--fg); font-size: 15px;
+}
+
+button {
+  margin: 10px 6px 0 0; padding: 11px 16px; min-height: 44px;
+  background: #223040; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--fg); font-size: 14px; cursor: pointer;
+}
+button:hover:not(:disabled) { background: #2b3c4f; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: #1f6f36; border-color: #2ea043; }
+button.danger  { background: #6e2226; border-color: #a03a3a; }
+
+.err { color: var(--err); font-size: 13px; min-height: 18px; }
+.msg { color: var(--accent); font-size: 13px; min-height: 18px; }
+
+/* --- Listeler ve tablolar ------------------------------------------------ */
+.list { list-style: none; padding: 0; margin: 8px 0; max-height: 220px; overflow-y: auto; }
+.list li {
+  padding: 11px 8px; border-bottom: 1px solid var(--line);
+  cursor: pointer; display: flex; justify-content: space-between; gap: 8px;
+}
+.list li:hover { background: #202b36; }
+
+.log { width: 100%; border-collapse: collapse; font-size: 12px; }
+.log td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.log .lvl-3, .log .lvl-4 { color: var(--err); }
+.log .lvl-2 { color: var(--warn); }
+
+@media (max-width: 480px) {
+  .card { margin: 8px; }
+  .stat b { font-size: 16px; }
+}
