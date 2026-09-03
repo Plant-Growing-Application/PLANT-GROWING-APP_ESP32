@@ -2,8 +2,9 @@
 
 // Konfigürasyon yaşam döngüsü — TASK-015
 //
-// BÖLÜM BAŞINA AYRI NVS ANAHTARI: config tek blob olarak değil, altı ayrı
-// anahtar olarak saklanır (`net`, `sens`, `act`, `safe`, `auto`, `sys`).
+// BÖLÜM BAŞINA AYRI NVS ANAHTARI: config tek blob olarak değil, yedi ayrı
+// anahtar olarak saklanır (`net`, `sens`, `act`, `safe`, `auto`, `rules`,
+// `sys`). `rules` şema sürümü 2 ile eklendi (ISSUE-021).
 //
 //   · Kısmi bozulmada YALNIZCA o bölüm varsayılana döner — kullanıcı Wi-Fi
 //     ayarını kaybetmeden kalibrasyonunu geri alabilir
@@ -71,6 +72,18 @@ core::ConfigError updateActuator(uint8_t index, const core::ActuatorConfig& v);
 core::ConfigError updateSafety(const core::SafetyConfig& v);
 core::ConfigError updateAutomation(const core::AutomationConfig& v);
 core::ConfigError updateSystem(const core::SystemConfig& v);
+
+/// Kural kümesini **bütün olarak** değiştirir (ISSUE-021).
+///
+/// Kısmi güncelleme (tek kural yazma) bilinçli olarak YOK: çakışma kontrolü
+/// (aynı aktüatör + aynı öncelik) yalnızca küme bütününde anlamlıdır ve
+/// slot slot yazmak, aradaki geçici durumda geçersiz bir küme bırakırdı.
+core::ConfigError updateRules(const core::RuleSet& v);
+
+/// Kural kümesinin sürüm sayacı — her `updateRules()` ve fabrika sıfırlaması
+/// sonrası artar. Otomasyon motoru bunu izleyerek kural çalışma durumlarını
+/// sıfırlar (bkz. `domain/AutomationEngine.h`).
+uint32_t rulesRevision();
 
 /// Değişmiş bölümleri NVS'e yazar.
 ///

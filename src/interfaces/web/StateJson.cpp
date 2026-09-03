@@ -1,6 +1,7 @@
 #include "interfaces/web/StateJson.h"
 
 #include <ArduinoJson.h>
+#include <string.h>
 
 #include "core/Diagnostics.h"
 #include "core/TaskRegistry.h"
@@ -284,6 +285,14 @@ size_t writeConfigJson(char* out, size_t outLen)
         o["cooldownMs"] = c.actuators[i].cooldownMs;
     }
 
+    // Otomasyon. `PUT /api/config/automation` bu iki alanı yazar; GET'te
+    // dönmediği sürece arayüz mevcut modu GÖSTEREMEZ ve kullanıcı kendi
+    // yazdığı değeri geri okuyamaz — yazılabilir ama okunamaz bir ayar,
+    // kullanıcının neyi değiştirdiğini bilmediği ayardır.
+    JsonObject aut = doc["automation"].to<JsonObject>();
+    aut["mode"] = (c.automation.mode == core::AutomationMode::AUTO) ? "auto" : "manual";
+    aut["manualOverrideMs"] = c.automation.manualOverrideMs;
+
     JsonObject sys = doc["system"].to<JsonObject>();
     sys["timezone"]            = c.system.timezone.c_str();
     sys["telemetryIntervalMs"] = c.system.telemetryIntervalMs;
@@ -292,6 +301,112 @@ size_t writeConfigJson(char* out, size_t outLen)
 
     const size_t n = serializeJson(doc, out, outLen);
     return (n > 0 && n < outLen) ? n : 0u;
+}
+
+
+const char* ruleKindName(core::RuleKind k)
+{
+    switch (k)
+    {
+        case core::RuleKind::THRESHOLD:       return "threshold";
+        case core::RuleKind::SCHEDULE_WINDOW: return "window";
+        case core::RuleKind::SCHEDULE_CYCLE:  return "cycle";
+        case core::RuleKind::INACTIVE:        return "inactive";
+        default:                              return "inactive";
+    }
+}
+
+bool sensorIdFromName(const char* name, SensorId& out)
+{
+    if (name == nullptr || name[0] == '\0') { return false; }
+
+    for (uint8_t i = 0; i < core::MAX_SENSORS; ++i)
+    {
+        const char* n = sensorName(static_cast<SensorId>(i));
+        // Tanımsız slotlar "unknown" döner; "unknown" bir ad DEĞİLDİR ve
+        // eşleşmesine izin verilirse ilk tanımsız sensöre çözülürdü.
+        if (strcmp(n, "unknown") == 0) { continue; }
+        if (strcmp(n, name) == 0)
+        {
+            out = static_cast<SensorId>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool actuatorIdFromName(const char* name, ActuatorId& out)
+{
+    if (name == nullptr || name[0] == '\0') { return false; }
+
+    for (uint8_t i = 0; i < core::MAX_ACTUATORS; ++i)
+    {
+        const char* n = actuatorName(static_cast<ActuatorId>(i));
+        if (strcmp(n, "unknown") == 0) { continue; }
+        if (strcmp(n, name) == 0)
+        {
+            out = static_cast<ActuatorId>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ruleKindFromName(const char* name, core::RuleKind& out)
+{
+    if (name == nullptr) { return false; }
+
+    const core::RuleKind kinds[] = {
+        core::RuleKind::INACTIVE,
+        core::RuleKind::THRESHOLD,
+        core::RuleKind::SCHEDULE_WINDOW,
+        core::RuleKind::SCHEDULE_CYCLE,
+    };
+    for (const core::RuleKind k : kinds)
+    {
+        if (strcmp(ruleKindName(k), name) == 0) { out = k; return true; }
+    }
+    return false;
+}
+
+size_t writeRulesJson(char* out, size_t outLen)
+{
+    const core::Config& c = services::config::get();
+
+    JsonDocument doc;
+    doc["count"] = c.rules.count;
+    doc["max"]   = core::MAX_RULES;
+
+    JsonArray arr = doc["rules"].to<JsonArray>();
+
+    const uint8_t n = (c.rules.count <= core::MAX_RULES) ? c.rules.count : core::MAX_RULES;
+    for (uint8_t i = 0; i < n; ++i)
+    {
+        const core::Rule& r = c.rules.rules[i];
+        JsonObject o = arr.add<JsonObject>();
+
+        // Kural yapısı `union` DEĞİL (Rule.h): her tür için TÜM alanlar
+        // taşınır. JSON de aynı seçimi izler — istemci `kind` değiştirdiğinde
+        // diğer türün değerleri kaybolmaz ve kullanıcı geri dönebilir.
+        o["kind"]                = ruleKindName(r.kind);
+        o["target"]              = actuatorName(r.target);
+        o["enabled"]             = r.enabled != 0u;
+        o["priority"]            = r.priority;
+        o["minTriggerIntervalS"] = r.minTriggerIntervalS;
+
+        o["sensor"]       = sensorName(r.sensor);
+        o["onThreshold"]  = r.onThreshold;
+        o["offThreshold"] = r.offThreshold;
+
+        o["startMin"] = r.startMin;
+        o["endMin"]   = r.endMin;
+
+        o["cycleOnS"]     = r.cycleOnS;
+        o["cyclePeriodS"] = r.cyclePeriodS;
+    }
+
+    const size_t written = serializeJson(doc, out, outLen);
+    return (written > 0 && written < outLen) ? written : 0u;
 }
 
 size_t writeScanJson(core::Millis now, char* out, size_t outLen)

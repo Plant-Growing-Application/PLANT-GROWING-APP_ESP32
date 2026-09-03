@@ -500,7 +500,7 @@ arena allocator (iki örnek — biri AsyncTCP, biri `net`).
 ## ISSUE-021 — Kural düzenleme API'si ve arayüzü yok
 
 **Bulunduğu yer:** `interfaces/web/api/ConfigApi.cpp`, `frontend/`
-**Öncelik:** P2 · **Durum:** Açık
+**Öncelik:** P2 · **Durum:** ✅ **ÇÖZÜLDÜ** — kapanış kaydı dosyanın sonunda
 
 TASK-054–057 kural motorunu ve veri modelini tamamladı. Ancak kuralları
 **oluşturmanın, düzenlemenin veya silmenin hiçbir yolu yok**:
@@ -880,3 +880,102 @@ ayırıyor, mod yazısı kalan alana sığdırılıyor.
 
 **Doğrulama:** 9 tipik etiket/değer çifti hesaplandı — en uzunu
 `255.255.255.255` dahil **hepsi 128 px'e tam oturuyor**.
+
+---
+
+## ISSUE-021 — KAPANDI
+
+**Durum:** ✅ **ÇÖZÜLDÜ** — kural düzenleme API'si ve arayüzü eklendi
+
+Kapatılırken bulunan **ikinci ve daha ağır boşluk:** kural kümesi NVS'e
+**hiç yazılmıyordu.** `Config::rules` alanı TASK-054'te tanımlanmıştı ama
+`ConfigService`'in bölüm listesinde (`net`, `sens`, `act`, `safe`, `auto`,
+`sys`) `rules` YOKTU. Yani API tek başına eklenseydi kurallar yazılabilir,
+okunabilir ve **ilk yeniden başlatmada sessizce kaybolurdu.**
+
+Yapılanlar:
+
+| Katman | Değişiklik |
+|---|---|
+| `core/Config.h` | `CONFIG_SCHEMA_VERSION` 1 → **2** |
+| `services/ConfigService` | `rules` NVS bölümü, `DIRTY_RULES` biti, `updateRules()`, `rulesRevision()` |
+| `services/ConfigService` | 1 → 2 göçü: sürüm 1 kaydında kural saklanmadığı için taşınacak veri yok, küme boş kalır |
+| `domain/AutomationEngine` | `rulesRevision()` izlenir; küme değişince kural çalışma durumları sıfırlanır |
+| `interfaces/web/StateJson` | `writeRulesJson()` + ad↔kimlik çeviricileri (`sensorIdFromName` vb.) |
+| `interfaces/web/api/ConfigApi` | `GET/PUT /api/config/rules` |
+| `frontend/` | Kural düzenleyici: ekle/sil, tür değiştir, canlı özet cümlesi, istemci denetimi |
+
+**Kararlar:**
+
+1. **Kural kümesi BÜTÜN olarak yazılır.** Tek kural yazan uç nokta yok:
+   çakışma denetimi (aynı aktüatör + aynı öncelik) yalnızca küme bütününde
+   anlamlıdır; slot slot yazmak aradaki adımlarda geçersiz bir küme
+   bırakırdı.
+2. **Kurallar `/api/config` yanıtına KONMADI.** 8 kural ~1,7 KB tutuyor ve
+   ortak `CONFIG_JSON_MAX` (2048) tamponunu taşırırdı. Ayrı uç nokta, ayrı
+   tampon (`RULES_JSON_MAX` = 2560).
+3. **Sürüm sayacıyla durum sıfırlama.** Kurallar `net` task'ında yazılıp
+   `app_core`'da okunuyor. Kimlik = dizideki indeks olduğu için düzenlenen
+   bir slotun eski histerezisini devralması, kuralın ters taraftan
+   başlaması demekti. Motor her çevrimde sayacı karşılaştırır — kilit yok,
+   tek yazarlı sayaç.
+4. **Yeni kural `enabled = false` doğar.** "Ekle"ye basıp kaydeden bir
+   operatör, bilinçli olarak etkinleştirmeden hiçbir aktüatörü sürmez.
+
+**Açık kalan bağımlılık:** M4 kapısı. Kural yazılabiliyor olması otomasyonun
+açılabileceği anlamına gelmez — `automation.mode` varsayılanı hâlâ `MANUAL`
+ve arayüz OTOMATİK'e geçişte donanım doğrulaması uyarısı gösteriyor.
+
+**Doğrulama:** Arayüz, cihaz sözleşmesini taklit eden sahte bir sunucuya
+karşı tarayıcıda denendi (ekleme, silme, tür değiştirme, alan korunması,
+istemci denetimleri, cihaz reddinin alan adıyla gösterimi, GET/PUT gidiş
+dönüşü). **Firmware DERLENMEDİ** — bu makinede PlatformIO/gcc yok
+(bkz. ISSUE-033).
+
+---
+
+## ISSUE-033 — Bu geliştirme makinesinde derleyici ve Python yok
+
+**Bulunduğu yer:** geliştirme ortamı
+**Öncelik:** P1 · **Durum:** Açık
+
+`pio`, `g++` ve gerçek bir `python` kurulu değil (`python` yalnızca Microsoft
+Store yer tutucusu). Sonuçları:
+
+- Firmware **derlenemiyor** → C++ değişiklikleri yalnızca gözle denetlendi
+- `pio test -e native` **koşturulamıyor** → 28 Unity testi hâlâ hiç çalışmadı
+- `tools/build_assets.py` **çalıştırılamıyor** → `data/*.gz` şimdilik
+  `gzip -9 -n` ile üretiliyor (aynı çıktı: sıkıştırma düzeyi 9, zaman damgası
+  yok), ama kanonik betik bu değil
+
+**Kapatma koşulu:** PlatformIO CLI + Python kurulup `pio run` ve
+`pio test -e native` bir kez başarıyla koşturulmalı; `data/` kanonik betikle
+yeniden üretilmeli.
+
+---
+
+## ISSUE-034 — Arayüzde karşılığı olmayan uç noktalar (KAPANDI)
+
+**Durum:** ✅ **ÇÖZÜLDÜ**
+
+Backend'de hazır olan üç uç noktanın arayüzde hiçbir karşılığı yoktu:
+
+| Uç nokta | Sonuç |
+|---|---|
+| `POST /api/auth/password` | Yönetici parolası **değiştirilemiyordu** — yalnızca ilk kurulum vardı |
+| `PUT /api/config/actuators` | Asgari/azami çalışma süresi ve bekleme süresi **ayarlanamıyordu** |
+| `PUT /api/config/automation` | Mod ve manuel müdahale süresi **yazılamıyordu** |
+
+`POST /api/auth/logout` de kullanılmıyordu; oturum yalnızca TTL dolunca
+düşüyordu.
+
+Ayrıca `GET /api/config` **otomasyon bölümünü döndürmüyordu**: mod
+yazılabiliyor ama geri okunamıyordu. Yazılıp okunamayan bir ayar,
+kullanıcının neyi değiştirdiğini bilmediği ayardır — `writeConfigJson()`
+artık `automation` nesnesini de yazıyor.
+
+**Eklenenler:** Ayarlar sekmesinde "Otomasyon", "Aktüatör Kısıtları" ve
+"Yönetici Parolası ve Oturum" bölümleri; sistem formuna kayıt seviyesi
+seçimi. Süre alanları ms taşımaya devam ediyor ama altlarında insan ölçüsü
+ve izin verilen aralık canlı gösteriliyor; cihazın alan adıyla döndürdüğü
+doğrulama hatası artık Türkçe alan adıyla gösteriliyor.

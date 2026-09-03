@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "core/Rule.h"
 #include "core/SystemState.h"
 
 namespace interfaces {
@@ -32,6 +33,26 @@ size_t writeDiagnosticsJson(char* out, size_t outLen);
 
 /// Yapılandırma görünümü — **sırlar maskeli**.
 size_t writeConfigJson(char* out, size_t outLen);
+
+/// Otomasyon kural kümesi (ISSUE-021).
+///
+/// `/api/config` içine KONMADI: 8 kural tek başına ~1,7 KB tutar ve config
+/// yanıtını ortak tamponun üstüne taşırdı. Kurallar yalnızca ayar ekranında
+/// gerekiyor; her durum yenilemesinde taşınmaları da gereksiz olurdu.
+size_t writeRulesJson(char* out, size_t outLen);
+
+/// Kural türü → ad.
+const char* ruleKindName(core::RuleKind k);
+
+// --- Ad → kimlik ------------------------------------------------------------
+//
+// Kablo üzerindeki sözlük TEK YERDE: bu çeviriciler yukarıdaki `*Name`
+// fonksiyonlarını tarar. İki yön ayrı tablolarla yazılsaydı, birine eklenen
+// bir ad diğerinde unutulur ve hata ancak çalışma anında görünürdü.
+
+bool sensorIdFromName(const char* name, core::SensorId& out);
+bool actuatorIdFromName(const char* name, core::ActuatorId& out);
+bool ruleKindFromName(const char* name, core::RuleKind& out);
 
 /// Tarama sonucu. Şema **tüm durumlarda aynı**: `{status, age, truncated,
 /// networks[]}`. Eski sistemin "tarama sürerken farklı şekilli yanıt"

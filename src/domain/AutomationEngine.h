@@ -29,6 +29,17 @@
 //
 // Override AKTÜATÖR BAŞINADIR: hava pompasına müdahale, su pompasının
 // otomasyonunu durdurmaz.
+//
+// ── KURAL DEĞİŞİMİ (ISSUE-021) ──────────────────────────────────────────────
+// Kurallar web arayüzünden `net` task'ında yazılır, burada `app_core`'da
+// okunur. `evaluate()` her çevrimde `services::config::rulesRevision()`
+// sayacını karşılaştırır; değiştiyse kural çalışma durumları (histerezis,
+// son tetikleme) SIFIRLANIR.
+//
+// Gerekçe: kimlik = dizideki indekstir. Operatör 3 numaralı slotu "EC düştü →
+// besin ver" yerine "sıcaklık yükseldi → fan" yaparsa, eski kuralın "şu an
+// açık tarafındayım" durumu yeni kurala miras kalırdı ve kural ters
+// tarafından başlardı. Mod değişiminde uygulanan kuralın (setMode) aynısı.
 
 #include <stdint.h>
 

@@ -46,7 +46,7 @@ build'e dahil değil.
 | Ekran | Adafruit SSD1306 + GFX |
 | Depolama | NVS (config + sırlar) · LittleFS (web varlıkları + geçmiş) |
 | Güvenlik | mbedTLS SHA-256 (donanım hızlandırmalı) |
-| Frontend | **Çerçevesiz** — el yazımı HTML/CSS/JS, gzip'li 11,7 KB |
+| Frontend | **Çerçevesiz** — el yazımı HTML/CSS/JS, gzip'li 30,4 KB |
 | Test | Unity (host) + 46 `static_assert` |
 
 **Kaldırılanlar:** SQLite (66 MB kütüphane, hiç etkinleştirilmemişti),
@@ -241,8 +241,9 @@ Bölümleme: `app0`/`app1` 1,5 MB (OTA) · `littlefs` 896 KB · `coredump` 64 KB
 |---|---|---|
 | **ISSUE-003** | Röle polaritesi doğrulanmadı | **Güvenlik zincirinin tamamı** `RELAY_ACTIVE_LOW` varsayımına dayanıyor |
 | ISSUE-024 | Stack boyutları tahmin | İlk çalıştırmada `minStack` ile düzeltilmeli |
-| ISSUE-021 | Kural düzenleme arayüzü yok | Otomasyon kuralı **yazılamıyor** |
+| ~~ISSUE-021~~ | ~~Kural düzenleme arayüzü yok~~ | ✅ Çözüldü — kural API'si + düzenleyici eklendi, şema sürümü 2 |
 | ISSUE-005 | Donanımsal RTC kararı | Ağsız çizelge çalışmaz — satın alma kararı |
+| ISSUE-033 | Bu makinede derleyici/Python yok | Firmware **derlenmedi**, host testleri hâlâ koşmadı |
 | ISSUE-014 | Akış katsayısı (450 darbe/L) teyitsiz | Kuru çalışma eşiği kayar |
 
 ### M4 kapısı
@@ -251,12 +252,17 @@ Bölümleme: `app0`/`app1` 1,5 MB (OTA) · `littlefs` 896 KB · `coredump` 64 KB
 M4 = pompanın yalnızca güvenlik izniyle çalıştığının **donanımda**
 kanıtlanması.
 
-**Kapı kapalı.** Otomasyon kodu yazıldı ama varsayılan mod `MANUAL` ve
-kural kümesi boş; sistem kutudan çıktığında **kendiliğinden hiçbir
-aktüatörü sürmez**.
+**Kapı kapalı.** Otomasyon kodu ve kural düzenleyici hazır, ancak
+varsayılan mod `MANUAL`, varsayılan kural kümesi boş ve yeni eklenen her
+kural **devre dışı doğar**; sistem kutudan çıktığında **kendiliğinden hiçbir
+aktüatörü sürmez**. Arayüz OTOMATİK moda geçişte M4 uyarısı gösterir.
 
-### Sıradaki iş — kod değil, donanım
+### Sıradaki iş
 
+0. **Araç zincirini kur** (ISSUE-033): PlatformIO + Python.
+   `pio run` ile derle, `pio test -e native` ile host testlerini bir kez koştur,
+   `python tools/build_assets.py` ile `data/`'yi kanonik yoldan üret.
+   *Bundan sonrası donanım işidir:*
 1. Röle polaritesini ölç → ISSUE-003'ü kapat
 2. İlk boot: seri porttan boot raporunu oku
 3. `GET /api/diagnostics` → `minStack` ile stack'leri düzelt

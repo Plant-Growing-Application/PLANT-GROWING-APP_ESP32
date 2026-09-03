@@ -3,121 +3,527 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Sera Kontrol</title>
+<meta name="theme-color" content="#0a0f14">
+<title>SALIXUS — Akıllı Tarım & Sera Otomasyonu</title>
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
 
-<!-- Bağlantı bandı: WS kopukken KALICI olarak görünür.
-     Eski projede kopuk bağlantıda eski değerler canlıymış gibi duruyordu;
-     kullanıcı 10 dakika önceki pH'a bakıp gübre ekleyebilirdi. -->
+<!-- Bağlantı Bandı: Bağlantı koptuğunda belirgin şekilde görünür -->
 <div id="linkBar" class="linkbar hidden" role="status" aria-live="polite">
-  <span id="linkText">Bağlantı yok — gösterilen veriler eski</span>
+  <div class="linkbar-content">
+    <svg class="icon pulse-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <span id="linkText">Bağlantı kesildi — gösterilen veriler eski</span>
+  </div>
 </div>
 
-<!-- Giriş ekranı -->
+<!-- Güvenlik Bandı: Acil durum mandalı veya kilit devredeyken -->
+<div id="safetyBar" class="safetybar hidden" role="alert"></div>
+
+<!-- Giriş Ekranı -->
 <section id="loginView" class="view hidden">
-  <div class="card auth">
-    <h1>Sera Kontrol</h1>
-    <p id="loginHint" class="muted"></p>
-    <label for="pw">Parola</label>
-    <input id="pw" type="password" autocomplete="current-password">
-    <label for="pw2" id="pw2Label" class="hidden">Parola (tekrar)</label>
-    <input id="pw2" type="password" class="hidden" autocomplete="new-password">
-    <button id="loginBtn" class="primary">Giriş</button>
-    <p id="loginErr" class="err"></p>
-    <p class="muted small">
-      Bu cihaz HTTPS kullanmaz. Yalnızca güvendiğiniz yerel ağda kullanın;
-      internete açmayın.
-    </p>
+  <div class="auth-wrapper">
+    <div class="card auth-card">
+      <div class="brand-badge">
+        <div class="brand-logo-glow">
+          <svg class="brand-icon" viewBox="0 0 32 32" width="36" height="36" fill="none">
+            <path d="M16 2C9.5 2 4 7.5 4 14c0 7 12 16 12 16s12-9 12-16c0-6.5-5.5-12-12-12z" fill="url(#brandGrad)" opacity="0.2"/>
+            <path d="M16 5C10.5 5 6 9.5 6 15c0 6 10 13.5 10 13.5s10-7.5 10-13.5c0-5.5-4.5-10-10-10z" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+            <path d="M16 9v11M16 14l-4-3M16 17l4-3" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="brandGrad" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#10b981"/>
+                <stop offset="1" stop-color="#047857"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-meta">
+          <span class="brand-title">SALIXUS</span>
+          <span class="brand-sub">Hassas Tarım & Sera Kontrolü</span>
+        </div>
+      </div>
+
+      <div class="auth-body">
+        <p id="loginHint" class="auth-hint">Devam etmek için parolanızı girin.</p>
+        
+        <div class="form-group">
+          <label for="pw">Cihaz Parolası</label>
+          <input id="pw" type="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        
+        <div class="form-group" id="pw2Group">
+          <label for="pw2" id="pw2Label" class="hidden">Parola (Tekrar)</label>
+          <input id="pw2" type="password" class="hidden" placeholder="••••••••" autocomplete="new-password">
+        </div>
+        
+        <button id="loginBtn" class="btn btn-primary btn-block">Giriş Yap</button>
+        <p id="loginErr" class="form-feedback err"></p>
+      </div>
+
+      <div class="auth-footer">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span>Yerel Ağ Güvenliği (İnternete Açmayın)</span>
+      </div>
+    </div>
   </div>
 </section>
 
-<!-- Ana uygulama -->
+<!-- Ana Uygulama -->
 <section id="appView" class="view hidden">
-  <nav class="tabs" role="tablist">
-    <button class="tab active" data-view="dashboard" role="tab">Panel</button>
-    <button class="tab" data-view="control" role="tab">Kontrol</button>
-    <button class="tab" data-view="network" role="tab">Ağ</button>
-    <button class="tab" data-view="settings" role="tab">Ayarlar</button>
-    <button class="tab" data-view="diagnostics" role="tab">Teşhis</button>
-  </nav>
+  <!-- Üst Başlık & Marka Çubuğu -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <svg class="brand-icon-sm" viewBox="0 0 32 32" width="24" height="24" fill="none">
+          <path d="M16 4C9.5 4 5 8.5 5 14c0 6 11 14 11 14s11-8 11-14c0-5.5-4.5-10-11-10z" stroke="#10b981" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M16 8v12M16 13l-4-3M16 16l4-3" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span class="header-title">SALIXUS</span>
+        <span class="header-tag">SERA</span>
+      </div>
 
-  <!-- Güvenlik bandı: acil durum mandalı veya kilit varken -->
-  <div id="safetyBar" class="safetybar hidden"></div>
+      <div class="header-status">
+        <div class="status-pill" id="connPill">
+          <span class="status-dot"></span>
+          <span id="connLabel" class="status-text">Canlı</span>
+        </div>
+        <div class="mode-pill" id="headModePill">
+          <span id="headMode">Çalışıyor</span>
+        </div>
+      </div>
+    </div>
 
-  <main>
-    <!-- PANEL -->
+    <!-- Sekmeler -->
+    <nav class="tabs-nav" role="tablist">
+      <button class="tab-btn active" data-view="dashboard" role="tab">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        <span>Panel</span>
+      </button>
+      <button class="tab-btn" data-view="control" role="tab">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+        <span>Kontrol</span>
+      </button>
+      <button class="tab-btn" data-view="charts" role="tab">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"></path><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path></svg>
+        <span>Grafikler</span>
+      </button>
+      <button class="tab-btn" data-view="network" role="tab">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+        <span>Ağ</span>
+      </button>
+      <button class="tab-btn" data-view="settings" role="tab">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span>Ayarlar</span>
+      </button>
+      <button class="tab-btn" data-view="diagnostics" role="tab">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+        <span>Teşhis</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="content-wrapper">
+    <!-- PANEL (DASHBOARD) -->
     <div id="v-dashboard" class="page">
-      <div class="row" id="statusRow">
-        <div class="card stat"><span class="lbl">Mod</span><b id="sMode">—</b></div>
-        <div class="card stat"><span class="lbl">Çalışma süresi</span><b id="sUptime">—</b></div>
-        <div class="card stat"><span class="lbl">Saat</span><b id="sClock">—</b></div>
-        <div class="card stat"><span class="lbl">Boş bellek</span><b id="sHeap">—</b></div>
-      </div>
-      <h2>Sensörler</h2>
-      <div class="grid" id="sensorGrid">
-        <p class="muted" id="sensorLoading">Yükleniyor…</p>
-      </div>
+      <!-- Sistem Özet Kartları -->
+      <section class="section-block">
+        <div class="stats-grid" id="statusRow">
+          <div class="card stat-card">
+            <div class="stat-icon-wrap mode-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+            </div>
+            <div class="stat-info">
+              <span class="stat-label">Sistem Modu</span>
+              <b id="sMode" class="stat-val">—</b>
+            </div>
+          </div>
+
+          <div class="card stat-card">
+            <div class="stat-icon-wrap uptime-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <div class="stat-info">
+              <span class="stat-label">Çalışma Süresi</span>
+              <b id="sUptime" class="stat-val">—</b>
+            </div>
+          </div>
+
+          <div class="card stat-card">
+            <div class="stat-icon-wrap clock-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path></svg>
+            </div>
+            <div class="stat-info">
+              <span class="stat-label">Cihaz Saati</span>
+              <b id="sClock" class="stat-val">—</b>
+            </div>
+          </div>
+
+          <div class="card stat-card">
+            <div class="stat-icon-wrap heap-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><path d="M6 12h4m4 0h4"></path></svg>
+            </div>
+            <div class="stat-info">
+              <span class="stat-label">Boş Bellek (Heap)</span>
+              <b id="sHeap" class="stat-val">—</b>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sensörler -->
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
+            <h2>Sensör Ölçümleri</h2>
+          </div>
+          <span class="section-badge" id="sensorCountBadge">Canlı Akış</span>
+        </div>
+        
+        <div class="grid sensor-grid" id="sensorGrid">
+          <div class="card skeleton-card"><p class="muted">Sensör verileri alınıyor…</p></div>
+        </div>
+      </section>
+
+      <!-- Hızlı Aktüatör Özeti -->
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            <h2>Aktüatör Durumu</h2>
+          </div>
+          <button class="btn btn-sm" onclick="switchView('control')">Detaylı Kontrol →</button>
+        </div>
+        <div class="grid mini-act-grid" id="miniActGrid">
+          <!-- Dinamik aktüatör özetleri -->
+        </div>
+      </section>
     </div>
 
-    <!-- KONTROL -->
+    <!-- KONTROL (ACTUATORS & AUTOMATION) -->
     <div id="v-control" class="page hidden">
-      <h2>Aktüatörler</h2>
-      <div class="grid" id="actuatorGrid">
-        <p class="muted" id="actLoading">Yükleniyor…</p>
-      </div>
-      <div class="card danger">
-        <h3>Acil durdurma</h3>
-        <p class="muted small">
-          Tüm aktüatörleri anında keser ve mandallar. Yalnızca operatör onayıyla
-          temizlenir; koşullar düzelmeden onay reddedilir.
-        </p>
-        <button id="estopBtn" class="danger">ACİL DURDUR</button>
-        <button id="eclearBtn">Acil durumu temizle</button>
-      </div>
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <h2>Aktüatör & Röle Yönetimi</h2>
+          </div>
+          <span class="muted small">Gerçek Pin Geri Bildirimi</span>
+        </div>
+
+        <div class="grid act-grid" id="actuatorGrid">
+          <div class="card skeleton-card"><p class="muted" id="actLoading">Aktüatörler yükleniyor…</p></div>
+        </div>
+      </section>
+
+      <!-- Acil Durdurma Paneli -->
+      <section class="section-block">
+        <div class="card danger-card">
+          <div class="danger-header">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#ef4444" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <div>
+              <h3>Acil Durdurma & E-Stop</h3>
+              <p class="muted small">
+                Tüm aktüatörleri anında keser ve kilitler. Sistem yalnızca operatör onayıyla ve koşullar güvenliyse normale döner.
+              </p>
+            </div>
+          </div>
+          <div class="danger-actions">
+            <button id="estopBtn" class="btn btn-danger btn-lg">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><rect x="9" y="9" width="6" height="6"></rect></svg>
+              <span>ACİL DURDUR</span>
+            </button>
+            <button id="eclearBtn" class="btn btn-outline">Acil Durumu Temizle</button>
+          </div>
+        </div>
+      </section>
     </div>
 
-    <!-- AĞ -->
+    <!-- GRAFİKLER (CHARTS) -->
+    <div id="v-charts" class="page hidden">
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M3 3v18h18"></path><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path></svg>
+            <h2>Geçmiş Sensör Telemetrisi</h2>
+          </div>
+          <button id="chartRefreshBtn" class="btn btn-sm">Yenile</button>
+        </div>
+
+        <div class="card chart-card">
+          <!-- Grafik Kontrolleri -->
+          <div class="chart-controls">
+            <div class="sensor-selectors" id="chartSensors">
+              <button class="chip-btn active" data-sensor="ph">pH</button>
+              <button class="chip-btn" data-sensor="waterTemp">Sıcaklık</button>
+              <button class="chip-btn" data-sensor="ec">EC</button>
+              <button class="chip-btn" data-sensor="humidity">Nem</button>
+              <button class="chip-btn" data-sensor="flow">Debi</button>
+            </div>
+            <div class="chart-meta-info" id="chartMeta">
+              <span class="muted small">Yükleniyor…</span>
+            </div>
+          </div>
+
+          <!-- Canvas Çizim Alanı -->
+          <div class="chart-canvas-wrapper">
+            <canvas id="historyCanvas" height="260"></canvas>
+            <div id="chartTooltip" class="chart-tooltip hidden"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- AĞ (NETWORK) -->
     <div id="v-network" class="page hidden">
-      <h2>Ağ durumu</h2>
-      <div class="card" id="netCard"><p class="muted">Yükleniyor…</p></div>
-      <h2>Ağ seç</h2>
-      <div class="card">
-        <button id="scanBtn">Tara</button>
-        <span id="scanStatus" class="muted small"></span>
-        <ul id="scanList" class="list"></ul>
-        <label for="ssid">SSID</label>
-        <input id="ssid" type="text" autocomplete="off">
-        <label for="wifiPw">Şifre</label>
-        <input id="wifiPw" type="password" autocomplete="off">
-        <button id="saveWifi" class="primary">Kaydet ve bağlan</button>
-        <button id="forgetWifi">Ağı unut</button>
-        <button id="retryNow">Şimdi dene</button>
-        <p id="netMsg" class="msg"></p>
-      </div>
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+            <h2>Ağ ve Bağlantı Durumu</h2>
+          </div>
+        </div>
+        <div class="card net-status-card" id="netCard">
+          <p class="muted">Ağ bilgileri alınıyor…</p>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            <h2>Wi-Fi Ağ Yönetimi</h2>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="scan-header">
+            <button id="scanBtn" class="btn btn-secondary">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+              <span>Ağları Tara</span>
+            </button>
+            <span id="scanStatus" class="scan-status-text muted small"></span>
+          </div>
+
+          <div class="scan-list-wrapper">
+            <ul id="scanList" class="scan-list"></ul>
+          </div>
+
+          <div class="wifi-form">
+            <div class="form-group">
+              <label for="ssid">Ağ Adı (SSID)</label>
+              <input id="ssid" type="text" placeholder="Wi-Fi Ağ Adı" autocomplete="off">
+            </div>
+
+            <div class="form-group">
+              <label for="wifiPw">Wi-Fi Parolası</label>
+              <input id="wifiPw" type="password" placeholder="••••••••" autocomplete="off">
+            </div>
+
+            <div class="btn-group">
+              <button id="saveWifi" class="btn btn-primary">Kaydet ve Bağlan</button>
+              <button id="retryNow" class="btn btn-secondary">Şimdi Dene</button>
+              <button id="forgetWifi" class="btn btn-outline-danger">Ağı Unut</button>
+            </div>
+            <p id="netMsg" class="form-feedback"></p>
+          </div>
+        </div>
+      </section>
     </div>
 
-    <!-- AYARLAR -->
+    <!-- AYARLAR (SETTINGS) -->
     <div id="v-settings" class="page hidden">
-      <h2>Güvenlik</h2>
-      <div class="card" id="safetyForm"><p class="muted">Yükleniyor…</p></div>
-      <h2>Sistem</h2>
-      <div class="card" id="systemForm"><p class="muted">Yükleniyor…</p></div>
-      <div class="card danger">
-        <h3>Fabrika ayarları</h3>
-        <p class="muted small">Tüm yapılandırma, ağ bilgileri ve parola silinir.</p>
-        <button id="factoryBtn" class="danger">Fabrika ayarlarına dön</button>
-      </div>
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <h2>Güvenlik Eşikleri</h2>
+          </div>
+        </div>
+        <div class="card form-card" id="safetyForm">
+          <p class="muted">Yapılandırma yükleniyor…</p>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="7"></circle><path d="M12 8v4l2.5 2.5"></path></svg>
+            <h2>Otomasyon</h2>
+          </div>
+          <span class="section-badge" id="autoBadge">—</span>
+        </div>
+        <div class="card form-card" id="automationForm">
+          <p class="muted">Yapılandırma yükleniyor…</p>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M4 6h10"></path><path d="M4 12h16"></path><path d="M4 18h7"></path><circle cx="18" cy="6" r="2"></circle><circle cx="15" cy="18" r="2"></circle></svg>
+            <h2>Otomasyon Kuralları</h2>
+          </div>
+          <span class="section-badge" id="rulesBadge">—</span>
+        </div>
+        <p class="section-note muted small">
+          Kurallar <b>veri</b>, motor <b>koddur</b> — yeni bir kural eklemek firmware
+          güncellemesi gerektirmez. Bir kural yalnızca <b>“şu aktüatör açık olsun”</b>
+          der; asgari/azami çalışma süresi, bekleme ve güvenlik kilitleri kuralın
+          <b>dışında</b> uygulanır. Kurallar yalnızca <b>OTOMATİK</b> modda
+          değerlendirilir.
+        </p>
+        <div id="rulesList">
+          <div class="card skeleton-card"><p class="muted">Kurallar yükleniyor…</p></div>
+        </div>
+        <div class="btn-group">
+          <button id="addRule" class="btn btn-secondary">+ Kural Ekle</button>
+          <button id="saveRules" class="btn btn-primary">Kuralları Kaydet</button>
+          <button id="reloadRules" class="btn btn-outline">Cihazdan Yeniden Yükle</button>
+        </div>
+        <p id="rulesMsg" class="form-feedback"></p>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+            <h2>Aktüatör Kısıtları</h2>
+          </div>
+          <span class="section-badge">Donanım Koruması</span>
+        </div>
+        <p class="section-note muted small">
+          Bu kısıtları <b>ActuatorManager</b> uygular; otomasyon motoru bunları bilmez.
+          Bir aktüatör açıldıktan sonra en az <b>asgari süre</b> kadar çalışır, en çok
+          <b>azami süre</b> kadar çalışabilir, kapandıktan sonra <b>bekleme süresi</b>
+          dolmadan yeniden açılmaz. Güvenlik kilidi bu kısıtları <b>ezer</b>: izin
+          kalkarsa asgari süre beklenmeden derhal durur.
+        </p>
+        <div class="grid cfg-act-grid" id="actuatorConfigForm">
+          <div class="card skeleton-card"><p class="muted">Yapılandırma yükleniyor…</p></div>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <h2>Sistem Parametreleri</h2>
+          </div>
+        </div>
+        <div class="card form-card" id="systemForm">
+          <p class="muted">Yapılandırma yükleniyor…</p>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <h2>Yönetici Parolası ve Oturum</h2>
+          </div>
+        </div>
+        <div class="card form-card">
+          <p class="section-note muted small">
+            Parola değiştiğinde <b>tüm oturumlar düşer</b> — bu tarayıcı dahil; hemen
+            ardından yeniden giriş yapmanız istenir. Bağlantı <b>şifreli değildir</b>
+            (HTTPS yok): parolayı yalnızca güvendiğiniz bir ağdayken değiştirin.
+          </p>
+          <div class="form-group">
+            <label for="pwCurrent">Mevcut Parola</label>
+            <input id="pwCurrent" type="password" autocomplete="current-password" placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label for="pwNext">Yeni Parola</label>
+            <input id="pwNext" type="password" autocomplete="new-password" minlength="8" placeholder="En az 8 karakter">
+          </div>
+          <div class="form-group">
+            <label for="pwNext2">Yeni Parola (tekrar)</label>
+            <input id="pwNext2" type="password" autocomplete="new-password" minlength="8" placeholder="••••••••">
+          </div>
+          <div class="btn-group">
+            <button id="savePw" class="btn btn-primary">Parolayı Değiştir</button>
+            <button id="logoutBtn" class="btn btn-outline">Oturumu Kapat</button>
+          </div>
+          <p id="pwMsg" class="form-feedback"></p>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="card danger-card">
+          <div class="danger-header">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ef4444" stroke-width="2">
+              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            <div>
+              <h3>Fabrika Ayarlarına Sıfırlama</h3>
+              <p class="muted small">Tüm yapılandırma, Wi-Fi kayıtları, sensör kalibrasyonu ve güvenlik parolası tamamen silinir.</p>
+            </div>
+          </div>
+          <button id="factoryBtn" class="btn btn-danger">Fabrika Ayarlarına Dön</button>
+        </div>
+      </section>
     </div>
 
-    <!-- TEŞHİS -->
+    <!-- TEŞHİS (DIAGNOSTICS) -->
     <div id="v-diagnostics" class="page hidden">
-      <h2>Aktif hatalar</h2>
-      <div class="card" id="faultCard"><p class="muted">Yükleniyor…</p></div>
-      <h2>Son olaylar</h2>
-      <div class="card"><table class="log"><tbody id="logBody"></tbody></table></div>
-      <button id="refreshDiag">Yenile</button>
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+            <h2>FreeRTOS Görev Sağlığı</h2>
+          </div>
+          <button id="refreshDiag" class="btn btn-sm">Yenile</button>
+        </div>
+        <div class="grid task-grid" id="tasksCard">
+          <div class="card skeleton-card"><p class="muted">Görev verileri alınıyor…</p></div>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <h2>Aktif Hatalar</h2>
+          </div>
+        </div>
+        <div class="card" id="faultCard"><p class="muted">Aktif hata taranıyor…</p></div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            <h2>Sistem Olay Günlüğü</h2>
+          </div>
+        </div>
+        <div class="card table-card">
+          <div class="table-responsive">
+            <table class="log-table">
+              <thead>
+                <tr>
+                  <th>Zaman</th>
+                  <th>Hata / Olay</th>
+                  <th>Detay</th>
+                </tr>
+              </thead>
+              <tbody id="logBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
 </section>

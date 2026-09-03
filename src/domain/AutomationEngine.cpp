@@ -22,6 +22,11 @@ bool                g_ready = false;
 
 core::RuleRuntime g_rt[core::MAX_RULES];
 
+/// Motorun en son gördüğü kural kümesi sürümü. Operatör kuralları
+/// düzenlediğinde slotların ANLAMI değişir; eski histerezis ve son tetikleme
+/// zamanını devralmak, yeni kuralın yanlış taraftan başlaması demektir.
+uint32_t g_seenRulesRevision = 0;
+
 /// Aktüatör başına manuel override. Global DEĞİL: hava pompasına müdahale,
 /// su pompasının otomasyonunu durdurmamalı.
 struct Override
@@ -86,14 +91,30 @@ core::ErrCode begin(const core::Config& cfg)
     g_cfg = &cfg;
     for (uint8_t i = 0; i < core::MAX_RULES; ++i) { g_rt[i].reset(); }
     for (uint8_t i = 0; i < core::MAX_ACTUATORS; ++i) { g_override[i] = Override{Millis{0}, 0u}; }
-    g_activeRuleId = 0xFFu;
-    g_ready        = true;
+    g_activeRuleId       = 0xFFu;
+    g_seenRulesRevision  = services::config::rulesRevision();
+    g_ready              = true;
     return ErrCode::OK;
 }
 
 void evaluate(const core::SystemState& snap, bool timeValid, Millis now)
 {
     if (!g_ready || g_cfg == nullptr) { return; }
+
+    // ── Kural kümesi değiştiyse çalışma durumları sıfırlanır ───────────────
+    // Kurallar web arayüzünden `net` task'ında yazılır, burada `app_core`'da
+    // okunur. Sürüm sayacı tek yazarlıdır; onu izlemek, düzenlenen bir slotun
+    // eski histerezisiyle çalışmasını önler. Mod değişiminde uygulanan kural
+    // (setMode) ile aynı gerekçe.
+    const uint32_t rev = services::config::rulesRevision();
+    if (rev != g_seenRulesRevision)
+    {
+        for (uint8_t i = 0; i < core::MAX_RULES; ++i) { g_rt[i].reset(); }
+        g_activeRuleId      = 0xFFu;
+        g_seenRulesRevision = rev;
+        core::diag::log(core::LogLevel::INFO, ErrCode::OK, static_cast<int32_t>(rev),
+                        "kural kumesi degisti — durumlar sifirlandi");
+    }
 
     // Override süreleri MOD'DAN BAĞIMSIZ işler. Yalnızca kural hedefi olan
     // aktüatörleri kontrol etseydik, kuralı olmayan bir aktüatörün override'ı

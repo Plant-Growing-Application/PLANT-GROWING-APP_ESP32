@@ -19,21 +19,35 @@ constexpr const char* KEY_SENS    = "sens";
 constexpr const char* KEY_ACT     = "act";
 constexpr const char* KEY_SAFE    = "safe";
 constexpr const char* KEY_AUTO    = "auto";
+constexpr const char* KEY_RULES   = "rules";
 constexpr const char* KEY_SYS     = "sys";
+
+/// `rules` bölümünün ilk göründüğü şema sürümü. Daha eski bir kayıtta bu
+/// anahtar YOKTUR ve aranması gereksiz bir CFG_NOT_FOUND uyarısı üretir.
+constexpr uint16_t RULES_SINCE_VERSION = 2;
 
 core::Config     g_config{};
 ConfigLoadResult g_result{};
 uint8_t          g_dirtyMask = 0;
 
+/// Kural kümesi her değiştiğinde artar. Otomasyon motoru bunu okuyarak kural
+/// çalışma durumlarını (histerezis, son tetikleme) sıfırlar: bir slotun
+/// anlamı değiştiğinde eski çalışma durumunu devralmak, yeni kuralın yanlış
+/// tarafından başlaması demektir.
+///
+/// Sayaç TEK YAZARLIDIR (bu modül) ve motor yalnızca okur; kilit gerekmez.
+uint32_t g_rulesRevision = 0;
+
 enum DirtyBit : uint8_t
 {
-    DIRTY_NET  = 1u << 0,
-    DIRTY_SENS = 1u << 1,
-    DIRTY_ACT  = 1u << 2,
-    DIRTY_SAFE = 1u << 3,
-    DIRTY_AUTO = 1u << 4,
-    DIRTY_SYS  = 1u << 5,
-    DIRTY_ALL  = 0x3Fu,
+    DIRTY_NET   = 1u << 0,
+    DIRTY_SENS  = 1u << 1,
+    DIRTY_ACT   = 1u << 2,
+    DIRTY_SAFE  = 1u << 3,
+    DIRTY_AUTO  = 1u << 4,
+    DIRTY_SYS   = 1u << 5,
+    DIRTY_RULES = 1u << 6,
+    DIRTY_ALL   = 0x7Fu,
 };
 
 /// Bir bölümü NVS'ten okur. Başarısızsa bölümü varsayılanda bırakır ve
@@ -63,11 +77,13 @@ ErrCode saveSection(const char* key, const void* src, size_t size)
     return hal::nvsstore::setBlob(hal::NS_CONFIG, key, src, size);
 }
 
-/// Eski şemadan göç. Şu an sürüm 1 tek sürüm olduğu için göç edilecek bir şey
-/// yok; akış TASK-054 sürümü 2'ye çıkardığında devreye girecek.
+/// Eski şemadan göç.
 ///
-/// Yol ŞİMDİ kuruluyor: sonradan eklemek, o noktada zaten kaydedilmiş kullanıcı
-/// ayarlarını riske atardı.
+/// **1 → 2 (ISSUE-021):** kural bölümü eklendi. Sürüm 1 kaydında kural
+/// SAKLANMIYORDU, dolayısıyla taşınacak veri de yok: `load()` zaten
+/// varsayılanlardan başladığı için kural kümesi boş kalır ve `DIRTY_ALL` ile
+/// yeni şemaya yeniden yazılır. Dönüştürülecek bir alan olmadığı için burada
+/// yalnızca kayıt düşülür.
 ErrCode migrate(uint16_t fromVersion, core::Config& cfg)
 {
     (void)cfg;
@@ -121,6 +137,14 @@ ErrCode load()
     loadSection(KEY_SAFE, &g_config.safety,     sizeof(g_config.safety),     "cfg.safe");
     loadSection(KEY_AUTO, &g_config.automation, sizeof(g_config.automation), "cfg.auto");
     loadSection(KEY_SYS,  &g_config.system,     sizeof(g_config.system),     "cfg.sys");
+
+    // Kural bölümü YALNIZCA sürüm 2 ve üstünde aranır. Sürüm 1 kayıtlarında
+    // böyle bir anahtar hiç yazılmadı; aramak her yükseltmede yanıltıcı bir
+    // "bölüm bozuk" uyarısı üretirdi. Kural kümesi boş varsayılanda kalır.
+    if (storedVersion >= RULES_SINCE_VERSION)
+    {
+        loadSection(KEY_RULES, &g_config.rules, sizeof(g_config.rules), "cfg.rules");
+    }
 
     g_config.magic         = core::CONFIG_MAGIC;
     g_config.schemaVersion = core::CONFIG_SCHEMA_VERSION;
@@ -235,6 +259,31 @@ core::ConfigError updateAutomation(const core::AutomationConfig& v)
     return core::configOk();
 }
 
+core::ConfigError updateRules(const core::RuleSet& v)
+{
+    // Kural kümesi BÜTÜN olarak doğrulanır: tek tek geçerli iki kural, aynı
+    // aktüatörü aynı öncelikle hedeflediğinde birlikte GEÇERSİZDİR
+    // (`validateRules` bunu yakalar). Kısmi güncelleme bu kontrolü atlardı.
+    //
+    // Eşikler sensörün geçerli aralığına göre denetlendiği için mevcut sensör
+    // yapılandırması da verilir.
+    const core::ConfigError e = core::cfgvalid::validateRules(v, g_config.sensors);
+    if (!e.ok())
+    {
+        return e;
+    }
+
+    g_config.rules = v;
+    g_dirtyMask |= DIRTY_RULES;
+    ++g_rulesRevision;
+    return core::configOk();
+}
+
+uint32_t rulesRevision()
+{
+    return g_rulesRevision;
+}
+
 core::ConfigError updateSystem(const core::SystemConfig& v)
 {
     const core::ConfigError e = core::cfgvalid::validateSystem(v);
@@ -286,6 +335,10 @@ ErrCode persist()
     {
         rc = saveSection(KEY_AUTO, &g_config.automation, sizeof(g_config.automation));
     }
+    if (rc == ErrCode::OK && (g_dirtyMask & DIRTY_RULES) != 0)
+    {
+        rc = saveSection(KEY_RULES, &g_config.rules, sizeof(g_config.rules));
+    }
     if (rc == ErrCode::OK && (g_dirtyMask & DIRTY_SYS) != 0)
     {
         rc = saveSection(KEY_SYS, &g_config.system, sizeof(g_config.system));
@@ -321,6 +374,10 @@ ErrCode factoryReset()
 
     core::loadDefaults(g_config);
     g_dirtyMask = 0;
+
+    // Kural kümesi de boşaldı: motorun eski kuralların çalışma durumuyla
+    // devam etmemesi için revizyon ilerletilir.
+    ++g_rulesRevision;
 
     core::diag::log(core::LogLevel::CRITICAL, ErrCode::OK, 0,
                     "FABRIKA AYARLARI — config ve sirlar silindi");

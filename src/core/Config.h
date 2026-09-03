@@ -24,9 +24,15 @@
 
 namespace core {
 
-/// Şema sürümü. TASK-054 otomasyon kurallarını eklediğinde 2'ye çıkacak
-/// ve TASK-015'in migration yolu devreye girecek (ARCHITECTURE §15.3).
-constexpr uint16_t CONFIG_SCHEMA_VERSION = 1;
+/// Şema sürümü.
+///
+/// **2 — otomasyon kuralları kalıcılaştı (ISSUE-021).** TASK-054 kural
+/// modelini `Config`'e eklemişti ama NVS'te bir `rules` bölümü YOKTU: kural
+/// kümesi yalnızca RAM'de yaşıyor ve her boot'ta boşalıyordu. Sürüm 2 ile
+/// `cfg.rules` bölümü eklendi ve TASK-015'in migration yolu devreye girdi
+/// (ARCHITECTURE §15.3): sürüm 1 kaydı okunduğunda kural kümesi BOŞ
+/// varsayılanda kalır — sürüm 1'de zaten kural saklanamıyordu.
+constexpr uint16_t CONFIG_SCHEMA_VERSION = 2;
 
 /// Kayıt geçerliliği işareti.
 constexpr uint32_t CONFIG_MAGIC = 0x43464731u;  // "CFG1"
@@ -112,8 +118,9 @@ struct SafetyConfig
 // ---------------------------------------------------------------------------
 // automation
 //
-// Kural yapısı bu sürümde YOK: TASK-054 tanımlayacak ve şema sürümünü
-// 2'ye çıkaracak. Şimdi boş bir kural dizisi ayırmak ölü alan olurdu (P7).
+// Kural yapısı `Rule.h` içinde (TASK-054); kural kümesi `Config::rules`
+// alanında taşınır ve şema sürümü 2'den itibaren NVS'te ayrı bir bölüm
+// olarak saklanır (ISSUE-021).
 // ---------------------------------------------------------------------------
 
 struct AutomationConfig
