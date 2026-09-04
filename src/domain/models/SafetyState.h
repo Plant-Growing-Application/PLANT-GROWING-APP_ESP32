@@ -42,17 +42,24 @@ constexpr core::ErrCode reasonOf(Interlock bit)
                                             : core::ErrCode::OK;
 }
 
-/// Kilit → aktüatör eşlemesi (TASK-030 Karar 3).
+/// Kilit → aktüatör eşlemesi (TASK-030 Karar 3, TASK-066 ile genişletildi).
 ///
-/// Hava pompası seviye kilitlerinden ETKİLENMEZ: hava taşı susuz kalınca
-/// hasar görmez, yalnızca işe yaramaz. Kuru çalışma riski su pompasına
-/// özgüdür. Gereksiz kilit, operatörün güvenlik uyarılarına
-/// duyarsızlaşmasına yol açar.
+/// Hava pompası, ışık ve dozaj pompası seviye kilitlerinden ETKİLENMEZ: hava
+/// taşı susuz kalınca hasar görmez, yalnızca işe yaramaz. Gereksiz kilit,
+/// operatörün güvenlik uyarılarına duyarsızlaşmasına yol açar.
+///
+/// **ISITICI İSTİSNASI:** daldırma ısıtıcısı susuz çalışırsa yanar ve hazneyi
+/// eritir. Seviye kilitleri onun için su pompasıyla aynı derecede geçerlidir;
+/// `ILK_DRY_RUN` ise yalnızca pompaya özgüdür (akış doğrulama pompa
+/// çalışmasını ölçer, ısıtıcıyı değil).
 constexpr uint32_t masksFor(core::ActuatorId id)
 {
     return (id == core::ActuatorId::WATER_PUMP)
                ? (ILK_EMERGENCY_LATCHED | ILK_LEVEL_INSUFFICIENT | ILK_LEVEL_SENSOR_FAULT |
                   ILK_DRY_RUN | ILK_MAX_RUNTIME_REPEATED)
+         : (id == core::ActuatorId::HEATER)
+               ? (ILK_EMERGENCY_LATCHED | ILK_LEVEL_INSUFFICIENT | ILK_LEVEL_SENSOR_FAULT |
+                  ILK_MAX_RUNTIME_REPEATED)
                : (ILK_EMERGENCY_LATCHED | ILK_MAX_RUNTIME_REPEATED);
 }
 
@@ -83,8 +90,28 @@ static_assert((masksFor(core::ActuatorId::WATER_PUMP) & ILK_EMERGENCY_LATCHED) !
               "acil durum su pompasini kesmeli");
 static_assert((masksFor(core::ActuatorId::AIR_PUMP) & ILK_EMERGENCY_LATCHED) != 0u,
               "acil durum hava pompasini kesmeli");
-static_assert((masksFor(core::ActuatorId::AUX_1) & ILK_EMERGENCY_LATCHED) != 0u,
-              "acil durum yedek cikislari da kesmeli");
+static_assert((masksFor(core::ActuatorId::GROW_LIGHT) & ILK_EMERGENCY_LATCHED) != 0u,
+              "acil durum isigi da kesmeli");
+static_assert((masksFor(core::ActuatorId::HEATER) & ILK_EMERGENCY_LATCHED) != 0u,
+              "acil durum isiticiyi da kesmeli");
+static_assert((masksFor(core::ActuatorId::NUTRIENT_PUMP) & ILK_EMERGENCY_LATCHED) != 0u,
+              "acil durum besin pompasini da kesmeli");
+
+// ISITICI SEVİYE KİLİDİNDEN ETKİLENMELİ (TASK-066).
+//
+// Daldırma ısıtıcısı susuz kalırsa yanar ve hazneyi eritebilir — bu, kuru
+// çalışan bir pompadan daha tehlikelidir. `masksFor()` su pompası dışındaki
+// her şeye yalnızca acil-durum + süre kilidi verdiği için ısıtıcı AÇIKÇA
+// listelenmek zorundaydı; aşağıdaki iddia o kararı kilitler.
+static_assert((masksFor(core::ActuatorId::HEATER) & ILK_LEVEL_INSUFFICIENT) != 0u,
+              "isitici seviye kilidinden ETKILENMELI (kuru yanma)");
+static_assert((masksFor(core::ActuatorId::HEATER) & ILK_LEVEL_SENSOR_FAULT) != 0u,
+              "seviye okunamiyorsa isitici KILITLENMELI (fail-safe)");
+
+// Işık ve besin pompası seviyeden etkilenmez: ışık suya değmez, dozaj pompası
+// birkaç mL basar ve haznenin dolmasını beklemek gübreyi geciktirir.
+static_assert((masksFor(core::ActuatorId::GROW_LIGHT) & ILK_LEVEL_INSUFFICIENT) == 0u,
+              "isik seviye kilidinden ETKILENMEMELI");
 // Acil durum önceliği: aynı anda seviye kilidi varken bile acil durum raporlanır.
 static_assert(firstReason(ILK_EMERGENCY_LATCHED | ILK_LEVEL_INSUFFICIENT) ==
                   core::ErrCode::SAFETY_EMERGENCY_LATCHED,

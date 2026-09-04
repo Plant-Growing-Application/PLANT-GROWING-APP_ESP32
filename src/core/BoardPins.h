@@ -56,7 +56,12 @@ constexpr bool isSafePullupInput(uint8_t p)
 }
 
 // ---------------------------------------------------------------------------
-// I2C — OLED paneli
+// I2C — OLED paneli + ortam sensörleri
+//
+// ÜÇ CİHAZ TEK HAT (TASK-066): SSD1306 (0x3C), AHT20 (0x38), BH1750 (0x23).
+// Adresler çakışmaz ve ortam sensörleri YENİ PİN İSTEMEZ — ADC1 bütçesi
+// tükendiği için (ISSUE-001) analog bir ortam sensörü zaten takılamazdı.
+// Cihaz adresleri sürücülerinde tanımlıdır; bu dosya yalnızca pin taşır.
 // ---------------------------------------------------------------------------
 constexpr uint8_t I2C_SDA = 21;
 constexpr uint8_t I2C_SCL = 22;
@@ -96,6 +101,25 @@ constexpr uint8_t BUTTON_BACK      = 27;
 // ---------------------------------------------------------------------------
 constexpr uint8_t RELAY_WATER_PUMP = 16;
 constexpr uint8_t RELAY_AIR_PUMP   = 17;
+
+// ── İKLİM VE BESLEME RÖLELERİ (TASK-066) ────────────────────────────────────
+//
+// Ürün profili (`core/CropProfile.h`) yalnızca "şu aktüatör açık olsun" diyen
+// kurallar üretir; o kuralların gidecek bir yeri olması için üç fiziksel çıkış
+// gerekti:
+//
+//   büyütme ışığı  → SCHEDULE_WINDOW kuralı (günlük ışık saati)
+//   ısıtıcı        → THRESHOLD kuralı (su sıcaklığı alt sınırı)
+//   besin pompası  → THRESHOLD kuralı (EC alt sınırı)
+//
+// PIN BÜTÇESİ TÜKENDİ — bu üç pin, kartta kalan TEK güvenli çıkış kümesidir.
+// Kullanılamayanlar: 0/2/5/12/15 strapping, 6–11 flash, 34/35/36/39 giriş-only,
+// geri kalanı zaten atanmış. Dördüncü bir röle (örn. pH dozajı) GPIO
+// genişletici (PCF8574) veya encoder'ın taşınmasını gerektirir.
+constexpr uint8_t RELAY_GROW_LIGHT = 19;
+constexpr uint8_t RELAY_HEATER     = 26;
+constexpr uint8_t RELAY_NUTRIENT   = 18;
+
 constexpr uint8_t STATUS_LED       = 23;
 
 // ---------------------------------------------------------------------------
@@ -135,7 +159,48 @@ static_assert(isAdc1(ADC_SPARE),      "ADC_SPARE ADC1 pini olmali");
 // Röleler ve LED güvenli çıkış olmalı (strapping / giriş-only değil)
 static_assert(isSafeOutput(RELAY_WATER_PUMP), "RELAY_WATER_PUMP guvenli cikis olmali");
 static_assert(isSafeOutput(RELAY_AIR_PUMP),   "RELAY_AIR_PUMP guvenli cikis olmali");
+static_assert(isSafeOutput(RELAY_GROW_LIGHT), "RELAY_GROW_LIGHT guvenli cikis olmali");
+static_assert(isSafeOutput(RELAY_HEATER),     "RELAY_HEATER guvenli cikis olmali");
+static_assert(isSafeOutput(RELAY_NUTRIENT),   "RELAY_NUTRIENT guvenli cikis olmali");
 static_assert(isSafeOutput(STATUS_LED),       "STATUS_LED guvenli cikis olmali");
+
+// RÖLE PİNLERİ BİRBİRİNDEN VE HER ŞEYDEN FARKLI OLMALI.
+//
+// İki röleye aynı pin verilmesi SESSİZ ve tehlikeli bir hatadır: ışığı açan
+// kural ısıtıcıyı da çalıştırır ve `readback()` her ikisi için de "açık"
+// döndüğü için uyuşmazlık tespiti bile devreye girmez. Beş röle × dört diğer
+// pin sınıfı elle taranmaz — derleyici tarar.
+// Tek ifade: `constexpr` gövdesinde döngü C++14 gerektirir, firmware C++11
+// derlenir (CODING_STANDARDS). On karşılaştırma açıkça yazılıdır.
+constexpr bool relayPinsDistinct()
+{
+    return RELAY_WATER_PUMP != RELAY_AIR_PUMP && RELAY_WATER_PUMP != RELAY_GROW_LIGHT &&
+           RELAY_WATER_PUMP != RELAY_HEATER && RELAY_WATER_PUMP != RELAY_NUTRIENT &&
+           RELAY_AIR_PUMP != RELAY_GROW_LIGHT && RELAY_AIR_PUMP != RELAY_HEATER &&
+           RELAY_AIR_PUMP != RELAY_NUTRIENT && RELAY_GROW_LIGHT != RELAY_HEATER &&
+           RELAY_GROW_LIGHT != RELAY_NUTRIENT && RELAY_HEATER != RELAY_NUTRIENT;
+}
+static_assert(relayPinsDistinct(), "iki role AYNI pine atanmis");
+
+/// Bir pin röle olarak kullanılıyor mu?
+constexpr bool isRelayPin(uint8_t p)
+{
+    return p == RELAY_WATER_PUMP || p == RELAY_AIR_PUMP || p == RELAY_GROW_LIGHT ||
+           p == RELAY_HEATER || p == RELAY_NUTRIENT;
+}
+
+// Röle pinleri diğer işlevlerle çakışamaz. Yeni röleler (18/19/26) eskiden
+// "boşta" listesindeydi; birinin sonradan encoder'a veya I2C'ye verilmesi
+// derlemeyi durdurur.
+static_assert(!isRelayPin(I2C_SDA) && !isRelayPin(I2C_SCL),
+              "role pini I2C hatti ile CAKISIYOR");
+static_assert(!isRelayPin(ENCODER_A) && !isRelayPin(ENCODER_B) &&
+                  !isRelayPin(ENCODER_PUSH) && !isRelayPin(BUTTON_BACK),
+              "role pini girdi cihazi ile CAKISIYOR");
+static_assert(!isRelayPin(FLOW_PULSE) && !isRelayPin(LEVEL_FLOAT_LOW) &&
+                  !isRelayPin(LEVEL_FLOAT_CRIT),
+              "role pini dijital sensor ile CAKISIYOR");
+static_assert(!isRelayPin(STATUS_LED), "role pini durum LED'i ile CAKISIYOR");
 
 // Dahili pull-up gerektiren girişler giriş-only pinlerde OLMAMALI.
 // ISSUE-002: eski kodda akış sensörü GPIO 34'te INPUT_PULLUP ile kullanılıyordu;

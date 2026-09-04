@@ -1,8 +1,9 @@
 // Yapılandırma uç noktaları — TASK-044
 //
-//   GET /api/config                 — SIRLAR MASKELİ
+//   GET /api/config                 — SIRLAR MASKELİ (akıtılır)
 //   PUT /api/config/network         — SSID/şifre/IP
 //   PUT /api/config/safety          — güvenlik eşikleri
+//   PUT /api/config/sensors         — etkinlik + kalibrasyon (index GÖVDEDE)
 //   PUT /api/config/actuators       — aktüatör kısıtları (index GÖVDEDE)
 //   PUT /api/config/automation      — mod + manuel müdahale süresi
 //   GET /api/config/rules           — otomasyon kural kümesi
@@ -28,6 +29,7 @@
 #include "interfaces/web/RequestValidation.h"
 #include "interfaces/web/StateJson.h"
 #include "services/ConfigService.h"
+#include "services/CropService.h"
 #include "services/network/NetworkFsm.h"
 
 namespace interfaces {
@@ -36,8 +38,6 @@ namespace api {
 namespace {
 
 using core::ErrCode;
-
-constexpr size_t CONFIG_JSON_MAX = 2048;
 
 /// Kütüphanenin `AsyncCallbackJsonWebHandler` sınıfı KULLANILMIYOR —
 /// gerekçe `JsonBody.h` başlığında.
@@ -54,7 +54,7 @@ void sendConfigResult(AsyncWebServerRequest* req, const core::ConfigError& e)
 }
 
 /// Kural kümesi yanıtı için tampon. 8 kural × ~200 bayt + sarmalayıcı.
-/// `CONFIG_JSON_MAX`'tan ayrı: kurallar `/api/config` yanıtına konsaydı iki
+/// Ayrı bir tampon: kurallar `/api/config` yanıtına konsaydı iki
 /// içerik tek tamponu paylaşır ve biri büyüdüğünde diğeri sessizce taşardı.
 constexpr size_t RULES_JSON_MAX = 2560;
 
@@ -94,10 +94,17 @@ void registerConfig(AsyncWebServer& server)
     server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest* req) {
         if (!requireAuth(req)) { return; }
 
-        static char json[CONFIG_JSON_MAX];
-        const size_t n = writeConfigJson(json, sizeof(json));
-        if (n == 0) { sendError(req, ErrCode::WEB_PAYLOAD_TOO_LARGE); return; }
-        sendJson(req, 200, json);
+        // ── AKITILIR, TAMPONA YAZILMAZ (ISSUE-035) ─────────────────────────
+        // Sensör bölümü eklenince yanıt ~2,1 KB'a çıktı ve 2 KB'lık sabit
+        // tamponu aşıyordu: `writeConfigJson` 0 döner, kullanıcı "istek çok
+        // büyük" hatası alır ve TÜM ayarlar ekranı çalışmazdı. Tamponu
+        // büyütmek yerine akıtıyoruz — 2 KB kalıcı `.bss` da geri kazanıldı.
+        JsonDocument doc;
+        fillConfigJson(doc);
+
+        AsyncResponseStream* res = req->beginResponseStream("application/json");
+        serializeJson(doc, *res);
+        req->send(res);
     });
 
     onJsonPut(server, "/api/config/network", [](AsyncWebServerRequest* req, JsonDocument& json) {
@@ -168,6 +175,62 @@ void registerConfig(AsyncWebServer& server)
                                      ? 1u : 0u;
 
         sendConfigResult(req, services::config::updateSafety(s));
+    });
+
+    // ── SENSÖRLER (ISSUE-035) ──────────────────────────────────────────────
+    //
+    // Bu uç nokta EKSİKTİ: `updateSensor()` yazılmış ama hiçbir yerden
+    // çağrılmıyordu. Sonuç, pH/EC/nem/hava sıcaklığı/ışık sensörlerinin
+    // arayüzden **hiç açılamaması** ve kalibrasyonun ulaşılamaz kalmasıydı.
+    //
+    // Aktüatör uç noktasıyla aynı desen: indeks GÖVDEDE, eksik alanlar
+    // mevcut değerden devralınır, doğrulama `ConfigValidation`'da.
+    onJsonPut(server, "/api/config/sensors", [](AsyncWebServerRequest* req,
+                                                JsonDocument& json) {
+        if (!requireAuth(req)) { return; }
+
+        const int idx = json["index"] | -1;
+        if (idx < 0 || idx >= static_cast<int>(core::MAX_SENSORS))
+        {
+            sendError(req, ErrCode::WEB_INVALID_REQUEST, "index");
+            return;
+        }
+
+        core::SensorConfig s = services::config::get().sensors[idx];
+
+        s.enabled         = (json["enabled"] | (s.enabled != 0u)) ? 1u : 0u;
+        s.offset          = json["offset"]          | s.offset;
+        s.scale           = json["scale"]           | s.scale;
+        s.maxChangePerSec = json["maxChangePerSec"] | s.maxChangePerSec;
+
+        if (json["filterStrength"].is<int32_t>())
+        {
+            const int32_t f = json["filterStrength"].as<int32_t>();
+            if (f < 0 || f > 255)
+            {
+                sendError(req, ErrCode::WEB_INVALID_REQUEST, "sensors.filterStrength");
+                return;
+            }
+            s.filterStrength = static_cast<uint8_t>(f);
+        }
+
+        // Aralık ikisi birden verilmeli: yalnızca `min` güncellenip `max`
+        // eskisinde kalırsa ters bir aralık ("min > max") oluşabilir ve
+        // sensör her okumada OUT_OF_RANGE damgalanırdı.
+        if (!json["validRange"].isNull())
+        {
+            JsonObjectConst vr = json["validRange"].as<JsonObjectConst>();
+            if (vr.isNull() || !vr["min"].is<float>() || !vr["max"].is<float>())
+            {
+                sendError(req, ErrCode::WEB_INVALID_REQUEST, "sensors.validRange");
+                return;
+            }
+            s.validRange.min = vr["min"].as<float>();
+            s.validRange.max = vr["max"].as<float>();
+        }
+
+        sendConfigResult(req,
+                         services::config::updateSensor(static_cast<uint8_t>(idx), s));
     });
 
     onJsonPut(server, "/api/config/actuators", [](AsyncWebServerRequest* req,
@@ -344,7 +407,18 @@ void registerConfig(AsyncWebServer& server)
         // Anlamsal denetim (histerezis bandı, gece yarısını aşan pencere,
         // çevrim oranı, çakışan öncelikler) `ConfigValidation`'da yapılır ve
         // BURADA TEKRARLANMAZ — sınırların tek doğruluk kaynağı orasıdır.
-        sendConfigResult(req, services::config::updateRules(rs));
+        const core::ConfigError e = services::config::updateRules(rs);
+
+        // Kurallar artık profilin ürettiği kurallar değil (TASK-068).
+        // İşaretlenmeseydi arayüz "Çilek profili aktif" demeye devam eder ve
+        // YALAN SÖYLERDİ. Yalnızca yazma BAŞARILI olduysa: reddedilen bir
+        // gövde config'i değiştirmediği için profil de bozulmamıştır.
+        if (e.ok())
+        {
+            services::crop::markCustomized();
+        }
+
+        sendConfigResult(req, e);
     });
 
     onJsonPut(server, "/api/config/system", [](AsyncWebServerRequest* req, JsonDocument& json) {

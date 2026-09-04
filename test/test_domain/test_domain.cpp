@@ -23,6 +23,9 @@
 
 #include "core/Config.h"
 #include "core/ConfigValidation.h"
+#include "core/CropProfile.h"
+#include "core/EncoderDecode.h"
+#include "services/HistoryStore.h"
 #include "core/Rule.h"
 #include "core/SystemState.h"
 #include "core/Time.h"
@@ -401,6 +404,451 @@ void test_conflicting_rules_with_equal_priority_rejected()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 8. ÜRÜN PROFİLLERİ — TASK-067
+//
+// Bu bölüm donanımda test EDİLEMEZ: her ürünün her döneminin geçerli bir kural
+// kümesi üretip üretmediğini görmek için 6 ürün × 4 dönem × 3 yoğunluk = 72
+// kombinasyonun her birini gerçek bir serada denemek gerekirdi.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Tüm röleler ve sensörler bağlı — profilin üretebileceği azami kural kümesi.
+static void allHardwarePresent(bool (&acts)[MAX_ACTUATORS], bool (&sens)[MAX_SENSORS])
+{
+    for (uint8_t i = 0; i < MAX_ACTUATORS; ++i) { acts[i] = true; }
+    for (uint8_t i = 0; i < MAX_SENSORS; ++i)   { sens[i] = true; }
+}
+
+void test_every_crop_and_stage_produces_valid_rules()
+{
+    // ASIL İDDİA: katalogdaki hiçbir satır, doğrulamadan geçemeyecek bir kural
+    // üretemez. Üretse, kullanıcı "çilek profili uygulanamadı" hatası alır ve
+    // hatanın kaynağı bir tabloda gömülü kalırdı.
+    Config c{};
+    loadDefaults(c);
+
+    bool acts[MAX_ACTUATORS];
+    bool sens[MAX_SENSORS];
+    allHardwarePresent(acts, sens);
+
+    const Intensity levels[3] = {Intensity::SPARSE, Intensity::NORMAL, Intensity::ABUNDANT};
+
+    for (uint8_t ci = 0; ci < cropCount(); ++ci)
+    {
+        const CropProfile* p = cropAt(ci);
+        TEST_ASSERT_NOT_NULL(p);
+
+        for (uint8_t si = 0; si < p->stageCount; ++si)
+        {
+            for (uint8_t li = 0; li < 3u; ++li)
+            {
+                RuleSet rs{};
+                const uint8_t n = buildCropRules(*p, static_cast<GrowthStage>(si),
+                                                 levels[li], acts, sens, rs);
+
+                TEST_ASSERT_TRUE(n > 0u);
+                TEST_ASSERT_TRUE(n <= MAX_RULES);
+                TEST_ASSERT_EQUAL_UINT8(n, rs.count);
+
+                // Varsayılan sensör aralıkları içinde kalmalı ve çakışmamalı.
+                TEST_ASSERT_TRUE(validateRules(rs, c.sensors).ok());
+            }
+        }
+    }
+}
+
+void test_generated_cycle_never_exceeds_pump_max_runtime()
+{
+    // Üretilen çevrim su pompasının varsayılan `maxRunMs`'ini aşarsa,
+    // `ActuatorManager` pompayı HER çevrimde süre aşımıyla zorla kapatır ve
+    // kullanıcı doğru görünen bir kuralın neden kesildiğini bulamaz.
+    Config c{};
+    loadDefaults(c);
+    const uint32_t pumpMaxRunS =
+        c.actuators[static_cast<uint8_t>(ActuatorId::WATER_PUMP)].maxRunMs / 1000u;
+
+    bool acts[MAX_ACTUATORS];
+    bool sens[MAX_SENSORS];
+    allHardwarePresent(acts, sens);
+
+    for (uint8_t ci = 0; ci < cropCount(); ++ci)
+    {
+        const CropProfile* p = cropAt(ci);
+        for (uint8_t si = 0; si < p->stageCount; ++si)
+        {
+            RuleSet rs{};
+            // En uzun çevrimi üreten yoğunluk: BOL.
+            buildCropRules(*p, static_cast<GrowthStage>(si), Intensity::ABUNDANT, acts,
+                           sens, rs);
+
+            for (uint8_t r = 0; r < rs.count; ++r)
+            {
+                if (rs.rules[r].kind != RuleKind::SCHEDULE_CYCLE) { continue; }
+                TEST_ASSERT_TRUE(rs.rules[r].cycleOnS < pumpMaxRunS);
+                TEST_ASSERT_TRUE(rs.rules[r].cycleOnS < rs.rules[r].cyclePeriodS);
+            }
+        }
+    }
+}
+
+void test_missing_hardware_produces_no_rule_for_it()
+{
+    // Bağlı olmayan bir ısıtıcıya kural yazmak, kural listesinde hiçbir şey
+    // yapmayan bir satır bırakmaktı.
+    const CropProfile* p = cropById(CropId::STRAWBERRY);
+    TEST_ASSERT_NOT_NULL(p);
+
+    bool acts[MAX_ACTUATORS];
+    bool sens[MAX_SENSORS];
+    allHardwarePresent(acts, sens);
+
+    // Isıtıcı rölesi yok → ısıtma kuralı da yok.
+    acts[static_cast<uint8_t>(ActuatorId::HEATER)] = false;
+
+    RuleSet rs{};
+    buildCropRules(*p, GrowthStage::FRUITING, Intensity::NORMAL, acts, sens, rs);
+    for (uint8_t i = 0; i < rs.count; ++i)
+    {
+        TEST_ASSERT_TRUE(rs.rules[i].target != ActuatorId::HEATER);
+    }
+
+    // Röle var ama SICAKLIK SENSÖRÜ yok → kural yine üretilmemeli; ölçüm
+    // olmadan eşik kuralı asla tetiklenmez ve sessizce ölü durur.
+    allHardwarePresent(acts, sens);
+    sens[static_cast<uint8_t>(SensorId::WATER_TEMP)] = false;
+
+    RuleSet rs2{};
+    buildCropRules(*p, GrowthStage::FRUITING, Intensity::NORMAL, acts, sens, rs2);
+    for (uint8_t i = 0; i < rs2.count; ++i)
+    {
+        TEST_ASSERT_TRUE(rs2.rules[i].target != ActuatorId::HEATER);
+    }
+}
+
+void test_heater_and_dosing_thresholds_point_the_right_way()
+{
+    // Yön iki eşikten TÜRER (Rule.h): `on < off` = "altına düşünce AÇ".
+    // Ters kurulmuş bir ısıtıcı, hazne soğudukça ısıtmayı KAPATIRDI.
+    const CropProfile* p = cropById(CropId::STRAWBERRY);
+    bool acts[MAX_ACTUATORS];
+    bool sens[MAX_SENSORS];
+    allHardwarePresent(acts, sens);
+
+    RuleSet rs{};
+    buildCropRules(*p, GrowthStage::FRUITING, Intensity::NORMAL, acts, sens, rs);
+
+    bool sawHeater = false;
+    bool sawDosing = false;
+    for (uint8_t i = 0; i < rs.count; ++i)
+    {
+        const Rule& r = rs.rules[i];
+        if (r.target == ActuatorId::HEATER)
+        {
+            sawHeater = true;
+            TEST_ASSERT_EQUAL(RuleKind::THRESHOLD, r.kind);
+            TEST_ASSERT_TRUE(r.sensor == SensorId::WATER_TEMP);
+            TEST_ASSERT_TRUE(r.onThreshold < r.offThreshold);  // soğuyunca AÇ
+        }
+        if (r.target == ActuatorId::NUTRIENT_PUMP)
+        {
+            sawDosing = true;
+            TEST_ASSERT_EQUAL(RuleKind::THRESHOLD, r.kind);
+            TEST_ASSERT_TRUE(r.sensor == SensorId::EC);
+            TEST_ASSERT_TRUE(r.onThreshold < r.offThreshold);  // EC düşünce AÇ
+            // Dozaj arka arkaya tetiklenmemeli: karışma zaman alır.
+            TEST_ASSERT_TRUE(r.minTriggerIntervalS >= 60u);
+        }
+    }
+    TEST_ASSERT_TRUE(sawHeater);
+    TEST_ASSERT_TRUE(sawDosing);
+}
+
+void test_ec_rises_across_fruiting_stages()
+{
+    // Bu tablonun VARLIK NEDENİ: çileği domates EC'sinde çalıştırmak meyve
+    // tutumunu öldürür, aynı ürün içinde de fide meyveyle aynı çözeltiyi
+    // kaldıramaz. Dönem ilerledikçe EC hedefi artmalı.
+    const CropId fruiting[4] = {CropId::STRAWBERRY, CropId::TOMATO, CropId::PEPPER,
+                                CropId::CUCUMBER};
+    for (uint8_t i = 0; i < 4u; ++i)
+    {
+        const CropProfile* p = cropById(fruiting[i]);
+        TEST_ASSERT_NOT_NULL(p);
+        TEST_ASSERT_EQUAL_UINT8(4u, p->stageCount);
+
+        for (uint8_t s = 1; s < p->stageCount; ++s)
+        {
+            TEST_ASSERT_TRUE(p->stages[s].ec.min >= p->stages[s - 1].ec.min);
+            TEST_ASSERT_TRUE(p->stages[s].ec.valid());
+        }
+    }
+}
+
+void test_leafy_crops_reject_fruiting_stage()
+{
+    // Marulda "meyve dönemi" yoktur. Kabul edilseydi ekranda "Meyve" yazarken
+    // kurallar "Gelişme" olurdu — arayüz yalan söylerdi.
+    Config c{};
+    loadDefaults(c);
+    c.crop.crop  = CropId::LETTUCE;
+    c.crop.stage = GrowthStage::FRUITING;
+    TEST_ASSERT_FALSE(validateCrop(c.crop).ok());
+
+    c.crop.stage = GrowthStage::VEGETATIVE;
+    TEST_ASSERT_TRUE(validateCrop(c.crop).ok());
+
+    // Meyveli üründe aynı dönem geçerli.
+    c.crop.crop  = CropId::TOMATO;
+    c.crop.stage = GrowthStage::FRUITING;
+    TEST_ASSERT_TRUE(validateCrop(c.crop).ok());
+}
+
+void test_stage_advances_by_day_and_never_goes_backwards()
+{
+    const CropProfile* p = cropById(CropId::STRAWBERRY);
+    // fide 21 · gelişme 30 · çiçek 21 · meyve süresiz
+    TEST_ASSERT_EQUAL(GrowthStage::SEEDLING,   stageForDay(*p, 0));
+    TEST_ASSERT_EQUAL(GrowthStage::SEEDLING,   stageForDay(*p, 20));
+    TEST_ASSERT_EQUAL(GrowthStage::VEGETATIVE, stageForDay(*p, 21));
+    TEST_ASSERT_EQUAL(GrowthStage::VEGETATIVE, stageForDay(*p, 50));
+    TEST_ASSERT_EQUAL(GrowthStage::FLOWERING,  stageForDay(*p, 51));
+    TEST_ASSERT_EQUAL(GrowthStage::FRUITING,   stageForDay(*p, 72));
+
+    // Tablodaki toplam süre aşılsa bile SON dönemde kalınır; dönemi geri
+    // almak EC hedefini yarıya indirirdi.
+    TEST_ASSERT_EQUAL(GrowthStage::FRUITING, stageForDay(*p, 100000));
+
+    // İki dönemli üründe son dönem VEGETATIVE'dir, FRUITING değil.
+    const CropProfile* lettuce = cropById(CropId::LETTUCE);
+    TEST_ASSERT_EQUAL(GrowthStage::VEGETATIVE, stageForDay(*lettuce, 100000));
+}
+
+void test_crop_key_roundtrip_is_lossless()
+{
+    // Kablo üzerindeki sözlük tek yönlü bozulursa, kullanıcının seçtiği ürün
+    // sessizce başka bir ürüne dönüşür.
+    for (uint8_t i = 0; i < cropCount(); ++i)
+    {
+        const CropProfile* p = cropAt(i);
+        CropId back = CropId::NONE;
+        TEST_ASSERT_TRUE(cropIdFromKey(cropKeyOf(p->id), back));
+        TEST_ASSERT_TRUE(back == p->id);
+    }
+
+    CropId id = CropId::STRAWBERRY;
+    TEST_ASSERT_TRUE(cropIdFromKey("none", id));
+    TEST_ASSERT_TRUE(id == CropId::NONE);
+    TEST_ASSERT_TRUE(cropIdFromKey("custom", id));
+    TEST_ASSERT_TRUE(id == CropId::CUSTOM);
+    TEST_ASSERT_FALSE(cropIdFromKey("kavun", id));
+
+    for (uint8_t s = 0; s < CROP_MAX_STAGES; ++s)
+    {
+        GrowthStage gs = GrowthStage::SEEDLING;
+        TEST_ASSERT_TRUE(stageFromKey(stageKeyOf(static_cast<GrowthStage>(s)), gs));
+        TEST_ASSERT_EQUAL_UINT8(s, static_cast<uint8_t>(gs));
+    }
+}
+
+void test_config_still_fits_the_nvs_blob_budget()
+{
+    // Şema büyüdükçe bu sayı büyür. Sınır aşıldığında derleme zaten durur
+    // (`Config.h` static_assert), ama buradaki test SAYIYI KAYDA GEÇİRİR:
+    // bir sonraki geliştirici ne kadar pay kaldığını görebilsin.
+    TEST_ASSERT_TRUE(sizeof(Config) <= 640);
+    TEST_ASSERT_TRUE(sizeof(CropConfig) <= 24);
+    TEST_ASSERT_EQUAL_UINT8(5, MAX_ACTUATORS);
+    TEST_ASSERT_EQUAL_UINT8(8, MAX_SENSORS);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. ENCODER — yön değişiminde kaybolan tık (TASK-071)
+//
+// Bu hata donanımda GÖRÜLÜR ama TEKRARLANAMAZ: artığın oluşması için bir
+// geçişin kaybolması gerekir ve bunu elle üretmek mümkün değildir. Burada
+// sentetik olarak kuruluyor.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Quadrature durum döngüsü: 00 → 01 → 11 → 10 → 00 …
+/// Tabloda `quadDelta(0,1) == -1` olduğu için bu yön CCW'dir; ters sırada
+/// dönmek CW üretir. Testler yönü tablodan okur, varsaymaz.
+static const uint8_t PHASES[4] = {0, 1, 3, 2};
+
+/// Encoder'ı `n` geçiş kadar çevirir ve üretilen tıkları sayar.
+///
+/// @param dir +1 = tablo sırasında ileri · -1 = geri
+static void turn(EncoderDecoder& d, int dir, int transitions, int& cw, int& ccw,
+                 int& phaseIdx)
+{
+    for (int i = 0; i < transitions; ++i)
+    {
+        phaseIdx = (phaseIdx + dir + 4) % 4;
+        const EncoderTick t = encoderAdvance(d, PHASES[phaseIdx], 4);
+        if (t == EncoderTick::CW)  { ++cw; }
+        if (t == EncoderTick::CCW) { ++ccw; }
+    }
+}
+
+void test_encoder_clean_rotation_counts_one_tick_per_detent()
+{
+    EncoderDecoder d{};
+    d.reset(PHASES[0]);
+
+    int cw = 0, ccw = 0, idx = 0;
+    turn(d, +1, 4 * 5, cw, ccw, idx);          // 5 detent, tek yön
+
+    // Yön tabloya bağlı; hangisi olursa olsun TAM 5 tık üretilmeli ve
+    // ters yönde hiç tık olmamalı.
+    TEST_ASSERT_EQUAL_INT(5, cw + ccw);
+    TEST_ASSERT_TRUE(cw == 0 || ccw == 0);
+    TEST_ASSERT_EQUAL_INT8(0, d.steps);        // artık kalmamalı
+}
+
+void test_encoder_reversal_after_lost_transition_still_ticks_on_first_detent()
+{
+    // ── BİLDİRİLEN HATA ────────────────────────────────────────────────────
+    // "İleri sürekli gidersem sorun yok; ileri gidip bir geri geldiğimde
+    //  o 1 tık çalışmıyor, 2. tıkta geri geliyor."
+    //
+    // Kurulum: bir geçiş KAYBEDİLİR (flash yazarken GPIO ISR'si çalışmaz veya
+    // sıçrama filtresi eler). Bu, biriktiricide kalıcı bir artık bırakır.
+    EncoderDecoder d{};
+    d.reset(PHASES[0]);
+
+    int cw = 0, ccw = 0, idx = 0;
+
+    // Bir detent döndür ama SON geçişi kaybet: çözücüye 3 geçiş ulaşır.
+    turn(d, +1, 3, cw, ccw, idx);
+    TEST_ASSERT_EQUAL_INT(0, cw + ccw);        // henüz tık yok
+    // Kaybolan 4. geçiş: faz ilerler ama çözücü görmez.
+    idx = (idx + 1) % 4;
+
+    // İkinci detent: 4 geçiş. Artık nedeniyle tık ERKEN gelir — kullanıcı
+    // ileri yönde bir sorun HİSSETMEZ, her detent bir tık üretmeye devam eder.
+    turn(d, +1, 4, cw, ccw, idx);
+    TEST_ASSERT_EQUAL_INT(1, cw + ccw);
+    const int forwardTicks = cw + ccw;
+
+    // Artık var mı? Hatanın ön koşulu budur.
+    TEST_ASSERT_NOT_EQUAL(0, d.steps);
+
+    // ── ASIL İDDİA: ŞİMDİ GERİ DÖN ─────────────────────────────────────────
+    // Bir detentlik geri dönüş TAM BİR tık üretmeli. Yön değişiminde artık
+    // atılmasaydı bu detent sessiz kalır, tık ancak ikinci detentte gelirdi.
+    const int cwBefore = cw, ccwBefore = ccw;
+    turn(d, -1, 4, cw, ccw, idx);
+
+    TEST_ASSERT_EQUAL_INT(forwardTicks + 1, cw + ccw);          // tık geldi
+    TEST_ASSERT_TRUE((cw - cwBefore) + (ccw - ccwBefore) == 1); // tam bir tane
+    // ...ve TERS yönde geldi.
+    TEST_ASSERT_TRUE((cw > cwBefore) != (ccw > ccwBefore));
+}
+
+void test_encoder_direction_change_discards_partial_movement()
+{
+    // Kısmi bir dönüş (detenti tamamlamayan) ters yöndeki ilk tıkın hesabına
+    // yazılmamalı: kullanıcı o hareketi "bir tık" saymamıştır.
+    EncoderDecoder d{};
+    d.reset(PHASES[0]);
+
+    int cw = 0, ccw = 0, idx = 0;
+    turn(d, +1, 2, cw, ccw, idx);              // yarım detent ileri
+    TEST_ASSERT_EQUAL_INT(0, cw + ccw);
+
+    turn(d, -1, 4, cw, ccw, idx);              // tam bir detent geri
+    TEST_ASSERT_EQUAL_INT(1, cw + ccw);        // tık GELMELİ
+}
+
+void test_encoder_invalid_transitions_are_ignored()
+{
+    // Çift bit değişimi = kaçırılmış ara durum. Sayılmamalı, ama çözücü
+    // yeni duruma senkron kalmalı ki sonraki geçişler doğru hesaplansın.
+    EncoderDecoder d{};
+    d.reset(0);
+
+    int cw = 0, ccw = 0;
+    TEST_ASSERT_EQUAL(EncoderTick::NONE, encoderAdvance(d, 3, 4));  // 00 → 11
+    TEST_ASSERT_EQUAL_UINT8(3, d.phase);
+    TEST_ASSERT_EQUAL_INT8(0, d.steps);
+
+    // Aynı durumda kalmak da hareket değildir.
+    TEST_ASSERT_EQUAL(EncoderTick::NONE, encoderAdvance(d, 3, 4));
+    TEST_ASSERT_EQUAL_INT8(0, d.steps);
+    (void)cw; (void)ccw;
+}
+
+void test_encoder_sync_phase_does_not_count()
+{
+    // Zaman kapısı bir kenarı reddettiğinde durum güncellenir ama SAYILMAZ.
+    // Güncellenmeseydi çözücü gerçek pinlerden ayrışır ve sonraki geçiş
+    // tabloda geçersiz görünüp sessizce kaybolurdu.
+    EncoderDecoder d{};
+    d.reset(PHASES[0]);
+
+    encoderSyncPhase(d, PHASES[1]);
+    TEST_ASSERT_EQUAL_UINT8(PHASES[1], d.phase);
+    TEST_ASSERT_EQUAL_INT8(0, d.steps);
+
+    // Senkronizasyondan sonraki gerçek geçiş DOĞRU hesaplanmalı.
+    const EncoderTick t = encoderAdvance(d, PHASES[2], 4);
+    TEST_ASSERT_EQUAL(EncoderTick::NONE, t);   // tek geçiş, detent değil
+    TEST_ASSERT_NOT_EQUAL(0, d.steps);         // ama SAYILDI
+}
+
+void test_encoder_step_accumulator_cannot_overflow()
+{
+    // Aynı yönde çok uzun bir dönüş `int8_t` sınırında sarmamalı: sarma,
+    // encoder'ın aniden ters yöne dönmesi gibi görünürdü.
+    EncoderDecoder d{};
+    d.reset(PHASES[0]);
+
+    int cw = 0, ccw = 0, idx = 0;
+    turn(d, +1, 4 * 300, cw, ccw, idx);        // 300 detent
+    TEST_ASSERT_EQUAL_INT(300, cw + ccw);
+    TEST_ASSERT_TRUE(d.steps >= -4 && d.steps <= 4);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. GEÇMİŞ KAYDI SLOT SIRASI — ISSUE-034
+//
+// Yazıcı ve okuyucu farklı sıralar kullanıyordu ve grafik aylardır yanlış
+// sensörü yanlış ölçekle gösteriyordu. Hata donanımda görünmez: değerler
+// "makul" aralıkta kaldığı için kimse fark etmez.
+// ═══════════════════════════════════════════════════════════════════════════
+
+void test_history_every_sensor_has_exactly_one_slot()
+{
+    // Bir sensörün iki slotu olsaydı ikincisi birincisini ezerdi; hiç slotu
+    // olmasaydı sessizce kaydedilmezdi. İkisi de ISSUE-034'ün yaşama biçimi.
+    for (uint8_t s = 0; s < MAX_SENSORS; ++s)
+    {
+        const SensorId id   = static_cast<SensorId>(s);
+        const uint8_t  slot = services::history::slotOf(id);
+
+        TEST_ASSERT_TRUE(slot < services::history::SENSOR_SLOTS);
+        TEST_ASSERT_TRUE(services::history::SLOT_ORDER[slot] == id);
+    }
+}
+
+void test_history_slot_lookup_rejects_unknown_sensor()
+{
+    // Tabloda olmayan bir kimlik `SENSOR_SLOTS` döner ve yazıcı onu ATLAR —
+    // dizinin dışına yazmak yerine.
+    TEST_ASSERT_EQUAL_UINT8(services::history::SENSOR_SLOTS,
+                            services::history::slotOf(SensorId::NONE));
+}
+
+void test_history_slot_table_covers_all_sensors()
+{
+    // Slot sayısı sensör sayısıyla eşleşmeli: eşleşmezse bir ölçüm geçmişe
+    // hiç girmez ve grafikte "veri yok" olarak görünürdü.
+    TEST_ASSERT_EQUAL_UINT8(MAX_SENSORS, services::history::SENSOR_SLOTS);
+
+    // Maskeler 8 bit; slot sayısı 8'i aşarsa üst slotların kalite biti
+    // sessizce kaybolurdu.
+    TEST_ASSERT_TRUE(services::history::SENSOR_SLOTS <= 8);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 
 void setUp() {}
 void tearDown() {}
@@ -443,6 +891,27 @@ int runAllTests()
     RUN_TEST(test_rule_thresholds_cannot_be_equal);
     RUN_TEST(test_cycle_on_time_must_be_shorter_than_period);
     RUN_TEST(test_conflicting_rules_with_equal_priority_rejected);
+
+    RUN_TEST(test_every_crop_and_stage_produces_valid_rules);
+    RUN_TEST(test_generated_cycle_never_exceeds_pump_max_runtime);
+    RUN_TEST(test_missing_hardware_produces_no_rule_for_it);
+    RUN_TEST(test_heater_and_dosing_thresholds_point_the_right_way);
+    RUN_TEST(test_ec_rises_across_fruiting_stages);
+    RUN_TEST(test_leafy_crops_reject_fruiting_stage);
+    RUN_TEST(test_stage_advances_by_day_and_never_goes_backwards);
+    RUN_TEST(test_crop_key_roundtrip_is_lossless);
+    RUN_TEST(test_config_still_fits_the_nvs_blob_budget);
+
+    RUN_TEST(test_encoder_clean_rotation_counts_one_tick_per_detent);
+    RUN_TEST(test_encoder_reversal_after_lost_transition_still_ticks_on_first_detent);
+    RUN_TEST(test_encoder_direction_change_discards_partial_movement);
+    RUN_TEST(test_encoder_invalid_transitions_are_ignored);
+    RUN_TEST(test_encoder_sync_phase_does_not_count);
+    RUN_TEST(test_encoder_step_accumulator_cannot_overflow);
+
+    RUN_TEST(test_history_every_sensor_has_exactly_one_slot);
+    RUN_TEST(test_history_slot_lookup_rejects_unknown_sensor);
+    RUN_TEST(test_history_slot_table_covers_all_sensors);
 
     return UNITY_END();
 }

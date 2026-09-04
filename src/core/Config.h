@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <type_traits>
 
+#include "CropProfile.h"
 #include "Rule.h"
 #include "SystemState.h"
 #include "Types.h"
@@ -32,7 +33,12 @@ namespace core {
 /// `cfg.rules` bölümü eklendi ve TASK-015'in migration yolu devreye girdi
 /// (ARCHITECTURE §15.3): sürüm 1 kaydı okunduğunda kural kümesi BOŞ
 /// varsayılanda kalır — sürüm 1'de zaten kural saklanamıyordu.
-constexpr uint16_t CONFIG_SCHEMA_VERSION = 2;
+/// **3 — ürün profili seçimi kalıcılaştı (TASK-067).** `CropConfig` bölümü
+/// eklendi. Sürüm 2 kaydı okunduğunda bu bölüm varsayılanda kalır:
+/// `crop = NONE`, yani "ürün seçilmemiş" — cihazın TASK-067 öncesindeki
+/// davranışıyla birebir aynı. Göçün taşıyacağı veri yoktur, çünkü sürüm 2'de
+/// saklanabilecek bir ürün seçimi zaten yoktu.
+constexpr uint16_t CONFIG_SCHEMA_VERSION = 3;
 
 /// Kayıt geçerliliği işareti.
 constexpr uint32_t CONFIG_MAGIC = 0x43464731u;  // "CFG1"
@@ -131,6 +137,45 @@ struct AutomationConfig
 };
 
 // ---------------------------------------------------------------------------
+// crop — hangi ürün, hangi dönem (TASK-067)
+//
+// PARAMETRELER BURADA DEĞİL: profil tabloları `.rodata`'dadır
+// (`core/CropProfile.h`). Burada yalnızca SEÇİM saklanır. Bu ayrım sayesinde
+// altı ürünlük katalog NVS blob'una hiç dokunmaz ve profil tanımları firmware
+// ile birlikte sürümlenir — kullanıcının NVS'inde bozulmuş bir çilek profili
+// olamaz.
+// ---------------------------------------------------------------------------
+
+struct CropConfig
+{
+    /// Dikim tarihi (Unix epoch, saniye). 0 = bilinmiyor.
+    ///
+    /// `int64`: `core::EpochSeconds` ile aynı genişlik. 2038 sorunundan
+    /// etkilenmez ve duvar saati tipiyle sessizce daralan bir dönüşüm olmaz.
+    int64_t plantedAtEpoch;
+
+    CropId      crop;
+    GrowthStage stage;
+
+    /// 1 = dönem, dikimden bu yana geçen güne göre KENDİLİĞİNDEN ilerler.
+    ///
+    /// Zaman geçersizken ilerleme DURUR (donanımsal RTC yok — ISSUE-005).
+    /// Geçersiz saatle gün saymak, güç kesintisi sonrası meyve dönemindeki
+    /// çileği fide dönemine geri döndürür ve EC hedefini yarıya indirirdi.
+    uint8_t autoStage;
+
+    Intensity intensity;
+
+    /// `crop == CUSTOM` iken: kurallar HANGİ profilden türetilmişti.
+    ///
+    /// Arayüz "Çilekten türetildi (elle değiştirildi)" diyebilsin diye
+    /// saklanır. `CropId::NONE` = bilinmiyor.
+    CropId derivedFrom;
+
+    uint8_t reserved[2];
+};
+
+// ---------------------------------------------------------------------------
 // system
 // ---------------------------------------------------------------------------
 
@@ -154,6 +199,11 @@ struct Config
     uint16_t schemaVersion;
     uint16_t reserved;
 
+    /// **Başta duruyor, bilinçli olarak.** `CropConfig` `int64` taşır ve 8
+    /// bayta hizalanır; yapının ortasına konsaydı derleyici öncesine 4 bayt
+    /// dolgu koyardı. Başlık zaten 8 baytlık olduğu için burada dolgu sıfırdır.
+    CropConfig       crop;
+
     NetworkConfig    network;
     SensorConfig     sensors[MAX_SENSORS];
     ActuatorConfig   actuators[MAX_ACTUATORS];
@@ -174,11 +224,42 @@ struct Config
 // ---------------------------------------------------------------------------
 namespace limits {
 
-/// `maxRunMs`'in ÜST SINIRI. Sınırsız bırakılırsa "maksimum çalışma süresi"
-/// koruması anlamsızlaşır.
+/// `maxRunMs`'in ÜST SINIRI — pompalar. Sınırsız bırakılırsa "maksimum
+/// çalışma süresi" koruması anlamsızlaşır.
 constexpr Range<uint32_t> ACTUATOR_MAX_RUN{1000u, 2u * 60u * 60u * 1000u};   // 1 sn – 2 saat
 constexpr Range<uint32_t> ACTUATOR_MIN_RUN{0u, 10u * 60u * 1000u};           // 0 – 10 dk
 constexpr Range<uint32_t> ACTUATOR_COOLDOWN{0u, 60u * 60u * 1000u};          // 0 – 1 saat
+
+// ── AKTÜATÖR BAŞINA `maxRunMs` ÜST SINIRI (TASK-066) ────────────────────────
+//
+// TEK BİR GLOBAL SINIR ARTIK YETMİYOR. Büyütme ışığı günde 14–18 saat yanmak
+// zorundadır; 2 saatlik pompa sınırı ona uygulansaydı `ActuatorManager` ışığı
+// her 2 saatte bir zorla kapatır ve kullanıcı "ışık sönüyor" derdinin
+// kaynağını asla bulamazdı. Sınırı GLOBAL olarak 18 saate çıkarmak ise pompa
+// korumasını yok ederdi — 18 saat kuru çalışan bir pompa yanar.
+//
+// Bu yüzden sınır role göre ayrıldı; gevşetme yalnızca gevşetilmesi GEREKEN
+// aktüatörde geçerli.
+constexpr Range<uint32_t> ACTUATOR_MAX_RUN_LIGHT{1000u, 20u * 60u * 60u * 1000u};  // ≤ 20 sa
+constexpr Range<uint32_t> ACTUATOR_MAX_RUN_HEATER{1000u, 6u * 60u * 60u * 1000u};  // ≤ 6 sa
+
+/// Dozaj pompası: SIKI sınır. Takılı kalan bir dozaj pompası besin bidonunun
+/// tamamını hazneye boşaltır — bu, bitkiyi bir pompa arızasından daha hızlı
+/// öldürür. Saniyeler mertebesinde çalışması beklenir.
+constexpr Range<uint32_t> ACTUATOR_MAX_RUN_DOSING{1000u, 5u * 60u * 1000u};        // ≤ 5 dk
+
+/// Aktüatörün rolüne göre geçerli `maxRunMs` aralığı.
+///
+/// `ActuatorId` yerine indeks alır: `validateActuator()` dizinin indeksiyle
+/// çağrılır ve o indeksin kimliğe karşılık geldiği `SystemState.h`'ta
+/// `static_assert` ile zaten kilitlidir.
+constexpr Range<uint32_t> maxRunLimitFor(uint8_t index)
+{
+    return (index == static_cast<uint8_t>(ActuatorId::GROW_LIGHT))    ? ACTUATOR_MAX_RUN_LIGHT
+         : (index == static_cast<uint8_t>(ActuatorId::HEATER))        ? ACTUATOR_MAX_RUN_HEATER
+         : (index == static_cast<uint8_t>(ActuatorId::NUTRIENT_PUMP)) ? ACTUATOR_MAX_RUN_DOSING
+                                                                      : ACTUATOR_MAX_RUN;
+}
 
 constexpr Range<uint32_t> FLOW_VERIFY_DELAY{1000u, 60u * 1000u};             // 1 – 60 sn
 constexpr Range<float>    FLOW_MIN_RATE{0.01f, 1000.0f};                     // L/dk
@@ -200,12 +281,51 @@ void loadDefaults(Config& out);
 static_assert(std::is_trivially_copyable<Config>::value,
               "Config trivially copyable olmali (NVS blob olarak yazilacak)");
 static_assert(std::is_standard_layout<Config>::value, "Config standard layout olmali");
-static_assert(sizeof(Config) <= 640, "Config 640 bayti asmamali (NVS blob)");
+// ── BOYUT NÖBETÇİSİ ─────────────────────────────────────────────────────────
+//
+// ÖLÇÜLEN (TASK-072, firmware.elf sembol tablosundan): **624 bayt**.
+//   header 8 · crop 16 · network 56 · sensors 8×24 · actuators 5×16
+//   safety 16 · automation 8 · rules 196 · system 46 (+ hizalama)
+//
+// Sınır KEYFİDİR, NVS'in teknik sınırı değil: bölümler ayrı anahtarlarda
+// saklanır ve en büyüğü `rules` (196 bayt) — NVS blob sınırı bunun onlarca
+// katı. Buradaki sayının işi, yapının FARK EDİLMEDEN büyümesini engellemek.
+//
+// 640'tan 704'e çıkarıldı: eski değerde yalnızca 16 bayt pay kalmıştı ve
+// tek bir `uint32_t` alan ekleyen kişi, gerçek bir sorun olmadığı hâlde
+// derleme hatasıyla karşılaşıp sınırı düşünmeden yükseltirdi. Nöbetçinin
+// işe yaraması için payın anlamlı olması gerekir.
+static_assert(sizeof(Config) <= 704,
+              "Config 704 bayti asti — buyume kasitli mi? olculen deger 624 idi");
 
 // Aralık tanımlarının kendisi tutarlı mı?
 static_assert(limits::ACTUATOR_MAX_RUN.valid(), "ACTUATOR_MAX_RUN araligi tutarsiz");
+static_assert(limits::ACTUATOR_MAX_RUN_LIGHT.valid(), "ACTUATOR_MAX_RUN_LIGHT tutarsiz");
+static_assert(limits::ACTUATOR_MAX_RUN_HEATER.valid(), "ACTUATOR_MAX_RUN_HEATER tutarsiz");
+static_assert(limits::ACTUATOR_MAX_RUN_DOSING.valid(), "ACTUATOR_MAX_RUN_DOSING tutarsiz");
 static_assert(limits::FLOW_VERIFY_DELAY.valid(), "FLOW_VERIFY_DELAY araligi tutarsiz");
 static_assert(limits::ACTUATOR_MAX_RUN.max > limits::ACTUATOR_MIN_RUN.min,
               "maxRun ust siniri minRun alt sinirindan buyuk olmali");
+
+// Işık sınırı bir günü AŞMAMALI: 24 saati geçen bir "maksimum çalışma süresi"
+// hiç tetiklenmez ve koruma sessizce yok olur.
+static_assert(limits::ACTUATOR_MAX_RUN_LIGHT.max < 24u * 60u * 60u * 1000u,
+              "isik maxRun siniri bir gunu asamaz — koruma anlamsizlasir");
+
+// Dozaj sınırı pompa sınırından GEVŞEK OLAMAZ; gevşerse ayrı tanımlamanın
+// amacı (aşırı gübreleme koruması) tersine döner.
+static_assert(limits::ACTUATOR_MAX_RUN_DOSING.max < limits::ACTUATOR_MAX_RUN.max,
+              "dozaj siniri pompa sinirindan siki olmali");
+
+// Rol tablosu enum ile hizalı mı? Yanlış indeks, ışığa dozaj sınırı verirdi.
+static_assert(limits::maxRunLimitFor(static_cast<uint8_t>(ActuatorId::WATER_PUMP)).max ==
+                  limits::ACTUATOR_MAX_RUN.max,
+              "su pompasi pompa sinirini kullanmali");
+static_assert(limits::maxRunLimitFor(static_cast<uint8_t>(ActuatorId::GROW_LIGHT)).max ==
+                  limits::ACTUATOR_MAX_RUN_LIGHT.max,
+              "isik gevsetilmis siniri kullanmali");
+static_assert(limits::maxRunLimitFor(static_cast<uint8_t>(ActuatorId::NUTRIENT_PUMP)).max ==
+                  limits::ACTUATOR_MAX_RUN_DOSING.max,
+              "dozaj pompasi siki siniri kullanmali");
 
 } // namespace core

@@ -6,6 +6,7 @@
 #include "core/Diagnostics.h"
 #include "core/StateStore.h"
 #include "hal/RelayOutput.h"
+#include "services/ConfigService.h"
 
 namespace domain {
 namespace actuators {
@@ -21,6 +22,18 @@ constexpr uint8_t COUNT = core::MAX_ACTUATORS;
 
 ActuatorRuntime  g_rt[COUNT];
 const core::Config* g_cfg    = nullptr;
+
+/// Aktüatör kısıtlarının TUTARLI kopyası (TASK-072).
+///
+/// Canlı `g_config.actuators[i]` üç süre alanını birlikte taşır ve `net`
+/// task'ı tamamını tek seferde değiştirir (web'den kısıt kaydetme veya
+/// "Bağlı cihazlar" onay kutusu). Buradan alan alan okumak, hiç var olmamış
+/// bir `minRunMs`/`maxRunMs` kombinasyonuyla çalışmak demekti.
+///
+/// Kopya her `apply()` turunun başında tazelenir. Sonuç: bir config
+/// değişikliği en geç bir sonraki 100 ms'lik turda etkili olur — başlıkta
+/// zaten vaat edilen davranış budur.
+core::ActuatorConfig g_actCfg[core::MAX_ACTUATORS] = {};
 SafetyPermitFn      g_permit = nullptr;
 TaskHandle_t        g_owner  = nullptr;
 bool                g_ready  = false;
@@ -32,7 +45,7 @@ inline bool valid(ActuatorId id) { return idx(id) < COUNT; }
 /// Yapılandırmada etkin ve fiziksel bir rölesi var mı?
 inline bool usable(ActuatorId id)
 {
-    return valid(id) && g_cfg != nullptr && g_cfg->actuators[idx(id)].enabled != 0u &&
+    return valid(id) && g_cfg != nullptr && g_actCfg[idx(id)].enabled != 0u &&
            hal::relay::isMapped(id);
 }
 
@@ -99,6 +112,12 @@ core::ErrCode begin(const core::Config& cfg, SafetyPermitFn permit)
     g_permit = permit;
     g_owner  = nullptr;
 
+    // İlk kopya BURADA alınır: `request()` ilk `apply()`den önce çağrılabilir
+    // (komut kuyruğu döngünün başında işlenir) ve sıfırlanmış bir kısıt
+    // tablosuyla karar vermek `minRunMs = 0`, `maxRunMs = 0` demek olurdu —
+    // yani hiç koruma yok.
+    services::config::copyActuators(g_actCfg);
+
     // Boot'ta durum GERİ YÜKLENMEZ (ARCHITECTURE §19) — her boot rölesiz başlar.
     for (uint8_t i = 0; i < COUNT; ++i) { g_rt[i].reset(); }
 
@@ -111,7 +130,7 @@ CommandResult request(ActuatorId id, bool on, ControlSource source, Millis now)
     if (!g_ready || !usable(id)) { return CommandResult::REJECTED_INVALID; }
 
     ActuatorRuntime&           rt  = g_rt[idx(id)];
-    const core::ActuatorConfig& cfg = g_cfg->actuators[idx(id)];
+    const core::ActuatorConfig& cfg = g_actCfg[idx(id)];
     const uint8_t              want = on ? 1u : 0u;
 
     if (rt.desired == want && rt.isOn == want) { return CommandResult::NO_CHANGE; }
@@ -179,6 +198,11 @@ void apply(Millis now)
     if (!g_ready) { return; }
     verifyOwner();
 
+    // Kısıt tablosunun tutarlı kopyası — tur başına BİR kez (TASK-072).
+    // `request()` bu turun kopyasını değil bir öncekini kullanır; config
+    // değişikliği en geç bir sonraki turda etkili olur.
+    services::config::copyActuators(g_actCfg);
+
     for (uint8_t i = 0; i < COUNT; ++i)
     {
         const ActuatorId id = static_cast<ActuatorId>(i);
@@ -190,7 +214,7 @@ void apply(Millis now)
             continue;
         }
 
-        const core::ActuatorConfig& cfg = g_cfg->actuators[i];
+        const core::ActuatorConfig& cfg = g_actCfg[i];
 
         // 1) GERÇEK pin durumu. Talep ile gerçek arasındaki fark hata göstergesidir.
         const bool actual = hal::relay::isOn(id);

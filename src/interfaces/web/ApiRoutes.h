@@ -24,6 +24,7 @@ void registerAuth(AsyncWebServer& server);         ///< TASK-042
 void registerConfig(AsyncWebServer& server);       ///< TASK-044
 void registerNetwork(AsyncWebServer& server);      ///< TASK-044
 void registerHistory(AsyncWebServer& server);      ///< TASK-059
+void registerCrop(AsyncWebServer& server);        ///< TASK-069 — ürün profilleri
 
 /// Tüm rota gruplarını kaydeder.
 void registerAll(AsyncWebServer& server);

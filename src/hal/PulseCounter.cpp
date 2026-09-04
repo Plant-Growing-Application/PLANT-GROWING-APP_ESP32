@@ -33,13 +33,38 @@ uint16_t filterTicksFromNs(uint16_t ns)
 
 core::ErrCode begin(uint8_t pin, uint16_t filterNs)
 {
+    // ══ DAHİLİ PULL-UP — TASK-074 ════════════════════════════════════════════
+    //
+    // BU SATIR EKSİKTİ VE AKIŞ SENSÖRÜNÜN ÇALIŞMAMASININ ASIL NEDENİYDİ.
+    //
+    // YF-S401'in Hall çıkışı **açık kolektördür**: hattı yalnızca GND'ye
+    // çeker, yukarı sürmez. Pull-up olmadan hat boşta kalır; PCNT ya hiç
+    // darbe görmez ya da gürültüyü sayar.
+    //
+    // `pcnt_unit_config()` GPIO'yu PCNT girişine bağlar ama **pull-up'ı
+    // etkinleştirmez** — sürücünün işi değildir. Sahada çalışan eski kodda
+    // bu satır vardı (`pinMode(PIN_WATER_FLOW, INPUT_PULLUP)`) ve buraya
+    // taşınırken düştü.
+    //
+    // SIRA ÖNEMLİ: pull-up PCNT yapılandırmasından ÖNCE kurulur ki hat
+    // sayıcı devreye girdiği anda tanımlı bir seviyede olsun.
+    //
+    // NOT: GPIO 34-39'da dahili pull-up YOKTUR (ISSUE-002). `BoardPins.h`
+    // `isSafePullupInput(FLOW_PULSE)` ile bunu derleme zamanında zorluyor.
+    pinMode(static_cast<uint8_t>(pin), INPUT_PULLUP);
+
     pcnt_config_t cfg = {};
     cfg.pulse_gpio_num = static_cast<int>(pin);
     cfg.ctrl_gpio_num  = PCNT_PIN_NOT_USED;
     cfg.channel        = CHANNEL;
     cfg.unit           = UNIT;
-    cfg.pos_mode       = PCNT_COUNT_INC;   // yükselen kenarda say
-    cfg.neg_mode       = PCNT_COUNT_DIS;
+
+    // DÜŞEN kenarda sayılır — sahada çalışan kodla aynı (`FALLING`).
+    // Açık kolektör çıkışında anlamlı kenar, hattın GND'ye çekildiği andır.
+    // Temiz bir kare dalgada iki kenar da aynı sayıyı verir; farkı ortadan
+    // kaldırmak, sahadan gelen katsayının birebir geçerli kalmasını sağlar.
+    cfg.pos_mode       = PCNT_COUNT_DIS;
+    cfg.neg_mode       = PCNT_COUNT_INC;
     cfg.lctrl_mode     = PCNT_MODE_KEEP;
     cfg.hctrl_mode     = PCNT_MODE_KEEP;
     cfg.counter_h_lim  = COUNTER_LIMIT;

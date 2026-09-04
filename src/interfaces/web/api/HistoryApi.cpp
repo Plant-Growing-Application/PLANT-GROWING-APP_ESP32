@@ -36,24 +36,24 @@ constexpr uint16_t DEFAULT_COUNT = 120;
 /// task'ının stack'ini aşardı.
 hist::Record g_page[hist::MAX_PAGE];
 
-/// Sensör dizinini ada çevirmek için sabit sıra — `Record.values[]` sırası
-/// snapshot'taki sıradır.
-const char* slotName(uint8_t i)
-{
-    static const core::SensorId ORDER[hist::SENSOR_SLOTS] = {
-        core::SensorId::WATER_TEMP, core::SensorId::WATER_FLOW, core::SensorId::PH,
-        core::SensorId::EC,         core::SensorId::WATER_LEVEL, core::SensorId::HUMIDITY,
-    };
-    return (i < hist::SENSOR_SLOTS) ? sensorName(ORDER[i]) : "?";
-}
+// ── SLOT SIRASI BURADA TANIMLI DEĞİL (ISSUE-034) ────────────────────────────
+//
+// Bu dosyada eskiden ELLE YAZILMIŞ bir `ORDER[]` tablosu vardı — üstelik İKİ
+// KEZ, `slotName` ve `slotId` içinde ayrı ayrı. `HistoryStore` ise slotları
+// yayın sırasına göre dolduruyordu. İki doğruluk kaynağı sessizce ayrışmış ve
+// grafik, aylardır yanlış sensörü yanlış ölçekle göstermişti.
+//
+// Sıra artık YALNIZCA `HistoryStore.h::SLOT_ORDER` içinde. Burada
+// tanımlanmıyor, yalnızca okunuyor.
 
 core::SensorId slotId(uint8_t i)
 {
-    static const core::SensorId ORDER[hist::SENSOR_SLOTS] = {
-        core::SensorId::WATER_TEMP, core::SensorId::WATER_FLOW, core::SensorId::PH,
-        core::SensorId::EC,         core::SensorId::WATER_LEVEL, core::SensorId::HUMIDITY,
-    };
-    return (i < hist::SENSOR_SLOTS) ? ORDER[i] : core::SensorId::NONE;
+    return (i < hist::SENSOR_SLOTS) ? hist::SLOT_ORDER[i] : core::SensorId::NONE;
+}
+
+const char* slotName(uint8_t i)
+{
+    return (i < hist::SENSOR_SLOTS) ? sensorName(hist::SLOT_ORDER[i]) : "?";
 }
 
 } // namespace

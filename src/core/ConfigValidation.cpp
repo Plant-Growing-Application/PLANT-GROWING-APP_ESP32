@@ -46,7 +46,25 @@ void loadDefaults(Config& out)
     // (TASK-023, TASK-026).
     out.sensors[static_cast<uint8_t>(SensorId::WATER_LEVEL)].filterStrength = 0;
 
+    // ── I2C ORTAM SENSÖRLERİ: GERÇEKÇİ GEÇERLİ ARALIK (TASK-066) ────────────
+    //
+    // Genel varsayılan `{-1000, +1000}` ışık sensörü için SESSİZ BİR ARIZADIR:
+    // güneşli bir serada 20 000 lüks olağandır ve her okuma OUT_OF_RANGE
+    // damgalanıp kullanılamaz hâle gelirdi. Aralıklar sensörlerin veri sayfası
+    // sınırlarından alınmıştır — "makul" değil, ÖLÇÜLEBİLİR sınırlar.
+    out.sensors[static_cast<uint8_t>(SensorId::HUMIDITY)].validRange =
+        Range<float>{0.0f, 100.0f};                       // bağıl nem, %
+    out.sensors[static_cast<uint8_t>(SensorId::AMBIENT_TEMP)].validRange =
+        Range<float>{-40.0f, 85.0f};                      // AHT20 çalışma aralığı
+    out.sensors[static_cast<uint8_t>(SensorId::LIGHT)].validRange =
+        Range<float>{0.0f, 120000.0f};                    // BH1750 üst ölçüm sınırı
+
     // --- actuators ---
+    //
+    // VARSAYILANLAR ROLE GÖRE (TASK-066). Tek tip varsayılan bırakmak sessiz
+    // bir arıza üretirdi: 5 dakikalık `maxRunMs` ile büyütme ışığı, 16 saatlik
+    // ışık penceresi kuralına rağmen her 5 dakikada bir zorla kapanırdı ve
+    // kullanıcı nedenini kural ekranında ararken bulamazdı.
     for (uint8_t i = 0; i < MAX_ACTUATORS; ++i)
     {
         out.actuators[i].minRunMs   = 5u * 1000u;        // kısa çevrim koruması
@@ -55,7 +73,41 @@ void loadDefaults(Config& out)
         out.actuators[i].relayIndex = i;
         out.actuators[i].enabled    = 0;
     }
-    // Yalnızca su ve hava pompası varsayılan olarak tanımlı; AUX'lar kapalı (P7).
+
+    // Büyütme ışığı: bir fotoperiyot boyunca kesintisiz yanar.
+    {
+        ActuatorConfig& a = out.actuators[static_cast<uint8_t>(ActuatorId::GROW_LIGHT)];
+        a.minRunMs   = 60u * 1000u;               // röle kısa çevrimini engelle
+        a.maxRunMs   = 18u * 60u * 60u * 1000u;   // en uzun fotoperiyot
+        a.cooldownMs = 60u * 1000u;
+    }
+
+    // Isıtıcı: soğuk bir hazneyi ısıtmak saatler sürebilir, ama sonsuza kadar
+    // değil. Kısa çevrim rölenin ve ısıtıcının ömrünü kısaltır.
+    {
+        ActuatorConfig& a = out.actuators[static_cast<uint8_t>(ActuatorId::HEATER)];
+        a.minRunMs   = 60u * 1000u;
+        a.maxRunMs   = 4u * 60u * 60u * 1000u;
+        a.cooldownMs = 3u * 60u * 1000u;
+    }
+
+    // Besin dozaj pompası: saniyeler basar, sonra KARIŞMAYI BEKLER.
+    //
+    // `cooldownMs` burada bir konfor ayarı değil, AŞIRI GÜBRELEME KORUMASIDIR.
+    // Dozajdan sonra EC'nin yükselmesi haznenin karışmasını gerektirir; bekleme
+    // olmasaydı kural "EC hâlâ düşük" görüp arka arkaya dozaj yapar ve çözeltiyi
+    // bitkiyi yakacak seviyeye çıkarırdı.
+    {
+        ActuatorConfig& a = out.actuators[static_cast<uint8_t>(ActuatorId::NUTRIENT_PUMP)];
+        a.minRunMs   = 2u * 1000u;
+        a.maxRunMs   = 60u * 1000u;
+        a.cooldownMs = 10u * 60u * 1000u;  // karışma payı
+    }
+
+    // Yalnızca su ve hava pompası varsayılan olarak AÇIK. Işık, ısıtıcı ve
+    // dozaj pompası kapalı doğar: kullanıcı o röleyi fiilen kablolamış olmak
+    // zorunda değildir ve olmayan bir donanımı sürmeye çalışmak, arayüzde
+    // "açtım ama bir şey olmadı" olarak görünürdü (P7).
     out.actuators[static_cast<uint8_t>(ActuatorId::WATER_PUMP)].enabled = 1;
     out.actuators[static_cast<uint8_t>(ActuatorId::AIR_PUMP)].enabled   = 1;
 
@@ -69,6 +121,19 @@ void loadDefaults(Config& out)
     // --- automation: MANUAL — kendiliğinden sulama YOK ---
     out.automation.mode             = AutomationMode::MANUAL;
     out.automation.manualOverrideMs = 15u * 60u * 1000u;
+
+    // --- crop: ürün SEÇİLMEMİŞ ---
+    //
+    // Varsayılan olarak bir ürün seçmek (örneğin marulu "kolay" diye) cihazı
+    // kullanıcının yetiştirmediği bir bitkinin parametreleriyle çalıştırırdı.
+    // Seçimsiz başlamak, kurulum sihirbazının soracağı ilk soruyu anlamlı
+    // kılar ve hiçbir kural üretilmemesini garanti eder.
+    out.crop.plantedAtEpoch = 0;
+    out.crop.crop           = CropId::NONE;
+    out.crop.stage          = GrowthStage::SEEDLING;
+    out.crop.autoStage      = 1;  // seçim yapıldığında gün saymaya hazır
+    out.crop.intensity      = Intensity::NORMAL;
+    out.crop.derivedFrom    = CropId::NONE;
 
     // --- kurallar: TAMAMEN BOŞ ---
     // İlk açılışta sistem kendiliğinden sulamaya başlamaz (TASK-054 Karar 6).
@@ -169,7 +234,11 @@ ConfigError validateActuator(const ActuatorConfig& c, uint8_t index)
 
     // maxRunMs'in ÜST SINIRI olması kritik: sınırsız bırakılırsa
     // "maksimum çalışma süresi" koruması anlamsızlaşır.
-    if (!limits::ACTUATOR_MAX_RUN.contains(c.maxRunMs))
+    //
+    // Sınır AKTÜATÖRÜN ROLÜNE göre seçilir (TASK-066): ışık 20 saate kadar
+    // yanabilir, dozaj pompası 5 dakikayı geçemez. Tek bir global sınır
+    // ikisinden birini mutlaka yanlış korurdu.
+    if (!limits::maxRunLimitFor(index).contains(c.maxRunMs))
     {
         return fail(RANGE_ERR, "actuators.maxRunMs");
     }
@@ -315,6 +384,48 @@ ConfigError validateRules(const RuleSet& rs, const SensorConfig* sensors)
     return configOk();
 }
 
+ConfigError validateCrop(const CropConfig& c)
+{
+    if (c.intensity != Intensity::SPARSE && c.intensity != Intensity::NORMAL &&
+        c.intensity != Intensity::ABUNDANT)
+    {
+        return fail(RANGE_ERR, "crop.intensity");
+    }
+
+    if (c.plantedAtEpoch < 0)
+    {
+        // Negatif epoch = 1970 öncesi. Gün sayımı taşar ve dönem hesabı
+        // anlamsızlaşır; sessizce kabul etmek yerine reddediyoruz.
+        return fail(RANGE_ERR, "crop.plantedAtEpoch");
+    }
+
+    // Ürün seçilmemiş veya kullanıcı elle düzenlemiş: dönem ve dikim tarihi
+    // hiçbir profile karşılık gelmez, denetlenecek bir şey yoktur.
+    if (c.crop == CropId::NONE || c.crop == CropId::CUSTOM)
+    {
+        return configOk();
+    }
+
+    const CropProfile* p = cropById(c.crop);
+    if (p == nullptr)
+    {
+        // Katalogda olmayan bir kimlik: firmware geri alınmış ve o ürün
+        // kaldırılmış olabilir. Sessizce başka bir ürüne düşmek yanlış
+        // parametrelerle sulama demektir.
+        return fail(RANGE_ERR, "crop.crop");
+    }
+
+    // Yapraklı bir üründe "meyve dönemi" seçili olamaz: o dönemin tablosu
+    // yoktur ve `buildCropRules` son geçerli döneme düşerdi — kullanıcı
+    // ekranda "Meyve" görürken kurallar "Gelişme" olurdu.
+    if (!stageValidFor(*p, c.stage))
+    {
+        return fail(RANGE_ERR, "crop.stage");
+    }
+
+    return configOk();
+}
+
 ConfigError validateSystem(const SystemConfig& c)
 {
     if (!limits::TELEMETRY_INTERVAL.contains(c.telemetryIntervalMs))
@@ -377,6 +488,11 @@ ConfigError validateAll(const Config& c)
     if (!e.ok()) { return e; }
 
     e = validateAutomation(c.automation);
+    if (!e.ok())
+    {
+        return e;
+    }
+    e = validateCrop(c.crop);
     if (!e.ok())
     {
         return e;

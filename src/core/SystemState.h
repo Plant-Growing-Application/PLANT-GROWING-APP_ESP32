@@ -30,7 +30,16 @@ namespace core {
 // Kapasiteler — derleme zamanı sabitleri
 // ---------------------------------------------------------------------------
 constexpr uint8_t MAX_SENSORS   = 8;  ///< REQUIREMENTS §3'te 6 sensör + büyüme payı
-constexpr uint8_t MAX_ACTUATORS = 4;
+
+/// Fiziksel röle sayısı. **Her slotun bir pini vardır** (TASK-066): eşlenmemiş
+/// mantıksal aktüatör bırakmıyoruz. Eskiden `AUX_1`/`AUX_2` slotları vardı ama
+/// `RelayOutput` onları `PIN_UNMAPPED` olarak reddediyordu — arayüzde açılıp
+/// hiçbir şey yapmayan iki anahtar demekti (ARCHITECTURE P7'nin ruhu).
+///
+/// Beş, kartta kalan güvenli çıkış sayısıyla SINIRLIDIR (`BoardPins.h`).
+/// Altıncı bir röle GPIO genişletici gerektirir; slot sayısını burada
+/// artırmak tek başına bir işe yaramaz.
+constexpr uint8_t MAX_ACTUATORS = 5;
 
 /// Heap bu değerin altına düşerse sistem KENDİNİ KISAR (ARCHITECTURE §16.3):
 /// telemetri hızı düşürülür, geçmiş yazımı duraklatılır.
@@ -61,6 +70,9 @@ enum class SystemMode : uint8_t
 
 /// Sensör kimlikleri. Kararlıdır: API ve config'te kullanılır, sıraya bağlı
 /// indeks yerine açık değer taşır.
+/// Sayısal değer `Config::sensors[]` dizisindeki İNDEKSTİR (`SensorService`
+/// `configIndexOf()` ile doğrudan dönüştürür). Bu yüzden değerler 0'dan
+/// başlar, boşluksuz ilerler ve `MAX_SENSORS`'ın altında kalmak ZORUNDADIR.
 enum class SensorId : uint8_t
 {
     WATER_TEMP  = 0,
@@ -68,9 +80,15 @@ enum class SensorId : uint8_t
     PH          = 2,
     EC          = 3,
     WATER_LEVEL = 4,
-    HUMIDITY    = 5,
+    HUMIDITY    = 5,  ///< ortam nemi — AHT20 (I2C)
+    AMBIENT_TEMP = 6, ///< ortam (hava) sıcaklığı — AHT20 (I2C), TASK-066
+    LIGHT        = 7, ///< aydınlık düzeyi (lüks) — BH1750 (I2C), TASK-066
     NONE        = 0xFF,
 };
+
+// Sensör kimlikleri config indeksidir: en büyüğü diziye SIĞMALI.
+static_assert(static_cast<uint8_t>(SensorId::LIGHT) < MAX_SENSORS,
+              "SensorId degeri Config::sensors[] disina tasiyor");
 
 /// Ölçümün güvenilirliği. Değer ASLA kalitesiz taşınmaz (CODING_STANDARDS Z6):
 /// mevcut sistemde `WaterTemprature = 0` değerinin gerçek ölçüm mü kopuk sensör
@@ -106,14 +124,21 @@ struct SensorSample
 
 /// Mantıksal aktüatör kimliği. Fiziksel röle eşlemesi konfigürasyondadır
 /// (ARCHITECTURE §10.1) — donanım değişince kod değil config değişir.
+/// Sayısal değer `Config::actuators[]` indeksidir ve `RelayOutput`'un pin
+/// tablosunda aynı sırayı taşır — kimlik ile fiziksel eşleme arasında tek bir
+/// doğruluk kaynağı olsun diye.
 enum class ActuatorId : uint8_t
 {
-    WATER_PUMP = 0,
-    AIR_PUMP   = 1,
-    AUX_1      = 2,
-    AUX_2      = 3,
-    NONE       = 0xFF,
+    WATER_PUMP    = 0,
+    AIR_PUMP      = 1,
+    GROW_LIGHT    = 2,  ///< büyütme ışığı — ışık penceresi kuralı (TASK-066)
+    HEATER        = 3,  ///< besin çözeltisi ısıtıcısı — sıcaklık eşiği (TASK-066)
+    NUTRIENT_PUMP = 4,  ///< besin dozaj pompası — EC eşiği (TASK-066)
+    NONE          = 0xFF,
 };
+
+static_assert(static_cast<uint8_t>(ActuatorId::NUTRIENT_PUMP) < MAX_ACTUATORS,
+              "ActuatorId degeri Config::actuators[] disina tasiyor");
 
 /// Aktüatörün mevcut durumunu kim belirledi? Tahkim sırası (ARCHITECTURE §10.3):
 /// SAFETY > MANUAL > AUTOMATION.

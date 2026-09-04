@@ -119,11 +119,17 @@ int16_t scaleFor(SensorId id, float v)
     float s = v;
     switch (id)
     {
-        case SensorId::WATER_TEMP: s = v * 10.0f;  break;
+        case SensorId::WATER_TEMP:
+        case SensorId::AMBIENT_TEMP: s = v * 10.0f;  break;  // 0,1 °C çözünürlük
         case SensorId::PH:
         case SensorId::EC:
-        case SensorId::WATER_FLOW: s = v * 100.0f; break;
-        default:                   s = v;          break;   // seviye, nem
+        case SensorId::WATER_FLOW:   s = v * 100.0f; break;
+        // Işık: 0–120 000 lüks `int16`'ya sığmaz. **Onda birine indirilir**
+        // (dekalüks): 120 000 lx → 12 000. Grafik için 10 lüks çözünürlük
+        // fazlasıyla yeterli; taşıp kırpılmak ise güneşli her günü 32767'de
+        // düzleştirirdi.
+        case SensorId::LIGHT:        s = v * 0.1f;   break;
+        default:                     s = v;          break;   // seviye, nem
     }
     // `int16` sınırına kırp: taşma sessiz bir işaret değişimi üretirdi.
     if (s > 32767.0f)  { s = 32767.0f; }
@@ -135,11 +141,13 @@ float unscale(SensorId id, int16_t raw)
 {
     switch (id)
     {
-        case SensorId::WATER_TEMP: return static_cast<float>(raw) / 10.0f;
+        case SensorId::WATER_TEMP:
+        case SensorId::AMBIENT_TEMP: return static_cast<float>(raw) / 10.0f;
         case SensorId::PH:
         case SensorId::EC:
-        case SensorId::WATER_FLOW: return static_cast<float>(raw) / 100.0f;
-        default:                   return static_cast<float>(raw);
+        case SensorId::WATER_FLOW:   return static_cast<float>(raw) / 100.0f;
+        case SensorId::LIGHT:        return static_cast<float>(raw) * 10.0f;
+        default:                     return static_cast<float>(raw);
     }
 }
 
@@ -156,6 +164,22 @@ core::ErrCode begin()
         core::diag::log(core::LogLevel::WARNING, ErrCode::STORAGE_FS_MOUNT_FAILED, 0,
                         "gecmis deposu devre disi - dosya sistemi yok");
         return ErrCode::STORAGE_FS_MOUNT_FAILED;
+    }
+
+    // ── SÜRÜM 1 DOSYASINI SİL (ISSUE-034) ──────────────────────────────────
+    //
+    // Eski dosya hem farklı kayıt boyutunda hem de İÇERİĞİ BOZUK: slot sırası
+    // uyuşmazlığı nedeniyle yazılan değerler yanlış sensöre ve yanlış ölçeğe
+    // karşılık geliyordu. Taşınacak bir şey yok.
+    //
+    // Sessizce bırakılsaydı 480 KB'lık ölü bir dosya LittleFS'te kalır ve yeni
+    // halkayla birlikte bölümü doldururdu.
+    if (hal::fs::exists(LEGACY_FILE_PATH))
+    {
+        const ErrCode rmRc = hal::fs::removeFile(LEGACY_FILE_PATH);
+        core::diag::log(rmRc == ErrCode::OK ? core::LogLevel::INFO : core::LogLevel::WARNING,
+                        rmRc, 0,
+                        "eski gecmis dosyasi silindi (surum 1 verisi gecersizdi)");
     }
 
     // Dosya henuz yoksa arama YAPILMAZ.
@@ -216,15 +240,25 @@ core::ErrCode append(const core::SystemState& snap, bool timeValid)
     // sistemin `"00:00:00"` desenidir ve kabul edilemez.
     r.flags = timeValid ? FLAG_TIME_VALID : 0u;
 
+    // ── SLOT KİMLİĞE GÖRE SEÇİLİR, İNDEKSE GÖRE DEĞİL (ISSUE-034) ──────────
+    //
+    // Eskiden `r.values[i] = ...samples[i]` yazılıyordu: slot numarası
+    // sensörün YAYIN SIRASIYDI. Okuyucu ise kendi sabit sırasını kullanıyordu
+    // ve ikisi ayrışmıştı. Artık her sensör `SLOT_ORDER`'daki yerine konur;
+    // yayın sırası değişse bile kaydın anlamı sabit kalır.
     const uint8_t sn = (snap.sensors.count <= core::MAX_SENSORS) ? snap.sensors.count
                                                                  : core::MAX_SENSORS;
-    for (uint8_t i = 0; i < sn && i < SENSOR_SLOTS; ++i)
+    for (uint8_t i = 0; i < sn; ++i)
     {
         const core::SensorSample& s = snap.sensors.samples[i];
-        r.values[i] = scaleFor(s.id, s.value);
+
+        const uint8_t slot = slotOf(s.id);
+        if (slot >= SENSOR_SLOTS) { continue; }   // tabloda yeri olmayan sensör
+
+        r.values[slot] = scaleFor(s.id, s.value);
         if (s.quality == core::SensorQuality::OK)
         {
-            r.qualityMask = static_cast<uint8_t>(r.qualityMask | (1u << i));
+            r.qualityMask = static_cast<uint8_t>(r.qualityMask | (1u << slot));
         }
     }
 

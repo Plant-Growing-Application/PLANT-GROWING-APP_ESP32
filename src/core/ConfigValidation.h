@@ -51,6 +51,14 @@ ConfigError validateRule(const Rule& r, uint8_t index, const SensorConfig* senso
 /// Kural kümesini doğrular; aynı aktüatörü hedefleyen eşit öncelikli
 /// kuralları da yakalar.
 ConfigError validateRules(const RuleSet& rs, const SensorConfig* sensors);
+
+/// Ürün seçimini doğrular (TASK-067).
+///
+/// Katalogda olmayan bir kimlik veya profilde bulunmayan bir dönem (yapraklı
+/// üründe "meyve") reddedilir. Sessizce başka bir ürüne/döneme düşmek, ekranda
+/// yazanla uygulanan parametrelerin ayrışması demektir.
+ConfigError validateCrop(const CropConfig& c);
+
 ConfigError validateSystem(const SystemConfig& c);
 
 /// Tüm config + **alanlar arası tutarlılık**.

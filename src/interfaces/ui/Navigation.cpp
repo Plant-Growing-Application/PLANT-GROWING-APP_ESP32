@@ -20,12 +20,32 @@ constexpr ScreenId ORDER[] = {
 constexpr uint8_t ORDER_LEN = sizeof(ORDER) / sizeof(ORDER[0]);
 
 /// Her ekranda kaç seçilebilir öğe var? 0 = seçim yok.
+///
+/// CONTROL: beş aktüatör + ACİL DURDUR (ISSUE-036). Sabit 3 iken büyütme
+/// ışığı, ısıtıcı ve dozaj pompası OLED'den kontrol EDİLEMİYORDU.
+///
+/// SENSORS: seçilebilir eylem yok ama liste 8 satır ve ekran 5 satır alıyor;
+/// imleç burada KAYDIRMA konumu olarak kullanılıyor. `itemCount` sıfır
+/// bırakılsaydı encoder listeyi kaydıramazdı.
 uint8_t itemCount(ScreenId s)
 {
-    return (s == ScreenId::CONTROL)   ? 3u   // su pompası · hava pompası · ACİL DURDUR
+    return (s == ScreenId::CONTROL)   ? static_cast<uint8_t>(core::MAX_ACTUATORS + 1u)
+         : (s == ScreenId::SENSORS)   ? core::MAX_SENSORS
          : (s == ScreenId::SYSTEM)    ? 1u   // yeniden başlat
          : (s == ScreenId::EMERGENCY) ? 1u   // onayla
                                       : 0u;
+}
+
+/// Bu ekranda onaylanacak bir eylem var mı?
+///
+/// `itemCount` ile AYNI ŞEY DEĞİLDİR: `SENSORS` ekranında imleç vardır
+/// (8 ölçüm, 5 satır — kaydırma için) ama basılacak bir eylem YOKTUR.
+/// Ayrılmasaydı, sensör ekranında basmak boş bir onay durumuna girer,
+/// "Onaylamak icin bas" hiçbir yerde görünmez ve ikinci basış hiçbir şey
+/// yapmazdı — kullanıcı cihazı takılmış sanardı (ISSUE-036).
+bool isActionable(ScreenId s)
+{
+    return s == ScreenId::CONTROL || s == ScreenId::SYSTEM || s == ScreenId::EMERGENCY;
 }
 
 uint8_t   g_index      = 0;      ///< ORDER içindeki konum
@@ -51,18 +71,19 @@ ActionRequest actionFor(ScreenId s, uint8_t cursor)
 
     if (s == ScreenId::CONTROL)
     {
-        if (cursor == 0u)
+        // İmleç doğrudan aktüatör indeksidir; son öğe ACİL DURDUR'dur.
+        // Eskiden iki aktüatör elle yazılıydı ve üçüncüsü acil durdurmaydı;
+        // yeni röleler eklendiğinde bu zincirin güncellenmesi unutulsaydı
+        // hata sahada "düğme hiçbir şey yapmıyor" olarak görünürdü.
+        if (cursor < core::MAX_ACTUATORS)
         {
-            return {UiAction::TOGGLE_ACTUATOR,
-                    static_cast<uint8_t>(core::ActuatorId::WATER_PUMP)};
-        }
-        if (cursor == 1u)
-        {
-            return {UiAction::TOGGLE_ACTUATOR,
-                    static_cast<uint8_t>(core::ActuatorId::AIR_PUMP)};
+            return {UiAction::TOGGLE_ACTUATOR, cursor};
         }
         return {UiAction::EMERGENCY_STOP, 0};
     }
+
+    // SENSORS'ta imleç yalnızca kaydırma konumudur — onaylanacak bir eylem yok.
+    if (s == ScreenId::SENSORS) { return {UiAction::NONE, 0}; }
 
     if (s == ScreenId::SYSTEM) { return {UiAction::RESTART, 0}; }
 
@@ -132,8 +153,8 @@ ActionRequest handle(const hal::InputEvent& ev, Millis now, bool emergencyActive
                 break;
             }
 
-            // ENCODER_PUSH: onay akışı.
-            if (items == 0u) { break; }
+            // ENCODER_PUSH: onay akışı. Yalnızca eylemi OLAN ekranlarda.
+            if (items == 0u || !isActionable(g_screen)) { break; }
 
             if (!g_confirm)
             {

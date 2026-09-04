@@ -6,6 +6,7 @@
 
 #include "core/BoardPins.h"
 #include "core/Diagnostics.h"
+#include "hal/I2cBus.h"
 
 namespace hal {
 namespace oled {
@@ -54,20 +55,17 @@ void noteTransfer(bool ok)
 
 core::ErrCode begin()
 {
-    Wire.begin(board::I2C_SDA, board::I2C_SCL);
-
-    // ── I2C HIZI: 400 kHz (FAST MODE) ──────────────────────────────────────
-    //
-    // `Wire.begin()` varsayilani 100 kHz'dir ve BU AYAR EKSIKTI.
-    //
-    // SSD1306 tam karesi 1024 bayt. 100 kHz'de bir kare ~105 ms surer;
-    // `ui` task periyodu 50 ms oldugu icin HER EKRAN DEGISIMI arayuzu iki
-    // periyot boyunca blokluyordu. Sahada "encoder gecisleri takiliyor"
-    // olarak goruldu.
-    //
-    // 400 kHz'de ayni kare ~26 ms — periyodun yarisindan az.
-    // 400 kHz I2C fast-mode standardidir; SSD1306 modulleri destekler.
-    Wire.setClock(400000u);
+    // Hat kurulumu `hal::i2cbus`'a taşındı (TASK-066): aynı hatta ortam
+    // sensörleri de bağlandı ve hattın açılması artık TEK BİR cihazın
+    // başlatma yolunda saklı olamaz. Çağrı idempotenttir; hangi modülün önce
+    // başladığı önemsizdir.
+    const core::ErrCode busRc = i2cbus::begin();
+    if (busRc != ErrCode::OK)
+    {
+        core::diag::log(core::LogLevel::ERROR, busRc, 0, "I2C hatti kurulamadi");
+        g_available = false;
+        return ErrCode::UI_DISPLAY_UNAVAILABLE;
+    }
 
     if (!g_panel.begin(SSD1306_SWITCHCAPVCC, I2C_ADDRESS))
     {

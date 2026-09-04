@@ -99,6 +99,7 @@ void registerAll(AsyncWebServer& server)
     registerConfig(server);
     registerNetwork(server);
     registerHistory(server);
+    registerCrop(server);
 }
 
 } // namespace api

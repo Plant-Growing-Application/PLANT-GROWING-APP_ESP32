@@ -32,6 +32,7 @@ enum class SensorUnit : uint8_t
     LITERS_PER_MIN = 4,
     PERCENT       = 5,
     LEVEL_STATE   = 6,  ///< ayrık seviye kodu (bkz. WaterLevelSensor)
+    LUX           = 7,  ///< aydınlık düzeyi (TASK-066)
 };
 
 /// Sensörün değişmeyen özellikleri — derleme zamanında sabittir.

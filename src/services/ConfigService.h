@@ -56,7 +56,43 @@ core::ErrCode load();
 
 /// RAM'deki tek kopya. Okuyucular her döngüde bunu okur; ayrı bir değişiklik
 /// bildirimi gerekmez (eşik değişikliği bir sonraki döngüde etkili olur).
+///
+/// ── YIRTIK OKUMA UYARISI (TASK-072) ────────────────────────────────────────
+/// Bu referans CANLI yapıya işaret eder ve `net` task'ı ona yazarken
+/// `app_core` okuyor olabilir. **Skaler alanlar güvenlidir**: 1/2/4 baytlık
+/// hizalı okuma/yazma Xtensa'da atomiktir, dolayısıyla `safety.*`,
+/// `automation.mode` ve benzerleri doğrudan okunabilir.
+///
+/// **Yapı okumaları güvenli DEĞİLDİR.** Bir `Rule` veya `ActuatorConfig`
+/// alan alan okunurken karşı taraf tamamını değiştirebilir ve okuyucu iki
+/// farklı sürümün alanlarını karıştırabilir. Bu iki yapı için aşağıdaki
+/// kopyalama fonksiyonlarını kullanın.
 const core::Config& get();
+
+// --- Tutarlı kopyalar -------------------------------------------------------
+//
+// NEDEN KİLİT SERVİSTE: `core/` ve `domain/` FreeRTOS başlığı include edemez
+// (D5). Kilit burada, L2'de yaşar; `domain/` yalnızca kopyalama fonksiyonunu
+// çağırır — `rulesRevision()` için zaten kurulmuş olan aşağı yönlü bağımlılığın
+// aynısı.
+//
+// Kilit bir SPINLOCK'tır ve yalnızca `memcpy` süresince tutulur (~0,5 µs).
+// Bloklamaz, öncelik terslenmesi üretmez (ARCHITECTURE P3).
+
+/// Kural kümesinin tutarlı bir kopyasını alır.
+///
+/// `AutomationEngine` her değerlendirme turunda bunu çağırır. Canlı yapıyı
+/// doğrudan okusaydı, `PUT /api/config/rules` veya otomatik dönem ilerlemesi
+/// tam o anda 196 baytlık kümeyi yeniden yazarken yarı eski yarı yeni bir
+/// kural görebilirdi.
+void copyRules(core::RuleSet& out);
+
+/// Aktüatör kısıtlarının tutarlı bir kopyasını alır.
+///
+/// `ActuatorManager` her `apply()` turunda çağırır. `minRunMs`/`maxRunMs`/
+/// `cooldownMs` üçlüsünün karışık sürümlerini okumak, koruma sürelerinin
+/// hiç var olmamış bir kombinasyonuyla çalışmak demektir.
+void copyActuators(core::ActuatorConfig (&out)[core::MAX_ACTUATORS]);
 
 /// Son `load()` sonucunun özeti.
 const ConfigLoadResult& lastLoadResult();
@@ -67,10 +103,33 @@ const ConfigLoadResult& lastLoadResult();
 // RAM'deki kopya da değişmez.
 
 core::ConfigError updateNetwork(const core::NetworkConfig& v);
+
+/// Bir sensörün yapılandırmasını değiştirir (etkinlik + kalibrasyon).
+///
+/// `sensorsRevision()` artırılır; `SensorService` bunu izleyerek YENİ
+/// ETKİNLEŞTİRİLEN sensörün sürücüsünü çalışma anında başlatır. Bu bağ
+/// olmadan bir sensörü açmak yeniden başlatmayı gerektirirdi ve arayüz bunu
+/// kullanıcıya söylemiyordu (ISSUE-035).
 core::ConfigError updateSensor(uint8_t index, const core::SensorConfig& v);
+
+/// Sensör yapılandırması her değiştiğinde artar. `SensorService` okur.
+///
+/// Kural kümesindeki `rulesRevision()` ile aynı desen: tek yazarlı sayaç,
+/// okuyucu tarafta kilit gerekmez.
+uint32_t sensorsRevision();
 core::ConfigError updateActuator(uint8_t index, const core::ActuatorConfig& v);
 core::ConfigError updateSafety(const core::SafetyConfig& v);
 core::ConfigError updateAutomation(const core::AutomationConfig& v);
+
+/// Ürün profili seçimini değiştirir (TASK-067).
+///
+/// **Kural kümesine DOKUNMAZ.** Seçim ile kuralların üretilmesi ayrı iki
+/// adımdır: `services::crop::apply()` önce kuralları üretip `updateRules()`
+/// ile doğrulatır, ancak ikisi de geçerse seçimi buraya yazar. Tek adımda
+/// yapılsaydı, geçersiz bir kural kümesi üretildiğinde config'te "çilek
+/// seçili ama çilek kuralları yok" gibi tutarsız bir durum kalırdı.
+core::ConfigError updateCrop(const core::CropConfig& v);
+
 core::ConfigError updateSystem(const core::SystemConfig& v);
 
 /// Kural kümesini **bütün olarak** değiştirir (ISSUE-021).

@@ -23,14 +23,20 @@ build'e dahil değil.
 
 **Ne yapar:**
 
-- 6 sensör okur (su sıcaklığı, debi, pH, EC, su seviyesi, nem) ve her
-  ölçümü bir **kalite** etiketiyle taşır
-- Su ve hava pompasını min/max çalışma süresi ve cooldown kısıtlarıyla sürer
+- **8 sensör** okur (su sıcaklığı, debi, pH, EC, su seviyesi, ortam nemi,
+  hava sıcaklığı, ışık) ve her ölçümü bir **kalite** etiketiyle taşır
+- **5 aktüatör** sürer (su pompası, hava pompası, büyütme ışığı, ısıtıcı,
+  besin dozaj pompası) — her biri min/max çalışma süresi ve cooldown
+  kısıtlarıyla, rolüne göre farklı üst sınırlarla
 - Kuru çalışma, yetersiz su seviyesi ve süre aşımına karşı **mandallı
-  güvenlik zinciri** işletir
+  güvenlik zinciri** işletir; ısıtıcı da seviye kilitlerine bağlıdır
+- **Ürün profili:** çilek/domates/biber/salatalık/marul/fesleğen seçilir,
+  sistem o bitkinin **o dönemdeki** hedeflerini ve sulama/ışık/ısıtma
+  programını kendisi kurar (`docs/CROP_PROFILES.md`)
 - Eşik ve çizelge kurallarıyla otomatik sulama yapar (kural motoru)
-- Web arayüzü (parola korumalı, WebSocket ile canlı) ve 128×64 OLED sunar
-- Geçmiş sensör verisini halka dosyada saklar (~14 gün)
+- **İki seviyeli web arayüzü:** basit modda 3 sekme ve düz Türkçe tavsiyeler,
+  uzman modunda kural düzenleyici ve teşhis ekranları
+- 128×64 OLED sunar ve geçmiş sensör verisini halka dosyada saklar (~12 gün)
 
 ---
 
@@ -46,8 +52,8 @@ build'e dahil değil.
 | Ekran | Adafruit SSD1306 + GFX |
 | Depolama | NVS (config + sırlar) · LittleFS (web varlıkları + geçmiş) |
 | Güvenlik | mbedTLS SHA-256 (donanım hızlandırmalı) |
-| Frontend | **Çerçevesiz** — el yazımı HTML/CSS/JS, gzip'li 30,4 KB |
-| Test | Unity (host) + 46 `static_assert` |
+| Frontend | **Çerçevesiz** — el yazımı HTML/CSS/JS, 5 modül → tek gzip'li paket, 48,5 KB |
+| Test | Unity (host, 46 test) + 134 `static_assert` |
 
 **Kaldırılanlar:** SQLite (66 MB kütüphane, hiç etkinleştirilmemişti),
 Bootstrap (298 KB, %95'i kullanılmıyordu).
@@ -172,6 +178,39 @@ eşik (histerezisli), zaman penceresi (gece yarısını aşabilir), periyodik
 Operatör AUTO modda müdahale ederse otomasyon **o aktüatör için** 15 dakika
 susar, sonra kontrolü geri alır.
 
+### Ürün profili (meyve modu)
+
+Kural motorunun bir katman üstü. Profiller `.rodata`'da sabittir; config'te
+yalnızca **seçim** saklanır (16 bayt).
+
+```
+ürün × dönem  →  hedef bantlar (pH · EC · su/hava sıcaklığı · nem · ışık)
+                 + üretilen kurallar (sulama · havalandırma · ışık · ısı · dozaj)
+```
+
+Neden dönem ayrımı var: çileği domates EC'sinde çalıştırmak yaprak büyütür ve
+**meyve tutumunu öldürür**; fide dönemi de meyve dönemiyle aynı çözeltiyi
+kaldıramaz. Değerler ve kaynakları `docs/CROP_PROFILES.md`'de.
+
+Üç kural:
+
+1. **Önizlemesiz uygulama yok** — seçim mevcut kuralların üzerine yazar;
+   `POST /api/crop/preview` ne değişeceğini önce söyler.
+2. **Çalışamayacak kural üretilmez** — hedef röle bağlı değilse veya eşiğin
+   sensörü takılı değilse o kural hiç doğmaz.
+3. **Profil uygulamak sulamayı başlatmaz** — kurallar etkin doğar ama
+   `automation.mode` `MANUAL` kalır ve motor MANUEL'de hiçbir kuralı
+   değerlendirmez. M4 kapısı kapalı.
+
+Kullanıcı bir kuralı elle değiştirirse profil `ÖZEL`'e düşer ve arayüz
+"Özel (Çilek temelli)" der — ekranda çilek yazarken kuralların çilek profiline
+ait olmadığı bir durum bırakmıyoruz. Hedef bantlar korunur: bantlar **bitkiyi**
+anlatır, kuralları değil.
+
+Dönem, dikim tarihinden gün sayılarak kendiliğinden ilerler — **cihaz saati
+geçerliyken**. Geçersizken donar (donanımsal RTC yok, ISSUE-005) ve arayüz
+bunu söyler.
+
 ---
 
 ## 5. Çalıştırma
@@ -194,6 +233,32 @@ pio test -e native
 
 Bölümleme: `app0`/`app1` 1,5 MB (OTA) · `littlefs` 896 KB · `coredump` 64 KB.
 
+### Cihaz olmadan arayüzü çalıştırma
+
+```bash
+python tools/mock_device.py
+```
+
+`http://127.0.0.1:8099` — parola herhangi bir şey olabilir. Sahte cihaz,
+firmware'in **döndürdüğü şemayı** taklit eder ve arayüzü gerçek bir kurulum
+gibi besler:
+
+- WebSocket üzerinden canlı telemetri, komut → **ack** → gerçek durum yolu
+- fiziksel benzetim: pompa çalışınca debi oluşur ve depo boşalır, ısıtıcı suyu
+  ısıtır, bitki EC'yi düşürür, dozaj pompası yükseltir, ışık gün içi salınır
+- güvenlik zinciri: seviye düşünce pompa **ve ısıtıcı** kilitlenir, acil
+  durdurma mandallanır
+- kural motoru: ürün profili uygulanıp OTOMATİK moda geçilince çevrim, pencere
+  ve eşik kuralları gerçekten röleleri sürer
+
+Sanal saat varsayılan olarak **60× hızlı** akar (`--speed`); 30 dakikalık bir
+sulama çevrimi 30 saniyede izlenebilir. `--port` ile bağlantı noktası
+değiştirilir.
+
+> Bu bir **simülatördür, firmware değildir**: güvenlik zinciri ve aktüatör
+> kısıtları basitleştirilmiştir. Buradaki davranış firmware'in doğru olduğunun
+> kanıtı değildir — arayüzün doğru çizildiğinin kanıtıdır.
+
 ---
 
 ## 6. Belgeler
@@ -203,12 +268,14 @@ Bölümleme: `app0`/`app1` 1,5 MB (OTA) · `littlefs` 896 KB · `coredump` 64 KB
 | `REQUIREMENTS.md` | Eski sistemin **gerçek** durumu (%40–45 kapsam) |
 | `ARCHITECTURE.md` | 21 bölüm: ilkeler, katmanlar, task'lar, güvenlik, boot |
 | `IMPLEMENTATION_PLAN.md` | 16 faz, 65 task, bağımlılık grafiği, 8 kilometre taşı |
-| `docs/tasks/TASK-XXX.md` | 65 task — her birinde tasarım ve inceleme kaydı |
+| `docs/tasks/TASK-XXX.md` | 74 task — her birinde tasarım ve inceleme kaydı |
+| `docs/CROP_PROFILES.md` | Ürün × dönem parametre tablosu ve **kaynakları** |
 | `docs/ISSUES.md` | Açık maddeler ve kapsam dışı bulgular |
 | `docs/CODING_STANDARDS.md` | 14 yasak desen, her biri gerçek bir ihlale bağlı |
 | `docs/HARDWARE.md` | Pin planı, röle pull-up ve şamandıra NC zorunlulukları |
 | `docs/INTEGRATION_REPORT.md` | Entegrasyon bulguları ve ölçülmemişler listesi |
 | `docs/HARDWARE_TEST_PROCEDURE.md` | ~45 numaralı donanım testi, M4 kapısı dahil |
+| `docs/PC_TEST_REHBERI.md` | **Cihaz olmadan PC'de her şeyi test etme — adım adım** |
 
 ---
 
@@ -216,10 +283,15 @@ Bölümleme: `app0`/`app1` 1,5 MB (OTA) · `littlefs` 896 KB · `coredump` 64 KB
 
 ### Yapılanlar
 
-- 65 task'ın tamamı uygulandı; her birinde tasarım ve inceleme kaydı var
-- Firmware derleniyor: **flash %65,4 · RAM %22** (`-Wall -Wextra`, 0 uyarı)
-- 46 `static_assert` + 28 Unity testi yazıldı
-- Frontend tarayıcıda doğrulandı (iyimser güncelleme yasağı dahil)
+- 74 task'ın tamamı uygulandı; her birinde tasarım ve inceleme kaydı var
+- Firmware derleniyor: **flash %66,9 · RAM %23,9** (`-Wall -Wextra`, 0 uyarı)
+- 134 `static_assert` + 46 Unity testi yazıldı
+- Frontend tarayıcıda uçtan uca doğrulandı: giriş, kurulum sihirbazı, ürün
+  profili uygulama, hedef bantlı ölçüm kartları, tavsiye motoru, sensör açma
+  ve kalibrasyon, geçmiş grafiği, uzman modu, mobil yerleşim
+  (iyimser güncelleme yasağı dahil)
+- Sistem geneli kod denetimi yapıldı; bulunan 11 kusurun **10'u kapatıldı**
+  (TASK-071 · 072 · 073), kalan biri ISSUE-037 olarak kayıtlı
 
 ### YAPILMAYANLAR — hepsi donanım gerektiriyor
 
@@ -231,8 +303,14 @@ Bölümleme: `app0`/`app1` 1,5 MB (OTA) · `littlefs` 896 KB · `coredump` 64 KB
 [ ] 24 saat / 72 saat kararlilik
 [ ] Ariza enjeksiyonunun tamami (TASK-061'in ozu)
 [ ] M4 GUVENLIK KAPISI
-[ ] Host testleri CALISTIRILMADI (bu makinede gcc yok; derlenebilirligi
+[ ] Host testleri CALISTIRILMADI (bu makinede gcc/g++ yok; derlenebilirligi
     hedef derleyiciyle dogrulandi)
+[ ] Uc yeni rolenin (isik 19, isitici 26, dozaj 18) polaritesi olculmedi
+[ ] AHT20 ve BH1750 hicbir zaman OKUNMADI — I2C adresleri, hat yuku ve
+    CRC yolu donanimda dogrulanmadi
+[ ] Urun profili GERCEK BIR CIHAZDA uygulanmadi (tarayicida sahte cihazla
+    dogrulandi)
+[ ] Donem otomatik ilerlemesi gercek zamanda gozlenmedi (gunler surer)
 ```
 
 ### Kritik açık maddeler
@@ -243,8 +321,12 @@ Bölümleme: `app0`/`app1` 1,5 MB (OTA) · `littlefs` 896 KB · `coredump` 64 KB
 | ISSUE-024 | Stack boyutları tahmin | İlk çalıştırmada `minStack` ile düzeltilmeli |
 | ~~ISSUE-021~~ | ~~Kural düzenleme arayüzü yok~~ | ✅ Çözüldü — kural API'si + düzenleyici eklendi, şema sürümü 2 |
 | ISSUE-005 | Donanımsal RTC kararı | Ağsız çizelge çalışmaz — satın alma kararı |
-| ISSUE-033 | Bu makinede derleyici/Python yok | Firmware **derlenmedi**, host testleri hâlâ koşmadı |
-| ISSUE-014 | Akış katsayısı (450 darbe/L) teyitsiz | Kuru çalışma eşiği kayar |
+| ISSUE-033 | Host derleyicisi (gcc/g++) yok | PlatformIO ve Python **kuruldu**; firmware artık derleniyor ve `data/` üretiliyor. `pio test -e native` hâlâ **koşmuyor** — `native` ortamı sistemin C++ derleyicisini ister. Çözüm: MinGW-w64 kurmak. |
+| ~~ISSUE-014~~ | ~~Akış katsayısı (450 darbe/L) teyitsiz~~ | ✅ Çözüldü (TASK-074) — sahada çalışan formülden türetildi: **270 darbe/L**. Eski değer debiyi 1,67 kat düşük gösteriyordu |
+| ~~ISSUE-034~~ | ~~Geçmiş kaydı slot sırası uyuşmazlığı~~ | ✅ Çözüldü (TASK-073) — sıra tek tabloda (`SLOT_ORDER`), 8 slot, dosya sürüm 2 |
+| ~~ISSUE-035~~ | ~~Sensörler arayüzden açılamıyor~~ | ✅ Çözüldü (TASK-073) — `PUT /api/config/sensors`, "Takılı sensörler" ekranı, kalibrasyon, çalışma anında sürücü başlatma |
+| ~~ISSUE-036~~ | ~~OLED yeni donanımı görmüyor~~ | ✅ Çözüldü (TASK-073) — 8 sensör / 5 aktüatör, kayan pencere |
+| ISSUE-037 | GPIO kesmesi IRAM'de kayıtlı değil | Flash yazarken (geçmiş kaydı her 60 sn) encoder geçişleri düşer. TASK-071 bunu zararsız kıldı ama kaynağı duruyor |
 
 ### M4 kapısı
 
@@ -252,19 +334,24 @@ Bölümleme: `app0`/`app1` 1,5 MB (OTA) · `littlefs` 896 KB · `coredump` 64 KB
 M4 = pompanın yalnızca güvenlik izniyle çalıştığının **donanımda**
 kanıtlanması.
 
-**Kapı kapalı.** Otomasyon kodu ve kural düzenleyici hazır, ancak
-varsayılan mod `MANUAL`, varsayılan kural kümesi boş ve yeni eklenen her
-kural **devre dışı doğar**; sistem kutudan çıktığında **kendiliğinden hiçbir
-aktüatörü sürmez**. Arayüz OTOMATİK moda geçişte M4 uyarısı gösterir.
+**Kapı kapalı.** Otomasyon kodu, kural düzenleyici ve ürün profilleri hazır,
+ancak varsayılan mod `MANUAL`, varsayılan kural kümesi boş, elle eklenen her
+kural **devre dışı doğar** ve ürün seçilmemiştir; sistem kutudan çıktığında
+**kendiliğinden hiçbir aktüatörü sürmez**.
+
+Ürün profili uygulamak bunu **değiştirmez**: profil kuralları etkin üretir ama
+`automation.mode`'a dokunmaz ve motor MANUEL modda hiçbir kuralı
+değerlendirmez. Sihirbazın son ekranı ve Ayarlar → Otomatik çalışma bölümü
+bunu açıkça yazar; moda geçişte onay istenir.
 
 ### Sıradaki iş
 
-0. **Araç zincirini kur** (ISSUE-033): PlatformIO + Python.
-   `pio run` ile derle, `pio test -e native` ile host testlerini bir kez koştur,
-   `python tools/build_assets.py` ile `data/`'yi kanonik yoldan üret.
+0. **Host derleyicisini kur** (ISSUE-033'ün kalanı): MinGW-w64 →
+   `pio test -e native` ile 37 host testini bir kez koştur.
    *Bundan sonrası donanım işidir:*
-1. Röle polaritesini ölç → ISSUE-003'ü kapat
-2. İlk boot: seri porttan boot raporunu oku
-3. `GET /api/diagnostics` → `minStack` ile stack'leri düzelt
-4. `docs/HARDWARE_TEST_PROCEDURE.md` §2'yi koştur → M4 kapısı
-5. M4 geçtikten **sonra** otomasyonu `AUTO`'ya al
+1. Röle polaritesini ölç — **beş röle** → ISSUE-003'ü kapat
+2. I2C hattını tara: AHT20 (0x38) ve BH1750 (0x23) yanıt veriyor mu
+3. İlk boot: seri porttan boot raporunu oku
+4. `GET /api/diagnostics` → `minStack` ile stack'leri düzelt
+5. `docs/HARDWARE_TEST_PROCEDURE.md` §2'yi koştur → M4 kapısı
+6. M4 geçtikten **sonra** ürün profilini uygula ve otomasyonu `AUTO`'ya al

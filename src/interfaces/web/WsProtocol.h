@@ -42,7 +42,15 @@ constexpr uint8_t MAX_CLIENTS = 4;
 constexpr uint16_t ASSEMBLY_MAX = 512;
 
 /// Sunucunun ürettiği state paketinin üst sınırı.
-constexpr uint16_t STATE_JSON_MAX = 2048;
+///
+/// TASK-066/069 ile paket büyüdü: sensör sayısı 5'ten 8'e, aktüatör sayısı
+/// 4'ten 5'e çıktı ve aktif ürün bilgisi eklendi. Ölçülen tipik paket ~1,6 KB.
+///
+/// Sınır 2 KB'da bırakılsaydı, tam dolu bir sistemde `serializeJson` tamponu
+/// aşar ve `writeStateJson` 0 dönerdi — arayüzde bu "bağlantı koptu" olarak
+/// görünürdü, oysa sorun yalnızca birkaç yüz bayttı. Pay bilinçli olarak
+/// geniş; maliyeti tek seferlik 512 bayt .bss'tir.
+constexpr uint16_t STATE_JSON_MAX = 2560;
 
 /// WS uç noktasını sunucuya bağlar. `WebService::begin()` içinden çağrılır.
 void attach(AsyncWebServer& server);

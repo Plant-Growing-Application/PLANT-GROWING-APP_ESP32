@@ -141,14 +141,13 @@ void handleCommand(AsyncWebSocketClient* c, const char* payload, size_t len, Mil
         cmd.type  = CommandType::SET_ACTUATOR;
         cmd.param = (strcmp(action, "on") == 0) ? 1 : 0;
 
-        cmd.target = (strcmp(target, "waterPump") == 0)
-                         ? static_cast<uint8_t>(core::ActuatorId::WATER_PUMP)
-                     : (strcmp(target, "airPump") == 0)
-                         ? static_cast<uint8_t>(core::ActuatorId::AIR_PUMP)
-                     : (strcmp(target, "aux1") == 0)
-                         ? static_cast<uint8_t>(core::ActuatorId::AUX_1)
-                     : (strcmp(target, "aux2") == 0)
-                         ? static_cast<uint8_t>(core::ActuatorId::AUX_2)
+        // TEK SÖZLÜK (StateJson.h): burada elle yazılmış bir isim zinciri
+        // vardı ve `actuatorName()` ile İKİ AYRI doğruluk kaynağı oluşuyordu.
+        // Yeni bir aktüatör eklendiğinde biri güncellenip diğeri unutulursa
+        // hata ancak sahada "buton hiçbir şey yapmıyor" olarak görünürdü.
+        core::ActuatorId id = core::ActuatorId::NONE;
+        cmd.target = actuatorIdFromName(target, id)
+                         ? static_cast<uint8_t>(id)
                          : static_cast<uint8_t>(core::ActuatorId::NONE);
 
         if (cmd.target == static_cast<uint8_t>(core::ActuatorId::NONE))

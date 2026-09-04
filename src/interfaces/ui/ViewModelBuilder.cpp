@@ -33,6 +33,8 @@ const char* labelOf(SensorId id)
         case SensorId::EC:          return "EC";
         case SensorId::WATER_LEVEL: return "Seviye";
         case SensorId::HUMIDITY:    return "Nem";
+        case SensorId::AMBIENT_TEMP: return "Hava C";
+        case SensorId::LIGHT:        return "Isik";
         default:                    return "?";
     }
 }
@@ -118,11 +120,18 @@ uint8_t barsFor(int8_t rssi, bool connected)
     return (rssi >= -55) ? 4u : (rssi >= -65) ? 3u : (rssi >= -75) ? 2u : 1u;
 }
 
+/// Aktüatör kısa adı. `ActuatorLine::label` 12 bayt — sığmalı (ISSUE-036).
 const char* actLabel(ActuatorId id)
 {
-    return (id == ActuatorId::WATER_PUMP) ? "Su pompa"
-         : (id == ActuatorId::AIR_PUMP)   ? "Hava pmp"
-                                          : "Yedek";
+    switch (id)
+    {
+        case ActuatorId::WATER_PUMP:    return "Su pompa";
+        case ActuatorId::AIR_PUMP:      return "Hava pmp";
+        case ActuatorId::GROW_LIGHT:    return "Isik";
+        case ActuatorId::HEATER:        return "Isitici";
+        case ActuatorId::NUTRIENT_PUMP: return "Besin pmp";
+        default:                        return "?";
+    }
 }
 
 /// `ErrCode` → kısa Türkçe. 128 px genişliğe sığmalı.
@@ -213,14 +222,19 @@ void build(const core::SystemState& s, ScreenId screen, uint8_t cursor, bool edi
         ++w;
     }
 
-    // --- Aktüatörler (OLED'de yalnızca gerçek olanlar) ---
+    // --- Aktüatörler ---
+    //
+    // FİLTRE KALDIRILDI (ISSUE-036). Eskiden yalnızca su ve hava pompası
+    // alınıyordu; o zaman doğruydu çünkü `AUX_1`/`AUX_2` eşlenmemişti ve
+    // OLED'de olmayan bir röleyi göstermek anlamsızdı. TASK-066 ile beş
+    // rölenin de fiziksel pini var; ışık, ısıtıcı ve dozaj pompasını
+    // gizlemek OLED'i sistemin gerisinde bırakıyordu.
     const uint8_t an = (s.actuators.count <= core::MAX_ACTUATORS) ? s.actuators.count
                                                                   : core::MAX_ACTUATORS;
     uint8_t a = 0;
     for (uint8_t i = 0; i < an && a < UI_ACTS; ++i)
     {
         const core::ActuatorStatus& x = s.actuators.items[i];
-        if (x.id != ActuatorId::WATER_PUMP && x.id != ActuatorId::AIR_PUMP) { continue; }
 
         copyTo(out.actuators[a].label, sizeof(out.actuators[a].label), actLabel(x.id));
         out.actuators[a].on      = x.isOn;   // GERÇEK pin durumu

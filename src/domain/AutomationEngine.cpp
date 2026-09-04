@@ -139,11 +139,22 @@ void evaluate(const core::SystemState& snap, bool timeValid, Millis now)
     uint8_t winnerRule[core::MAX_ACTUATORS];
     for (uint8_t i = 0; i < core::MAX_ACTUATORS; ++i) { winnerRule[i] = 0xFFu; }
 
-    const uint8_t n = (g_cfg->rules.count <= core::MAX_RULES) ? g_cfg->rules.count
-                                                              : core::MAX_RULES;
+    // ── KURAL KÜMESİNİN TUTARLI KOPYASI (TASK-072) ─────────────────────────
+    // Canlı yapı `net` task'ında yeniden yazılabilir (web'den kural kaydetme
+    // veya otomatik dönem ilerlemesi). Aşağıdaki döngü kuralları alan alan
+    // okuyor; kopyalamasaydık yarı eski yarı yeni bir kural görebilirdik —
+    // örneğin yeni bir `cycleOnS` ile eski bir `cyclePeriodS`.
+    //
+    // `static`: 196 bayt `app_core` stack'ine eklemek yerine .bss'te durur.
+    // Tek okuyucu task olduğu için paylaşım sorunu yoktur.
+    static core::RuleSet s_rules;
+    services::config::copyRules(s_rules);
+
+    const uint8_t n = (s_rules.count <= core::MAX_RULES) ? s_rules.count
+                                                         : core::MAX_RULES;
     for (uint8_t i = 0; i < n; ++i)
     {
-        const core::Rule& r = g_cfg->rules.rules[i];
+        const core::Rule& r = s_rules.rules[i];
         if (r.enabled == 0u || r.kind == core::RuleKind::INACTIVE) { continue; }
 
         const uint8_t ti = static_cast<uint8_t>(r.target);

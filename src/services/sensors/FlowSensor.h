@@ -32,10 +32,34 @@ namespace flow {
 
 /// Sensör modelinin fiziksel özelliği: litre başına darbe.
 ///
-/// !!! DOĞRULANMAMIŞ !!! Bu değer eski kodun yorumundan geliyor (YF-S401,
-/// ~450 darbe/L) ve ölçülmedi. Gerçek sensörle bilinen hacim akıtılarak
-/// doğrulanmalıdır (ISSUE-014). Saha trim'i `SensorConfig.scale` ile yapılır.
-constexpr float PULSES_PER_LITER = 450.0f;
+/// ══ SAHADAN GELEN DEĞER — TASK-074 ═══════════════════════════════════════
+///
+/// Önceki değer 450 idi ve **ölçülmemişti** (ISSUE-014): eski kodun
+/// yorumundaki "YF-S401 ~450 darbe/L" ifadesinden alınmıştı. Ama aynı eski
+/// kodun ÇALIŞAN hesabı farklı bir katsayı kullanıyordu:
+///
+///     L/dk = darbe × 100 / 450          (1 saniyelik pencerede)
+///
+/// Buradaki zaman normalize edilmiş hesap ise şudur:
+///
+///     L/dk = darbe / PULSES_PER_LITER × (60000 / pencere_ms)
+///
+/// İkisini 1 saniyelik pencerede eşitlersek:
+///
+///     100/450 = 60 / PULSES_PER_LITER   ⇒   PULSES_PER_LITER = 270
+///
+/// Yani sahada doğru sonuç veren katsayı **270 darbe/L**'dir; 450 rakamı
+/// hiçbir zaman doğrulanmamış bir veri sayfası varsayımıydı. Değer buradan
+/// geliyor ve ISSUE-014 bu şekilde kapanıyor.
+///
+/// ZAMAN NORMALİZASYONU KORUNDU: eski formül 1 saniyelik sabit pencere
+/// varsayıyordu; örnekleme periyodu değişirse (veya bir tur gecikirse)
+/// sessizce yanlış debi üretirdi. Buradaki hesap gerçek geçen süreye böler,
+/// dolayısıyla aynı sayıyı üretir ama varsayıma bağlı değildir.
+///
+/// Farklı bir sensör veya boru çapı için saha trim'i `SensorConfig.scale`
+/// ile yapılır — artık arayüzden erişilebilir (Gelişmiş → Sensör Kalibrasyonu).
+constexpr float PULSES_PER_LITER = 270.0f;
 
 /// Donanımsal gürültü filtresi (ns). Sensörün minimum darbe genişliğinden
 /// kısa olmalı; çok agresif değer GERÇEK darbeleri de eler.

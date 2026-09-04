@@ -12,24 +12,46 @@ using core::ActuatorId;
 
 /// Mantıksal aktüatör → fiziksel pin eşlemesi.
 ///
-/// `0xFF` = bu kimliğin fiziksel karşılığı yok. Yardımcı aktüatörler (AUX)
-/// donanımda tanımlı değil; olmayan bir pini sürmeye çalışmak yerine
-/// eşlenmemiş bırakılıyor (P7).
+/// `0xFF` = bu kimliğin fiziksel karşılığı yok. TASK-066 ile eşlenmemiş slot
+/// KALMADI (ışık, ısıtıcı ve besin pompası gerçek pin aldı), ama nöbetçi değer
+/// korunuyor: `pinOf()` aralık dışı bir kimlikle çağrılırsa sürülecek pin
+/// olmadığını söylemenin tek yolu budur — alternatif, `kRelayPin` dizisinin
+/// dışını okumaktı.
 constexpr uint8_t PIN_UNMAPPED = 0xFFu;
 
-constexpr uint8_t kRelayPin[static_cast<uint8_t>(ActuatorId::AUX_2) + 1] = {
+/// Sıra `ActuatorId` ile AYNI olmak zorundadır; aşağıdaki `static_assert`'ler
+/// bunu her satır için tek tek doğrular.
+constexpr uint8_t kRelayPin[core::MAX_ACTUATORS] = {
     board::RELAY_WATER_PUMP,  // WATER_PUMP
     board::RELAY_AIR_PUMP,    // AIR_PUMP
-    PIN_UNMAPPED,             // AUX_1
-    PIN_UNMAPPED,             // AUX_2
+    board::RELAY_GROW_LIGHT,  // GROW_LIGHT
+    board::RELAY_HEATER,      // HEATER
+    board::RELAY_NUTRIENT,    // NUTRIENT_PUMP
 };
+
+// Tablo ile enum'un kayması SESSİZ bir felakettir: "ışığı aç" komutu ısıtıcıyı
+// çalıştırır. Her satır kimliğiyle eşleştirilerek derleme zamanında kilitlenir.
+static_assert(kRelayPin[static_cast<uint8_t>(ActuatorId::WATER_PUMP)] ==
+                  board::RELAY_WATER_PUMP,
+              "kRelayPin[WATER_PUMP] yanlis pine bakiyor");
+static_assert(kRelayPin[static_cast<uint8_t>(ActuatorId::AIR_PUMP)] ==
+                  board::RELAY_AIR_PUMP,
+              "kRelayPin[AIR_PUMP] yanlis pine bakiyor");
+static_assert(kRelayPin[static_cast<uint8_t>(ActuatorId::GROW_LIGHT)] ==
+                  board::RELAY_GROW_LIGHT,
+              "kRelayPin[GROW_LIGHT] yanlis pine bakiyor");
+static_assert(kRelayPin[static_cast<uint8_t>(ActuatorId::HEATER)] == board::RELAY_HEATER,
+              "kRelayPin[HEATER] yanlis pine bakiyor");
+static_assert(kRelayPin[static_cast<uint8_t>(ActuatorId::NUTRIENT_PUMP)] ==
+                  board::RELAY_NUTRIENT,
+              "kRelayPin[NUTRIENT_PUMP] yanlis pine bakiyor");
 
 bool g_ready = false;
 
 inline uint8_t pinOf(ActuatorId id)
 {
     const uint8_t i = static_cast<uint8_t>(id);
-    return (i <= static_cast<uint8_t>(ActuatorId::AUX_2)) ? kRelayPin[i] : PIN_UNMAPPED;
+    return (i < core::MAX_ACTUATORS) ? kRelayPin[i] : PIN_UNMAPPED;
 }
 
 /// Bir pini glitch'siz şekilde güvenli seviyede çıkışa alır.
@@ -51,7 +73,7 @@ void configureSafeOutput(uint8_t pin)
 
 core::ErrCode begin()
 {
-    for (uint8_t i = 0; i <= static_cast<uint8_t>(ActuatorId::AUX_2); ++i)
+    for (uint8_t i = 0; i < core::MAX_ACTUATORS; ++i)
     {
         const uint8_t pin = kRelayPin[i];
         if (pin != PIN_UNMAPPED)
@@ -101,7 +123,7 @@ core::ErrCode allSafe()
     // Acil durum yolu: hızlı, bloklamayan, kısıt tanımayan.
     // `g_ready` kontrolü YAPILMAZ — güvenli seviyeye almak her koşulda
     // yapılabilmelidir.
-    for (uint8_t i = 0; i <= static_cast<uint8_t>(ActuatorId::AUX_2); ++i)
+    for (uint8_t i = 0; i < core::MAX_ACTUATORS; ++i)
     {
         const uint8_t pin = kRelayPin[i];
         if (pin != PIN_UNMAPPED)

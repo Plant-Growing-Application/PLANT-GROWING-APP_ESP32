@@ -27,8 +27,27 @@ namespace interfaces {
 namespace ui {
 
 constexpr uint8_t TEXT_MAX  = 22;   ///< 128 px / 6 px ≈ 21 karakter + sonlandırıcı
-constexpr uint8_t UI_SENSORS = 6;
-constexpr uint8_t UI_ACTS    = 2;   ///< OLED'de yalnızca gerçek aktüatörler
+
+/// Modelde taşınan sensör satırı sayısı — **sistemdeki tüm sensörler**.
+///
+/// 6 idi ve `MAX_SENSORS` 8'e çıkınca (TASK-066) nem ile ışık OLED'den
+/// sessizce düşmüştü: taşma yoktu (döngüler sınırlıydı) ama iki ölçüm ekranda
+/// hiç görünmüyor ve kimse nedenini bilmiyordu (ISSUE-036).
+constexpr uint8_t UI_SENSORS = core::MAX_SENSORS;
+
+/// Modelde taşınan aktüatör satırı sayısı — **tüm röleler**.
+///
+/// 2 idi ve `ViewModelBuilder` su/hava pompası dışındakileri filtreliyordu.
+/// O filtre `AUX_1`/`AUX_2` fiziksel pini olmadığı için doğruydu; TASK-066
+/// ile beşinin de pini var ve büyütme ışığı, ısıtıcı ve dozaj pompası OLED'de
+/// ne görülebiliyor ne kontrol edilebiliyordu.
+constexpr uint8_t UI_ACTS    = core::MAX_ACTUATORS;
+
+/// Bir ekranda aynı anda çizilebilen satır sayısı (128×64, durum çubuğu hariç).
+///
+/// Sensör ve kontrol ekranları bundan fazla öğe taşır; ikisi de **kayan
+/// pencere** kullanır (bkz. `Screens.cpp`).
+constexpr uint8_t UI_VISIBLE_ROWS = 5;
 
 /// Ekran kimliği. `EMERGENCY` öncelikli ekrandır.
 ///

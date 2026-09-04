@@ -43,23 +43,49 @@ RawSample WaterTempSensor::sample(const SampleContext& ctx)
         return rawFault();
     }
 
-    const float mv = static_cast<float>(r.value.millivolts);
+    // ══ ORANSAL (RATIOMETRIC) HESAP — TASK-074 ═══════════════════════════════
+    //
+    // Bu fonksiyon eskiden `millivolts` üzerinden çalışıyordu ve SAHADA YANLIŞ
+    // DEĞER ÜRETİYORDU:
+    //
+    //   R_ntc = R_series × (VCC_MV − mv) / mv     ← VCC_MV = 3300 varsayımı
+    //
+    // Hata şurada: `mv`, `esp_adc_cal_raw_to_voltage()` ile 12 dB
+    // zayıflatmada üretiliyor ve ESP32 ADC'si o modda **3,1 V civarında
+    // doyuma girer** — 3300 mV'a HİÇ ulaşmaz. Yani `(VCC_MV − mv)` payı
+    // sistematik olarak kayıyor, ADC'nin tam ölçeği besleme gerilimine eşit
+    // olmadığı için oran bozuluyordu.
+    //
+    // Çözüm, çalıştığı bilinen sahadaki formülün yaptığı şey: **ham ADC
+    // oranıyla** çalışmak. Bölücü oranı zaten VCC'den bağımsızdır ve mutlak
+    // gerilim kalibrasyonuna hiç ihtiyaç duymaz:
+    //
+    //   V_out/VCC = raw/4095
+    //   Bölücü (NTC → VCC, R_series → GND):
+    //       V_out = VCC × R_series / (R_ntc + R_series)
+    //   ⇒   4095/raw − 1 = R_ntc / R_series
+    //
+    // Sahadaki formülün `log((4095.0/sensorValue) - 1.0)` ifadesi tam olarak
+    // budur. Buradaki fark yalnızca DOMAIN KORUMALARI ve `R_NOMINAL`'ın ayrı
+    // bir sabit olarak kalması: ikisi eşitken sonuç birebir aynı, farklı bir
+    // NTC takıldığında ise formül doğru kalır.
+    const float raw = static_cast<float>(r.value.raw);
 
     // --- DOMAIN KORUMASI 1: bölücü uçlarında direnç hesaplanamaz ---
     //
-    // V_out = 0     → NTC direnci sonsuz (kopuk)
-    // V_out = VCC   → NTC direnci sıfır  (kısa devre)
-    // Her ikisi de FİZİKSEL ARIZA'dır; mevcut sistem bu noktalarda
-    // `log()` domain hatası üretip sonucu sessizce kullanıyordu.
-    if (mv <= 1.0f || mv >= (ntc::VCC_MV - 1.0f))
+    // raw = 0     → 4095/0        = ∞  → log(∞) tanımsız (NTC kopuk)
+    // raw = 4095  → 4095/4095 − 1 = 0  → log(0) = −∞    (NTC kısa devre)
+    //
+    // Sahadaki formülün üç matematiksel domain hatasından ikisi bunlardı ve
+    // sonuç sessizce kullanılıyordu (REQUIREMENTS §3.1). Değer üretmek yerine
+    // ARIZA bildiriyoruz.
+    if (!(raw >= 1.0f) || raw >= static_cast<float>(hal::adc::ADC_MAX_RAW))
     {
         return rawFault();
     }
 
-    // Bölücü: NTC → VCC, R_SERIES → GND
-    //   V_out = VCC × R_series / (R_ntc + R_series)
-    //   ⇒ R_ntc = R_series × (VCC − V_out) / V_out
-    const float rNtc = ntc::R_SERIES * (ntc::VCC_MV - mv) / mv;
+    const float ratio = (static_cast<float>(hal::adc::ADC_MAX_RAW) / raw) - 1.0f;
+    const float rNtc  = ntc::R_SERIES * ratio;
 
     // --- DOMAIN KORUMASI 2: log() pozitif argüman ister ---
     if (!(rNtc > 0.0f) || !usable(rNtc))

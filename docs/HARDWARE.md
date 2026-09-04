@@ -63,14 +63,50 @@ Yanlış sınıfa taşınan bir pin projeyi derletmez — hata sahada değil der
 |---|---|---|
 | Röle 1 — su pompası | 16 | değişmedi; strapping değil |
 | Röle 2 — hava pompası | 17 | değişmedi; strapping değil |
+| **Röle 3 — büyütme ışığı** | **19** | TASK-066 |
+| **Röle 4 — ısıtıcı** | **26** | TASK-066 |
+| **Röle 5 — besin dozaj pompası** | **18** | TASK-066 |
 | Durum LED'i | 23 | değişmedi |
 
 > **ESP32-WROVER uyarısı:** GPIO 16/17 PSRAM'li modüllerde kullanılamaz.
 > Bu proje WROOM-32 (PSRAM'siz) varsayar. Modül değişirse röleler taşınmalıdır.
 
-### 3.5 Boşta kalan pinler
+Beş rölenin de pini `BoardPins.h` içinde `static_assert` ile denetlenir:
+strapping/giriş-only olamaz, birbirleriyle ve I2C / encoder / sensör
+pinleriyle çakışamaz. Eşlenmemiş mantıksal aktüatör **kalmadı** — arayüzde
+açılıp hiçbir şey yapmayan düğme bırakmamak için (ARCHITECTURE P7).
 
-`5`, `26`, `32`, `33`, `39` — ikisi (32, 33) ADC1 kapasiteli, genişleme için ayrıldı.
+### 3.5 I2C ortam sensörleri — TASK-066
+
+Üç cihaz **tek hattı** paylaşır (GPIO 21/22); adresler çakışmaz ve **yeni pin
+gerekmez**. Bu, ADC1 bütçesi tükendiği için (ISSUE-001) zorunlu bir tercihti:
+analog bir ortam sensörü fiziksel olarak takılamazdı.
+
+| Cihaz | Adres | Ölçtüğü | Sürücü |
+|---|---|---|---|
+| SSD1306 | 0x3C | (ekran) | `hal/OledPanel` |
+| **AHT20** | **0x38** | ortam sıcaklığı + bağıl nem | `hal/Aht20` |
+| **BH1750** | **0x23** | aydınlık (lüks) | `hal/Bh1750` |
+
+Hattın kurulumu `hal/I2cBus` içindedir; `Wire.begin()` çağrısı projede
+**yalnızca orada** bulunur. Üç modül de kendi `begin()`'inde onu çağırır ve
+hangisinin önce başladığı önemsizdir.
+
+**AHT20 iki fazlı okunur** (tetikle → sonraki turda oku): ölçüm ~80 ms sürer ve
+`io_sense` task'ının 250 ms'lik periyodunda beklemek güvenlik sensörlerinin
+örneklemesini geciktirirdi (ARCHITECTURE P3). Her okumada CRC8 doğrulanır —
+bozuk bir aktarım 22 °C yerine 120 °C okutup doğrudan ısıtıcı eşiğine
+girebilirdi.
+
+> **Not:** `SensorId::HUMIDITY` TASK-006'dan beri tanımlıydı, arayüzde kartı
+> vardı ve geçmiş verisinde yeri ayrılmıştı ama onu okuyan **hiçbir kod
+> yoktu**. AHT20 bu hayalet sensörü gerçek yapar.
+
+### 3.6 Boşta kalan pinler
+
+**Kalmadı.** `18`, `19`, `26` TASK-066 ile rölelere verildi; `32`/`33` encoder'da
+(ISSUE-001), `5` strapping. Altıncı bir röle (örneğin pH dozajı) ya bir GPIO
+genişletici (PCF8574) ya da encoder'ın taşınmasını gerektirir.
 
 ## 4. Gereken Kablolama Değişikliği
 
@@ -84,6 +120,30 @@ Mevcut donanımda **yalnızca 3 kablo** taşınır:
 
 Yeni eklenecekler: pH (34), EC (36), 2 adet şamandıra (13, 14).
 
+### 4.1 TASK-066 ile eklenen donanım
+
+| Parça | Bağlantı | Tahmini rol |
+|---|---|---|
+| AHT20 sıcaklık/nem modülü | I2C — SDA 21, SCL 22, 3V3, GND | ortam ölçümü |
+| BH1750 ışık modülü | I2C — SDA 21, SCL 22, 3V3, GND | ışığın gerçekten yandığını doğrulama |
+| 3'lü (veya 5'li) röle modülü | IN3→19, IN4→26, IN5→18 | ışık, ısıtıcı, dozaj |
+| Büyütme ışığı armatürü | röle 3 üzerinden şebeke | fotoperiyot |
+| Daldırma ısıtıcısı + termostat | röle 4 üzerinden şebeke | çözelti sıcaklığı |
+| Peristaltik dozaj pompası | röle 5 | besin dozajı |
+
+> **ISITICI GÜVENLİĞİ.** Daldırma ısıtıcısı susuz çalışırsa yanar ve hazneyi
+> eritir. Bu yüzden yazılımda ısıtıcı, **su pompasıyla aynı seviye
+> kilitlerine** bağlanmıştır (`SafetyState.h: masksFor`): seviye yetersizse
+> veya seviye sensörü okunamıyorsa ısıtıcı çalışamaz. Buna ek olarak
+> **kendi termostatı olan** bir ısıtıcı seçilmesi önerilir — yazılım kilidi
+> tek savunma hattı olmamalıdır.
+
+> **DOZAJ POMPASI.** Varsayılan `cooldownMs` 10 dakikadır ve bu bir konfor
+> ayarı değil **aşırı gübreleme korumasıdır**: dozajdan sonra EC'nin yükselmesi
+> haznenin karışmasını gerektirir; bekleme olmasa kural "EC hâlâ düşük" görüp
+> arka arkaya dozaj yapar ve çözeltiyi bitkiyi yakacak seviyeye çıkarırdı.
+> `maxRunMs` üst sınırı da 5 dakikayla sınırlıdır (`ACTUATOR_MAX_RUN_DOSING`).
+
 ## 5. Doğrulanması Gereken Donanım Maddeleri
 
 Bunlar **ölçümle** kapatılacaktır; tahmin kabul edilmez.
@@ -96,6 +156,15 @@ Bunlar **ölçümle** kapatılacaktır; tahmin kabul edilmez.
 - [ ] **Su sıcaklığı sensör tipi** — NTC mi DS18B20 mı (TASK-024). DS18B20
       seçilirse GPIO 35 bir ADC1 kanalı olarak serbest kalır.
 - [ ] **Akış sensörü modeli** — YF-S401 varsayımı ve darbe/litre katsayısı (TASK-025).
+- [ ] **Üç yeni rölenin aktif seviyesi** (TASK-066) — 19/26/18. `RELAY_ACTIVE_LOW`
+      tüm röleler için TEK bir derleme zamanı sabitidir; farklı polaritede bir
+      ikinci modül kullanılırsa bu varsayım kırılır.
+- [ ] **AHT20 / BH1750 I2C adresleri** — modüllerin varsayılanı 0x38 ve 0x23'tür,
+      ama BH1750'nin ADDR pini VCC'ye çekiliyse adres 0x5C olur. `i2cdetect`
+      benzeri bir taramayla teyit edilmeli.
+- [ ] **I2C hat yükü** — üç cihaz + uzun kablo 400 kHz'de pull-up direnci
+      gerektirebilir (tipik 4.7 kΩ). OLED hata sayacı (`i2cErrorCount`) artıyorsa
+      ilk bakılacak yer burasıdır.
 
 ## 6. Flash Bölümleme
 

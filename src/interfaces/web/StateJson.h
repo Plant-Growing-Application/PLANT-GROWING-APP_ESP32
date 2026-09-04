@@ -14,6 +14,8 @@
 // §14.6: büyük JSON önceden boyutlandırılır, heap parçalanması önlenir.
 // Çıktı çağıranın verdiği sabit tampona yazılır; dinamik `String` yok.
 
+#include <ArduinoJson.h>
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -31,8 +33,16 @@ size_t writeStateJson(const core::SystemState& s, char* out, size_t outLen);
 /// Tanılama görünümü: aktif hatalar, son olaylar, boot bilgisi.
 size_t writeDiagnosticsJson(char* out, size_t outLen);
 
-/// Yapılandırma görünümü — **sırlar maskeli**.
-size_t writeConfigJson(char* out, size_t outLen);
+/// Yapılandırmayı bir belgeye doldurur — **sırlar maskeli**.
+///
+/// Tampona değil belgeye yazar, çünkü yanıt artık AKITILIYOR: sensör bölümü
+/// eklenince (ISSUE-035) içerik ~2,1 KB'a çıktı ve 2 KB'lık sabit tampon
+/// taşacaktı — `writeConfigJson` 0 döner, arayüz "istek çok büyük" hatası
+/// alır ve **tüm ayarlar ekranı çalışmazdı**.
+///
+/// Tamponu 4 KB'a çıkarmak yerine akıtmayı seçtik: katalog ve geçmiş için
+/// verilen kararın aynısı, ve 2 KB kalıcı `.bss` geri kazanıldı.
+void fillConfigJson(JsonDocument& doc);
 
 /// Otomasyon kural kümesi (ISSUE-021).
 ///

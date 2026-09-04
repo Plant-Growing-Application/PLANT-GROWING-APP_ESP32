@@ -8,6 +8,7 @@
 #include "hal/FileStore.h"
 #include "hal/SecretStore.h"
 #include "services/ConfigService.h"
+#include "services/CropService.h"
 #include "services/HistoryStore.h"
 #include "services/StorageService.h"
 #include "services/network/ScanService.h"
@@ -43,6 +44,8 @@ const char* sensorName(SensorId id)
         case SensorId::EC:          return "ec";
         case SensorId::WATER_LEVEL: return "level";
         case SensorId::HUMIDITY:    return "humidity";
+        case SensorId::AMBIENT_TEMP: return "airTemp";
+        case SensorId::LIGHT:        return "light";
         default:                    return "unknown";
     }
 }
@@ -51,11 +54,12 @@ const char* actuatorName(ActuatorId id)
 {
     switch (id)
     {
-        case ActuatorId::WATER_PUMP: return "waterPump";
-        case ActuatorId::AIR_PUMP:   return "airPump";
-        case ActuatorId::AUX_1:      return "aux1";
-        case ActuatorId::AUX_2:      return "aux2";
-        default:                     return "unknown";
+        case ActuatorId::WATER_PUMP:    return "waterPump";
+        case ActuatorId::AIR_PUMP:      return "airPump";
+        case ActuatorId::GROW_LIGHT:    return "growLight";
+        case ActuatorId::HEATER:        return "heater";
+        case ActuatorId::NUTRIENT_PUMP: return "nutrientPump";
+        default:                        return "unknown";
     }
 }
 
@@ -167,6 +171,23 @@ size_t writeStateJson(const core::SystemState& s, char* out, size_t outLen)
     // Geçersizken SAHTE DEĞER YOK — arayüz "saat geçersiz" gösterir.
     tm["epoch"] = s.time.valid ? static_cast<long>(s.time.epoch.s) : 0L;
 
+    // ── AKTİF ÜRÜN (TASK-069) ──────────────────────────────────────────────
+    //
+    // KOMPAKT: yalnızca kimlik, dönem ve gün. Hedef bantlar ve katalog burada
+    // DEĞİL — onlar `/api/crop` ile bir kez alınır. Bu paket saniyede bir
+    // yayınlanıyor; değişmeyen 5 KB'lık katalogu her turda taşımak, telemetri
+    // hızını düşürmekten başka bir işe yaramazdı.
+    //
+    // Panelin "Çilek · 34. gün · Meyve dönemi" satırını çizmesi için bu üç
+    // alan yeterlidir ve ayrı bir istek gerektirmez.
+    {
+        const core::CropConfig& cc = services::config::get().crop;
+        JsonObject              cr = doc["crop"].to<JsonObject>();
+        cr["key"]   = core::cropKeyOf(cc.crop);
+        cr["stage"] = core::stageKeyOf(cc.stage);
+        cr["day"]   = services::crop::daysSincePlanting();
+    }
+
     JsonObject au = doc["automation"].to<JsonObject>();
     au["mode"]            = static_cast<uint8_t>(s.automation.mode);
     au["schedulesPaused"] = s.automation.schedulesPaused != 0u;
@@ -248,11 +269,9 @@ size_t writeDiagnosticsJson(char* out, size_t outLen)
     return (n > 0 && n < outLen) ? n : 0u;
 }
 
-size_t writeConfigJson(char* out, size_t outLen)
+void fillConfigJson(JsonDocument& doc)
 {
     const core::Config& c = services::config::get();
-
-    JsonDocument doc;
 
     JsonObject net = doc["network"].to<JsonObject>();
     net["ssid"]   = c.network.ssid.c_str();
@@ -273,6 +292,35 @@ size_t writeConfigJson(char* out, size_t outLen)
     safety["maxRuntimeGraceMs"]   = c.safety.maxRuntimeGraceMs;
     safety["maxRuntimeViolations"] = c.safety.maxRuntimeViolations;
     safety["requireLevelSensor"]  = c.safety.requireLevelSensor != 0u;
+
+    // ── SENSÖRLER (ISSUE-035) ──────────────────────────────────────────────
+    //
+    // Bu bölüm EKSİKTİ. `PUT /api/config/sensors` uç noktası da yoktu ve
+    // `ConfigService::updateSensor()` hiçbir yerden çağrılmıyordu: pH, EC,
+    // nem, hava sıcaklığı ve ışık `enabled = 0` doğuyor ve **hiçbir şekilde
+    // açılamıyordu**. Kullanıcı sensörü fiziksel olarak taksa bile arayüzde
+    // sonsuza kadar "takılı değil" yazıyordu.
+    //
+    // Kalibrasyon (`offset`/`scale`) de aynı boşluktaydı: ARCHITECTURE §9.3'ün
+    // anlattığı 2 nokta pH kalibrasyonunun API karşılığı yoktu.
+    JsonArray sens = doc["sensors"].to<JsonArray>();
+    for (uint8_t i = 0; i < core::MAX_SENSORS; ++i)
+    {
+        const char* name = sensorName(static_cast<SensorId>(i));
+        if (strcmp(name, "unknown") == 0) { continue; }   // tanımsız slot
+
+        JsonObject o = sens.add<JsonObject>();
+        o["id"]              = name;
+        o["enabled"]         = c.sensors[i].enabled != 0u;
+        o["offset"]          = c.sensors[i].offset;
+        o["scale"]           = c.sensors[i].scale;
+        o["filterStrength"]  = c.sensors[i].filterStrength;
+        o["maxChangePerSec"] = c.sensors[i].maxChangePerSec;
+
+        JsonObject vr = o["validRange"].to<JsonObject>();
+        vr["min"] = c.sensors[i].validRange.min;
+        vr["max"] = c.sensors[i].validRange.max;
+    }
 
     JsonArray acts = doc["actuators"].to<JsonArray>();
     for (uint8_t i = 0; i < core::MAX_ACTUATORS; ++i)
@@ -298,9 +346,6 @@ size_t writeConfigJson(char* out, size_t outLen)
     sys["telemetryIntervalMs"] = c.system.telemetryIntervalMs;
     sys["logLevel"]            = c.system.logLevel;
     sys["authSet"]             = hal::secrets::hasAuthHash();
-
-    const size_t n = serializeJson(doc, out, outLen);
-    return (n > 0 && n < outLen) ? n : 0u;
 }
 
 

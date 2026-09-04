@@ -173,44 +173,120 @@ void drawHome(const UiModel& m)
 }
 
 // ── SENSORS: tüm sensörler + kalite ────────────────────────────────────────
+/// Kayan pencerenin başlangıcını hesaplar.
+///
+/// İmleç her zaman GÖRÜNÜR kalmalı: seçili öğe pencerenin altına taşarsa
+/// pencere onunla birlikte kayar. `cursor` doğrudan başlangıç olarak
+/// kullanılsaydı, listenin sonuna gelindiğinde boş satırlar çizilirdi.
+static uint8_t windowStart(uint8_t cursor, uint8_t total, uint8_t visible)
+{
+    if (total <= visible) { return 0u; }
+    const uint8_t maxStart = static_cast<uint8_t>(total - visible);
+    if (cursor < visible) { return 0u; }
+    const uint8_t want = static_cast<uint8_t>(cursor - visible + 1u);
+    return (want > maxStart) ? maxStart : want;
+}
+
+// KAYDIRMA GÖSTERGESİ OLARAK İMLEÇ KULLANILIYOR — sayısal bir "3-7/8"
+// göstergesi denendi ve DURUM ÇUBUĞUNA sığmadı: çubuğun sağı mod yazısı
+// tarafından kullanılıyor ("CALISIYOR" ~54 px, sağa yaslı) ve gösterge onun
+// üzerine biniyordu. Ekranın gövdesinde de yer yok; değerler sağa yaslı.
+//
+// İmleç zaten her satırda `>` ile çiziliyor ve kullanıcı çevirdikçe hareket
+// ediyor; listenin devam ettiğini bu yeterince anlatıyor. Fazladan bir metin,
+// 128 px'lik bir ekranda çakışma riskine değmez.
+
+// ── SENSORS: 8 ölçüm, 5 satır — KAYAN PENCERE (ISSUE-036) ──────────────────
+//
+// `UI_SENSORS` 6'dan 8'e çıktı (TASK-066 ile nem, hava sıcaklığı ve ışık
+// eklendi). Ekran 5 satır alıyor; eskiden ilk 5 çizilip gerisi SESSİZCE
+// düşüyordu. Artık encoder listeyi kaydırıyor.
 void drawSensors(const UiModel& m)
 {
     const int16_t rows[] = {L::ROW0, L::ROW1, L::ROW2, L::ROW3, L::ROW4};
-    uint8_t drawn = 0;
 
-    for (uint8_t i = 0; i < UI_SENSORS && drawn < 5u; ++i)
+    // Önce görünür (present) satırların sıkıştırılmış listesi çıkarılır:
+    // takılı olmayan bir sensör pencerede yer kaplamamalı.
+    uint8_t visibleIdx[UI_SENSORS];
+    uint8_t total = 0;
+    for (uint8_t i = 0; i < UI_SENSORS; ++i)
     {
-        if (m.sensors[i].present == 0u) { continue; }
+        if (m.sensors[i].present != 0u) { visibleIdx[total++] = i; }
+    }
+
+    if (total == 0u)
+    {
+        text(L::COL_LABEL, L::ROW0, "Sensor verisi yok");
+        return;
+    }
+
+    const uint8_t cursor = (m.cursor < total) ? m.cursor : static_cast<uint8_t>(total - 1u);
+    const uint8_t start  = windowStart(cursor, total, UI_VISIBLE_ROWS);
+
+    uint8_t drawn = 0;
+    for (uint8_t k = start; k < total && drawn < UI_VISIBLE_ROWS; ++k, ++drawn)
+    {
+        const SensorLine& s = m.sensors[visibleIdx[k]];
 
         // Değer zaten `UiModel` tarafından kalite tablosuna göre
         // biçimlendirilmiş durumda ("--" / "yok" / "12.3!"). Ekran katmanı
         // kendi başına biçimlendirme YAPMAZ — arızalı sensörün eski değerini
         // göstermek eski projedeki en tehlikeli hataydı.
-        row(rows[drawn], m.sensors[i].label, m.sensors[i].value);
-        ++drawn;
+        //
+        // `selectableRow` ile çiziliyor: imleç burada bir EYLEM seçmez,
+        // yalnızca listedeki konumu gösterir. `confirming` her zaman false —
+        // sensör ekranında onaylanacak bir şey yok.
+        selectableRow(rows[drawn], k, cursor, false, s.label, s.value);
     }
-
-    if (drawn == 0u) { text(L::COL_LABEL, L::ROW0, "Sensor verisi yok"); }
 }
 
 // ── CONTROL: aktüatörler + acil durdurma ───────────────────────────────────
+// ── CONTROL: 5 aktüatör + ACİL DURDUR = 6 öğe, 5 satır ─────────────────────
+//
+// Eskiden yalnızca su ve hava pompası vardı ve üçüncü satır ACİL DURDUR'du.
+// TASK-066 ile üç röle daha gerçek oldu; sabit üç satır onları erişilemez
+// bırakıyordu (ISSUE-036). Liste artık kayıyor.
+//
+// ACİL DURDUR **her zaman son öğedir** ve kaydırmayla yeri değişmez: kritik
+// bir kontrolün konumunun listeye göre oynaması kabul edilemez.
 void drawControl(const UiModel& m)
 {
-    selectableRow(L::ROW0, 0, m.cursor, m.editing != 0u, m.actuators[0].label,
-                  m.actuators[0].on ? "ACIK" : "kapali");
-    selectableRow(L::ROW1, 1, m.cursor, m.editing != 0u, m.actuators[1].label,
-                  m.actuators[1].on ? "ACIK" : "kapali");
-    selectableRow(L::ROW2, 2, m.cursor, m.editing != 0u, "ACIL DURDUR", "");
+    const int16_t rows[] = {L::ROW0, L::ROW1, L::ROW2, L::ROW3, L::ROW4};
+
+    const uint8_t total  = static_cast<uint8_t>(UI_ACTS + 1u);   // +1 = ACİL DURDUR
+    const uint8_t cursor = (m.cursor < total) ? m.cursor : static_cast<uint8_t>(total - 1u);
+
+    // Engel nedeni ve onay satırı için bir satır ayrılır; ikisi de aynı anda
+    // görünmez olduğundan tek satır yeterli.
+    const uint8_t listRows = static_cast<uint8_t>(UI_VISIBLE_ROWS - 1u);
+    const uint8_t start    = windowStart(cursor, total, listRows);
+
+    uint8_t drawn = 0;
+    for (uint8_t k = start; k < total && drawn < listRows; ++k, ++drawn)
+    {
+        if (k < UI_ACTS)
+        {
+            selectableRow(rows[drawn], k, cursor, m.editing != 0u, m.actuators[k].label,
+                          m.actuators[k].on ? "ACIK" : "kapali");
+        }
+        else
+        {
+            selectableRow(rows[drawn], k, cursor, m.editing != 0u, "ACIL DURDUR", "");
+        }
+    }
 
     // Engel nedeni GÖSTERİLİR. Sessizce çalışmayan bir buton, kullanıcıyı
     // "sistem bozuk" sanmaya iter (§12.2 gözlemlenebilirlik).
-    const ActuatorLine& sel = m.actuators[(m.cursor < UI_ACTS) ? m.cursor : 0];
-    if (m.cursor < UI_ACTS && sel.blocked != 0u)
-    {
-        text(L::COL_LABEL, L::ROW3, sel.why);
-    }
+    const int16_t lastRow = rows[UI_VISIBLE_ROWS - 1u];
 
-    if (m.editing != 0u) { text(L::COL_LABEL, L::ROW4, "Onaylamak icin bas"); }
+    if (m.editing != 0u)
+    {
+        text(L::COL_LABEL, lastRow, "Onaylamak icin bas");
+    }
+    else if (cursor < UI_ACTS && m.actuators[cursor].blocked != 0u)
+    {
+        text(L::COL_LABEL, lastRow, m.actuators[cursor].why);
+    }
 }
 
 // ── NETWORK: durum, SSID, IP — ŞİFRE YOK ───────────────────────────────────

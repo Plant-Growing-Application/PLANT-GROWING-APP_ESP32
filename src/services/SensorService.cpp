@@ -5,6 +5,7 @@
 #include "core/StateStore.h"
 #include "hal/AdcInput.h"
 #include "sensors/AnalogSensors.h"
+#include "sensors/EnvSensors.h"
 #include "sensors/FlowSensor.h"
 #include "sensors/SensorRegistry.h"
 #include "sensors/WaterLevelSensor.h"
@@ -19,20 +20,29 @@ using core::SensorQuality;
 using namespace services::sensors;
 
 // --- Sensör örnekleri: STATİK, heap yok (ARCHITECTURE §9.1) -----------------
-WaterLevelSensor g_level;
-FlowSensor       g_flow;
-WaterTempSensor  g_temp;
-PhSensor         g_ph;
-EcSensor         g_ec;
+WaterLevelSensor  g_level;
+FlowSensor        g_flow;
+WaterTempSensor   g_temp;
+PhSensor          g_ph;
+EcSensor          g_ec;
+AmbientTempSensor g_airTemp;
+HumiditySensor    g_humidity;
+LightSensor       g_light;
 
 /// Kayıt tablosuyla AYNI SIRADA. Sıra önemli: su sıcaklığı EC'den ÖNCE
 /// gelir, çünkü EC sıcaklık telafisi için o turun sıcaklık değerini ister.
+///
+/// Ortam sensörleri en sonda: hiçbiri güvenlik zincirinin girdisi değildir ve
+/// aralarında bağımlılık yoktur.
 ISensor* const g_sensors[REGISTERED_SENSOR_COUNT] = {
-    &g_level,  // WATER_LEVEL — güvenlik
-    &g_flow,   // WATER_FLOW  — güvenlik
-    &g_temp,   // WATER_TEMP  — EC telafisi için ÖNCE
-    &g_ph,     // PH
-    &g_ec,     // EC          — sıcaklığı bağlamdan alır
+    &g_level,     // WATER_LEVEL  — güvenlik
+    &g_flow,      // WATER_FLOW   — güvenlik
+    &g_temp,      // WATER_TEMP   — EC telafisi için ÖNCE
+    &g_ph,        // PH
+    &g_ec,        // EC           — sıcaklığı bağlamdan alır
+    &g_airTemp,   // AMBIENT_TEMP — AHT20 (paylaşılan çip)
+    &g_humidity,  // HUMIDITY     — AHT20 (paylaşılan çip)
+    &g_light,     // LIGHT        — BH1750
 };
 
 PipelineState      g_pipeline[REGISTERED_SENSOR_COUNT];
@@ -51,6 +61,31 @@ constexpr core::Duration TEMP_CONTEXT_MAX_AGE = core::seconds(10);
 
 bool    g_ready            = false;
 uint8_t g_lastCycleSamples = 0;
+
+// ── ÇALIŞMA ANINDA SENSÖR AÇMA (ISSUE-035) ─────────────────────────────────
+//
+// `begin()` yalnızca boot'ta koşuyordu. Bir sensör web'den etkinleştirildiğinde
+// sürücüsü HİÇ başlatılmıyor, `sample()` her turda `FAULT` dönüyordu — yani
+// kullanıcı sensörü açıyor, arayüzde "okunamıyor" görüyor ve nedenini
+// anlayamıyordu. Yeniden başlatma gerektiği hiçbir yerde yazmıyordu.
+//
+// Çözüm: config sürüm sayacını izle. Sensör açıldığında sürücüsünü BURADA,
+// `io_sense` bağlamında başlat — donanıma dokunan tek task orası.
+
+/// Her sensörün sürücüsü başlatıldı mı?
+bool g_driverReady[REGISTERED_SENSOR_COUNT] = {};
+
+/// Görülen son sensör config sürümü.
+uint32_t g_seenSensorsRevision = 0;
+
+/// Başlatma başarısızsa bu süre dolmadan yeniden denenmez.
+///
+/// Takılı olmayan bir çipi her 250 ms'de yoklamak I2C hattını OLED ile
+/// gereksiz yere paylaştırır ve her denemede bir hata satırı üretirdi.
+constexpr core::Duration DRIVER_RETRY_PERIOD = core::seconds(10);
+
+core::Millis g_lastInitTry[REGISTERED_SENSOR_COUNT] = {};
+bool         g_everTriedInit[REGISTERED_SENSOR_COUNT] = {};
 
 /// Kayıt tablosundaki indeksi `SensorConfig` dizisindeki indekse çevirir.
 inline uint8_t configIndexOf(SensorId id)
@@ -87,7 +122,11 @@ core::ErrCode begin()
         }
 
         const ErrCode rc = g_sensors[i]->begin(cfg.sensors[cfgIdx]);
-        if (rc != ErrCode::OK)
+        if (rc == ErrCode::OK)
+        {
+            g_driverReady[i] = true;
+        }
+        else
         {
             // BİR SENSÖRÜN HATASI DİĞERLERİNİ ETKİLEMEZ: döngü devam eder.
             core::diag::log(core::LogLevel::ERROR, rc, static_cast<int32_t>(id),
@@ -95,8 +134,10 @@ core::ErrCode begin()
             g_lastSample[i].quality = SensorQuality::FAULT;
             overall                 = rc;
         }
+        g_everTriedInit[i] = true;
     }
 
+    g_seenSensorsRevision = config::sensorsRevision();
     g_ready = true;
     return overall;
 }
@@ -109,6 +150,60 @@ void tick(core::Millis now)
     }
 
     const core::Config& cfg = config::get();
+
+    // ── SENSÖR AÇILDI MI? (ISSUE-035) ──────────────────────────────────────
+    // Sürüm sayacı değiştiyse, etkinleştirilmiş ama sürücüsü hazır olmayan
+    // sensörler burada başlatılır. Kapatılanların sürücüsü serbest bırakılır
+    // ki tekrar açıldığında yeniden başlatılsın.
+    const uint32_t sensRev = config::sensorsRevision();
+    if (sensRev != g_seenSensorsRevision)
+    {
+        g_seenSensorsRevision = sensRev;
+        for (uint8_t i = 0; i < REGISTERED_SENSOR_COUNT; ++i)
+        {
+            if (cfg.sensors[configIndexOf(kSensorTable[i].id)].enabled == 0u)
+            {
+                g_driverReady[i]   = false;
+                g_everTriedInit[i] = false;
+                g_pipeline[i].reset();
+            }
+        }
+    }
+
+    for (uint8_t i = 0; i < REGISTERED_SENSOR_COUNT; ++i)
+    {
+        const uint8_t cfgIdx = configIndexOf(kSensorTable[i].id);
+        if (cfg.sensors[cfgIdx].enabled == 0u || g_driverReady[i]) { continue; }
+
+        // Başarısız denemeler hız sınırlı: takılı olmayan bir çipi her
+        // 250 ms'de yoklamak I2C hattını meşgul eder ve olay günlüğünü aynı
+        // hatayla doldururdu.
+        if (g_everTriedInit[i] &&
+            !core::hasElapsed(now, g_lastInitTry[i], DRIVER_RETRY_PERIOD))
+        {
+            continue;
+        }
+
+        g_lastInitTry[i]   = now;
+        g_everTriedInit[i] = true;
+
+        const ErrCode rc = g_sensors[i]->begin(cfg.sensors[cfgIdx]);
+        if (rc == ErrCode::OK)
+        {
+            g_driverReady[i] = true;
+            g_pipeline[i].reset();
+            g_lastSampleAt[i] = core::Millis{0};   // ilk örneği hemen al
+            core::diag::log(core::LogLevel::INFO, ErrCode::OK,
+                            static_cast<int32_t>(kSensorTable[i].id),
+                            "sensor calisma aninda baslatildi");
+        }
+        else
+        {
+            core::diag::log(core::LogLevel::WARNING, rc,
+                            static_cast<int32_t>(kSensorTable[i].id),
+                            "sensor baslatilamadi - yeniden denenecek");
+        }
+    }
 
     // Bağlam: EC sıcaklık telafisi için. Bağımlılık AÇIK ve TEK YÖNLÜ —
     // EC sensörü sıcaklık sensörünü ÇAĞIRMAZ, verilen bağlamı kullanır.
@@ -128,6 +223,18 @@ void tick(core::Millis now)
         if (cfg.sensors[cfgIdx].enabled == 0u)
         {
             g_lastSample[i] = pipeline::notPresent(d.id, now);
+            continue;
+        }
+
+        // Etkin ama sürücüsü henüz hazır değil (çip yanıt vermiyor veya
+        // yeniden deneme bekliyor). Sürücüyü çağırmak yerine FAULT
+        // bildiriyoruz — hazır olmayan bir sürücüden okumak tanımsızdır.
+        if (!g_driverReady[i])
+        {
+            g_lastSample[i]           = core::SensorSample{};
+            g_lastSample[i].id        = d.id;
+            g_lastSample[i].timestamp = now;
+            g_lastSample[i].quality   = SensorQuality::FAULT;
             continue;
         }
 

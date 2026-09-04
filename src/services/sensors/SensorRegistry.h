@@ -20,10 +20,13 @@
 namespace services {
 namespace sensors {
 
-/// Kayıtlı sensör sayısı. `MAX_SENSORS` (8) üst sınırdır; şu an 5 sensör
-/// tanımlı — nem sensörü donanımda yok (REQUIREMENTS §3.5), eklendiğinde
-/// tabloya bir satır olarak girer.
-constexpr uint8_t REGISTERED_SENSOR_COUNT = 5;
+/// Kayıtlı sensör sayısı. `MAX_SENSORS` (8) üst sınırdır ve TASK-066 ile
+/// TAMAMI kullanıldı: nem sensörü nihayet gerçek bir sürücüye kavuştu
+/// (AHT20), yanına ortam sıcaklığı ve ışık eklendi.
+///
+/// Dokuzuncu bir sensör `MAX_SENSORS`'ı büyütmeyi gerektirir; bu, `Config`
+/// NVS blob'unu 24 bayt büyütür ve boyut `static_assert`'i uyarır.
+constexpr uint8_t REGISTERED_SENSOR_COUNT = 8;
 
 /// Sensör tanımlayıcıları — ARCHITECTURE §9.3 kataloğu.
 constexpr SensorDescriptor kSensorTable[REGISTERED_SENSOR_COUNT] = {
@@ -41,6 +44,22 @@ constexpr SensorDescriptor kSensorTable[REGISTERED_SENSOR_COUNT] = {
     // bu yüzden daha seyrek örneklenir.
     {core::SensorId::PH, SensorUnit::PH, 0, 0, core::millisecs(2000)},
     {core::SensorId::EC, SensorUnit::MILLISIEMENS, 0, 0, core::millisecs(2000)},
+
+    // --- I2C ortam sensörleri (TASK-066) ---
+    //
+    // Ortam sıcaklığı ve nem AYNI ÇİPTEN (AHT20) gelir ve ardışık sıralanır:
+    // ikisi de `hal::aht20::service()` çağırır, sürücü aynı turdaki ikinci
+    // çağrıyı yok sayar. Ayrık periyot vermek çipi gereksiz yere iki kat
+    // sık tetiklerdi.
+    //
+    // 5 sn: hava sıcaklığı ve nem bu ölçekte ölçülebilir biçimde değişmez;
+    // daha sık okumak I2C hattını OLED ile gereksiz yere paylaştırır.
+    {core::SensorId::AMBIENT_TEMP, SensorUnit::CELSIUS, 0, 0, core::millisecs(5000)},
+    {core::SensorId::HUMIDITY, SensorUnit::PERCENT, 0, 0, core::millisecs(5000)},
+
+    // Işık daha hızlı değişir (bulut, perde, lambanın açılması) ve büyütme
+    // ışığının gerçekten yandığını doğrulamak için kullanılır.
+    {core::SensorId::LIGHT, SensorUnit::LUX, 0, 0, core::millisecs(2000)},
 };
 
 /// Kimliğe göre tanımlayıcı bulur; yoksa `nullptr`.

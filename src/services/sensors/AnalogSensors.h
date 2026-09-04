@@ -50,6 +50,13 @@ constexpr float BETA = 3950.0f;
 constexpr float T_NOMINAL_K = 298.15f;
 
 /// Besleme gerilimi (mV).
+///
+/// **HESAPTA KULLANILMIYOR** (TASK-074). Bölücü oranı ham ADC değerinden
+/// türetiliyor ve oran VCC'den bağımsız. Sabit yalnızca belge amaçlı duruyor:
+/// devre 3,3 V ile besleniyor.
+///
+/// Eskiden hesapta kullanılıyordu ve hatanın kaynağıydı — ESP32'nin ADC'si
+/// 12 dB zayıflatmada ~3,1 V'ta doyuma girer, yani tam ölçeği 3300 mV DEĞİLDİR.
 constexpr float VCC_MV = 3300.0f;
 
 } // namespace ntc

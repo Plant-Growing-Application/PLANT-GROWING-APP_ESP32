@@ -8,6 +8,7 @@
 #include <atomic>
 
 #include "core/BoardPins.h"
+#include "core/EncoderDecode.h"
 
 namespace hal {
 namespace input {
@@ -25,17 +26,14 @@ std::atomic<uint32_t> g_dropped{0};
 uint8_t g_stepsPerDetent = 4;
 
 // --- Encoder durumu (ISR tarafından güncellenir) ----------------------------
-volatile uint8_t  g_encState  = 0;
+//
+// Çözümleme mantığı `core/EncoderDecode.h` içinde SAF bir fonksiyondur ve
+// host'ta test edilir (TASK-071). Burada yalnızca donanım kalır: pin okuma,
+// zaman kapısı ve kuyruğa olay basma.
+volatile core::EncoderDecoder g_enc  = {0, 0};
 volatile uint32_t g_lastEncUs = 0;   ///< son KABUL EDILEN gecisin zamani (us)
-volatile int8_t  g_encSteps    = 0;  ///< detente henüz dönüşmemiş adımlar
-volatile bool    g_ready       = false;
+volatile bool     g_ready     = false;
 
-/// Quadrature geçiş tablosu.
-///
-/// İndeks = (öncekiDurum << 2) | yeniDurum. Değer: +1 / -1 / 0 (geçersiz).
-///
-/// NEDEN TABLO: mevcut sistemde ISR içinde uzun bir `if/else if` zinciri vardı.
-/// Tablo hem daha kısa hem sabit süreli — ISR'de olması gereken budur.
 /// ISR seviyesinde gurultu reddi.
 ///
 /// Mekanik encoder kontaklari sicrar (bounce) ve sicrama, quadrature
@@ -46,13 +44,6 @@ volatile bool    g_ready       = false;
 /// tipik olarak 100-300 us surer. 600 us'lik bir kapi sicramayi eler ve
 /// el hizini SINIRLAMAZ.
 constexpr uint32_t ENCODER_GLITCH_US = 600u;
-
-const int8_t kQuadTable[16] = {
-    0, -1, +1,  0,
-   +1,  0,  0, -1,
-   -1,  0,  0, +1,
-    0, +1, -1,  0,
-};
 
 /// Kuyruğa ISR-güvenli olay koyar.
 inline void pushFromIsr(InputEventType type, ButtonId btn)
@@ -87,41 +78,55 @@ void IRAM_ATTR encoderIsr()
         return;
     }
 
-    // Sicrama reddi: son KABUL EDILEN gecisten bu yana yeterli sure gecmediyse
-    // bu kesme gurultudur.
-    const uint32_t nowUs = static_cast<uint32_t>(esp_timer_get_time());
-    if ((nowUs - g_lastEncUs) < ENCODER_GLITCH_US)
-    {
-        return;
-    }
-
+    // Pinler HER ZAMAN okunur — zaman kapısından önce.
     const uint8_t a  = static_cast<uint8_t>(digitalRead(board::ENCODER_A));
     const uint8_t b  = static_cast<uint8_t>(digitalRead(board::ENCODER_B));
     const uint8_t st = static_cast<uint8_t>((a << 1) | b);
 
-    const int8_t delta = kQuadTable[((g_encState & 0x03u) << 2) | st];
-    g_encState         = st;
+    // `volatile` yapı üzerinde doğrudan çalışılamaz: yerel bir kopya alınır,
+    // işlenir, geri yazılır. ISR'ler aynı önceliktedir ve iç içe geçmez, bu
+    // yüzden kopyala-işle-yaz güvenlidir.
+    core::EncoderDecoder d;
+    d.phase = g_enc.phase;
+    d.steps = g_enc.steps;
 
-    if (delta == 0)
+    // Sicrama reddi: son KABUL EDILEN gecisten bu yana yeterli sure gecmediyse
+    // bu kesme gurultudur — SAYILMAZ.
+    //
+    // Ama durum yine de GÜNCELLENİR. Eskiden reddedilen kenarda `return`
+    // ediliyordu ve çözücünün "önceki durum"u gerçek pinlerden ayrışıyordu;
+    // sonraki gerçek geçiş bayat duruma göre hesaplanıp tabloda geçersiz
+    // görünüyor ve sessizce kayboluyordu. Bu, biriktiricide artık bırakan
+    // kaynaklardan biriydi (TASK-071).
+    const uint32_t nowUs = static_cast<uint32_t>(esp_timer_get_time());
+    if ((nowUs - g_lastEncUs) < ENCODER_GLITCH_US)
     {
-        return;  // geçersiz geçiş (gürültü) — yok sayılır
+        core::encoderSyncPhase(d, st);
+        g_enc.phase = d.phase;
+        return;
     }
 
-    g_lastEncUs = nowUs;
-    g_encSteps  = static_cast<int8_t>(g_encSteps + delta);
+    // Geçişin geçerli olup olmadığını ÖNCEDEN bilmemiz gerekiyor: zaman
+    // damgası yalnızca GEÇERLİ bir geçişte tazelenir. Geçersiz bir kenar
+    // kapıyı ileri sarsaydı, hemen ardından gelen gerçek geçiş elenirdi.
+    const bool valid = (core::quadDelta(d.phase, st) != 0);
 
-    // Detent normalizasyonu TAMSAYI aritmetiğiyle. Mevcut sistemdeki
-    // `1.5` (double) değeri int sayaçla karşılaştırılıyordu.
-    const int8_t threshold = static_cast<int8_t>(g_stepsPerDetent);
+    const core::EncoderTick tick = core::encoderAdvance(d, st, g_stepsPerDetent);
 
-    if (g_encSteps >= threshold)
+    g_enc.phase = d.phase;
+    g_enc.steps = d.steps;
+
+    if (valid)
     {
-        g_encSteps = static_cast<int8_t>(g_encSteps - threshold);
+        g_lastEncUs = nowUs;
+    }
+
+    if (tick == core::EncoderTick::CW)
+    {
         pushFromIsr(InputEventType::ENCODER_CW, ButtonId::COUNT);
     }
-    else if (g_encSteps <= -threshold)
+    else if (tick == core::EncoderTick::CCW)
     {
-        g_encSteps = static_cast<int8_t>(g_encSteps + threshold);
         pushFromIsr(InputEventType::ENCODER_CCW, ButtonId::COUNT);
     }
 }
@@ -234,10 +239,13 @@ core::ErrCode begin(uint8_t stepsPerDetent)
         g_buttons[i].longFired    = false;
     }
 
-    g_encState = static_cast<uint8_t>((digitalRead(board::ENCODER_A) << 1) |
-                                      digitalRead(board::ENCODER_B));
-    g_encSteps = 0;
-    g_ready    = true;
+    // Çözücü GERÇEK pin durumundan başlatılır. Sıfırdan başlatmak, ilk
+    // kesmede uydurma bir geçiş üretirdi.
+    g_enc.phase = static_cast<uint8_t>(((digitalRead(board::ENCODER_A) << 1) |
+                                        digitalRead(board::ENCODER_B)) & 0x03);
+    g_enc.steps = 0;
+    g_lastEncUs = 0;
+    g_ready     = true;
 
     attachInterrupt(digitalPinToInterrupt(board::ENCODER_A), encoderIsr, CHANGE);
     attachInterrupt(digitalPinToInterrupt(board::ENCODER_B), encoderIsr, CHANGE);

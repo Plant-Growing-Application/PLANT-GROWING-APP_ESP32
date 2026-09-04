@@ -16,6 +16,7 @@
 #include "TaskRunner.h"
 #include "core/Diagnostics.h"
 #include "services/ConfigService.h"
+#include "services/CropService.h"
 #include "services/TimeService.h"
 #include "hal/WifiRadio.h"
 #include "interfaces/web/AuthService.h"
@@ -89,6 +90,12 @@ void networkTaskEntry(void*)
 
         services::timesvc::tick(now, services::net::fsm::state() == core::NetState::CONNECTED);
         (void)services::timesvc::publish(now);
+
+        // Gelişim dönemi ilerlemesi (TASK-068). BURADA, `app_core`'da DEĞİL:
+        // config'e yazan tek bağlam bu task'tır (web API de buradan koşar) ve
+        // `app_core` config'i yalnızca okur. Saatte bir kez iş yapar; zaman
+        // geçersizken hiçbir şey yapmaz.
+        services::crop::tick(now);
 
         // Kopan WS istemcilerini temizle ve telemetri yayınla. Eski sistemde
         // `cleanupClients()` `loop()` içindeydi; artık ağ task'inin işi.
