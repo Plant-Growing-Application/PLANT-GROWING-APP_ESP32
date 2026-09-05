@@ -380,6 +380,17 @@ void onSetupNeeded(Millis now)
     if (g_screen != ScreenId::SETUP) { goTo(ScreenId::SETUP, now); }
 }
 
+void onSetupFinished(Millis now)
+{
+    // Kullanıcı kendisi başka bir sayfaya geçmişse ekranı ELİNDEN ALMAYIZ:
+    // bağlantının kurulması, o sırada baktığı ölçümü silmek için bir gerekçe
+    // değildir.
+    if (g_screen != ScreenId::SETUP) { return; }
+
+    g_index = 0;
+    goTo(ScreenId::HOME, now);   // HOME artık IP'yi de gösteriyor
+}
+
 ScreenId screen()     { return g_screen; }
 uint8_t  cursor()     { return g_cursor; }
 bool     confirming() { return g_confirm; }

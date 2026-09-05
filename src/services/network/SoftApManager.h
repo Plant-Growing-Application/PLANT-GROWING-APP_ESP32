@@ -35,16 +35,22 @@ namespace softap {
 /// süreyi belirsiz kılar (3 deneme 7 sn de olabilir 90 sn de). Kullanıcı
 /// deneyimi süreyle ölçülür: "bir dakikadır bağlanamıyorum".
 ///
-/// ── NEDEN 90 SANİYE DEĞİL ──────────────────────────────────────────────────
-/// Süre 90 sn'ydi ve kullanıcı açısından şu demekti: internet gittiğinde
-/// cihaza ULAŞILAMAYAN bir buçuk dakika. O sürede ne web arayüzü ne de
-/// ayarlar erişilebilirdi; kullanıcı cihazın çöktüğünü düşünüyordu.
+/// ── 90 → 45 → 5 SANİYE ─────────────────────────────────────────────────────
+/// Süre önce 90, sonra 45 saniyeydi. İkisi de aynı şikâyeti üretti: internet
+/// gittiğinde cihaza ULAŞILAMAYAN bir dakika. O pencerede ne web arayüzü ne
+/// ayarlar açılıyor, kullanıcı cihazın çöktüğünü düşünüyordu.
 ///
-/// 45 sn hâlâ "geçici kopma" ile "gerçek arıza"yı ayıracak kadar uzun:
-/// yönlendirici yeniden başlatması tipik olarak 20-40 sn sürer ve bu sürede
-/// AP açılıp kapanmaz. Kurtarma AP'si STA denemesini DURDURMAZ (AP_STA), bu
-/// yüzden erken açılması bağlantının geri gelmesini geciktirmez.
-constexpr uint32_t FALLBACK_AFTER_MS = 45000u;
+/// **Erken açmanın maliyeti yok.** Kurtarma AP'si STA denemesini DURDURMAZ:
+/// radyo `AP_STA` modundadır ve arka planda ev ağı aranmaya devam eder
+/// (`NetworkFsm`, `AP_FALLBACK` durumu). Ağ döndüğünde `STA_GOT_IP` olayı
+/// cihazı `CONNECTED`'a taşır ve AP linger süresiyle kendiliğinden kapanır.
+/// Yani AP'nin erken açılması yalnızca **erişilebilirlik ekler**, bağlantının
+/// geri gelmesini geciktirmez.
+///
+/// Yönlendirici yeniden başlatması gibi 20-40 saniyelik kopmalarda AP açılıp
+/// kapanacaktır. Bu, "kapalı kalıp erişilemez olmaktan" iyidir; `LINGER_MS`
+/// açılıp kapanma titremesini zaten damperler.
+constexpr uint32_t FALLBACK_AFTER_MS = 5000u;
 
 /// STA bağlandıktan sonra AP'nin açık kalmaya devam edeceği asgari süre.
 ///

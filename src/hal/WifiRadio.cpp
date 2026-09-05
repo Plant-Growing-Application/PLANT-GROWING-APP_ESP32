@@ -6,6 +6,8 @@
 
 #include <string.h>
 
+#include "core/Diagnostics.h"
+
 namespace hal {
 namespace wifi {
 namespace {
@@ -27,6 +29,20 @@ volatile uint32_t g_dropped = 0;
 
 RadioMode g_mode  = RadioMode::OFF;
 bool      g_ready = false;
+
+/// AP'den haber alınmadığında kopmanın BİLDİRİLMESİ için beklenen süre (sn).
+///
+/// Sürücü varsayılanı 6 saniyedir: yönlendirici kapandığında istasyon
+/// beacon'ları kaçırmaya başlar ve kopma olayı ancak bu süre dolunca üretilir.
+/// AP fallback eşiği (`softap::FALLBACK_AFTER_MS`) 5 saniyeye çekildi ama
+/// sayaç ancak KOPMA BİLDİRİLDİKTEN sonra işlemeye başlar — yani kullanıcının
+/// ölçtüğü süre 6 + 5 = 11 saniye oluyordu.
+///
+/// 3 saniye ESP-IDF'in izin verdiği ALT SINIRDIR. Daha kısası yok; bu değer
+/// toplam süreyi ~8 saniyeye indirir. Zayıf sinyalde tek tük kaçan beacon
+/// yüzünden erken kopma bildirilmesi teorik olarak mümkündür ama bağlantı
+/// zaten arka planda kesintisiz yeniden kuruluyor (AP_STA).
+constexpr uint16_t STA_INACTIVE_S = 3;
 
 inline uint8_t next(uint8_t i) { return static_cast<uint8_t>((i + 1u) % EVENT_QUEUE_LEN); }
 
@@ -156,6 +172,22 @@ core::ErrCode setMode(RadioMode m)
     // yavaş hissettirir. Yapılandırılabilir yapılmadı — hiçbir yerden
     // değiştirilmeyen ölü bir config alanı olurdu (P7).
     if (m != RadioMode::OFF) { WiFi.setSleep(false); }
+
+    // Kopmanın daha ÇABUK bildirilmesi (bkz. `STA_INACTIVE_S`). Yalnızca
+    // istasyon arayüzü varken anlamlıdır.
+    if (m == RadioMode::STA || m == RadioMode::AP_STA)
+    {
+        const esp_err_t rc = esp_wifi_set_inactive_time(WIFI_IF_STA, STA_INACTIVE_S);
+        if (rc != ESP_OK)
+        {
+            // Sessiz yutma yok — ama ölümcül de değil: sürücü varsayılanıyla
+            // (6 sn) çalışmaya devam edilir, yalnızca AP fallback biraz geç
+            // açılır.
+            core::diag::log(core::LogLevel::WARNING, ErrCode::NET_DISCONNECTED,
+                            static_cast<int32_t>(rc),
+                            "sta inactive time ayarlanamadi - varsayilan 6 sn");
+        }
+    }
 
     return ErrCode::OK;
 }

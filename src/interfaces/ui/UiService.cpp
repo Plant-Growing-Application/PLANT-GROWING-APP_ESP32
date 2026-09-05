@@ -255,6 +255,21 @@ void tick(Millis now)
         nav::onSetupNeeded(now);
     }
 
+    // ── KURULUM BİTTİ: EKRAN ORADA KALMAZ ──────────────────────────────────
+    //
+    // Kurulum ekranı bir kez açılıp KALIYORDU. Kullanıcı kurulumu telefonundan
+    // yapıyor ve encoder'a hiç dokunmuyor; cihaz ev ağına bağlandıktan sonra
+    // bile ekran kurulum ağını ve şifresini gösteriyordu. Ekrana bakan
+    // kullanıcı bağlanamadığını sanıp cihazı elle resetliyordu.
+    //
+    // Yeniden başlatma BEKLENİYORSA dokunulmaz: o ekran zaten "bağlandı,
+    // adres bu, yeniden başlıyorum" diyor ve kullanıcının görmesi gereken şey
+    // odur.
+    if (s.network.state == core::NetState::CONNECTED && s.network.setupReboot == 0u)
+    {
+        nav::onSetupFinished(now);
+    }
+
     // 1) Girdi olayları → navigasyon → (varsa) komut.
     hal::InputEvent ev;
     while (hal::input::poll(ev))

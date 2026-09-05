@@ -197,7 +197,7 @@ const char* netText(core::NetState s)
 {
     switch (s)
     {
-        case core::NetState::BOOT:        return "baslıyor";
+        case core::NetState::BOOT:        return "basliyor";
         case core::NetState::AP_ONLY:     return "kurulum AP";
         case core::NetState::CONNECTING:  return "baglaniyor";
         case core::NetState::CONNECTED:   return "bagli";
@@ -308,6 +308,7 @@ void build(const core::SystemState& s, const NavState& nav, const char* apSsid,
     out.emergency  = s.safety.emergencyLatched;
     out.rssi       = s.network.rssi;
     out.apActive   = s.network.apActive;
+    out.staConnected = (s.network.state == core::NetState::CONNECTED) ? 1u : 0u;
     out.setupReboot = s.network.setupReboot;
     out.wifiBars   = barsFor(s.network.rssi, s.network.state == core::NetState::CONNECTED);
 

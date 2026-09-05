@@ -149,6 +149,18 @@ void setSensorCount(uint8_t n);
 /// çağırır: kullanıcı ekrandan çıktıktan sonra kendiliğinden geri gelmez.
 void onSetupNeeded(core::Millis now);
 
+/// Kurulum bitti (ev ağına bağlanıldı): kurulum ekranından ÇIKAR.
+///
+/// Kurulum ekranı bir kez açılıp orada KALIYORDU. Kullanıcı kurulumu
+/// telefonundan yaptığı için encoder'a hiç dokunmuyor; cihaz ev ağına
+/// bağlandıktan sonra bile ekran kurulum ağını ve şifresini göstermeye devam
+/// ediyordu. Ekrana bakan kullanıcı bağlanamadığını sanıp cihazı elle
+/// resetliyordu.
+///
+/// Yalnızca `SETUP` ekranındayken iş yapar; kullanıcı o sırada başka bir
+/// sayfaya geçmişse ekranı ELİNDEN ALMAZ.
+void onSetupFinished(core::Millis now);
+
 } // namespace nav
 } // namespace ui
 } // namespace interfaces

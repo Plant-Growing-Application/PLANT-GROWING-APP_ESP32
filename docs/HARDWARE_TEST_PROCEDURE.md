@@ -68,13 +68,24 @@ pio run -t uploadfs
 | k | Onaya bas, 20 sn bekle | Onay iptal olur; **hiçbir eylem üretilmez** |
 | l | Öğe modunda listeyi çevir | BİR tık BİR satır ilerletmeli. İki satır atlıyorsa `BootWiring.cpp` → `input::begin(2)` |
 
-### 1.6 Task periyotları
+### 1.6 Ağ durumu ve AP fallback (TASK-076)
+
+| # | Adım | Beklenen |
+|---|---|---|
+| a | Fabrika ayarlarından ilk kurulum: telefondan Wi-Fi kaydet | OLED "Baglandi + adres" gösterir; yeniden başlatma bekliyorsa "Yeniden baslatiliyor" |
+| b | Kurulumdan sonra ekrana bak (AP hâlâ açıkken) | `HOME` **KURULUM MODU demez**; su seviyesi/pompa özeti ve IP görünür |
+| c | Yeniden başlatma iptal olursa (log: "kayit tamamlanmadi") | Ekran yine "Baglandi + adres" — kurulum şifresine GERİ DÖNMEZ |
+| d | Bağlıyken yönlendiriciyi kapat | **~8 sn** sonra `Sera-XXXX` AP'si yayında (3 sn kopmayı fark etme + 5 sn eşik); durum çubuğunda AP |
+| e | AP açıkken bekle | Ağ durumu "AP + deniyor"; arka planda deneme sürüyor (en geç 20 sn'de bir) |
+| f | Yönlendiriciyi geri aç | Cihaz kendiliğinden bağlanır; AP en geç 30 sn (bağlı istemci varsa 90 sn) içinde kapanır |
+
+### 1.7 Task periyotları
 
 `GET /api/diagnostics` → her task için `maxLoopUs` ve `overruns`.
 
 Hedefler: `app_core` < 30 ms · `io_sense` < 100 ms · `ui` < 20 ms
 
-### 1.7 24 saat kesintisiz
+### 1.8 24 saat kesintisiz
 
 24 saat çalıştır, sonra `GET /api/diagnostics`:
 - `overruns` makul mü

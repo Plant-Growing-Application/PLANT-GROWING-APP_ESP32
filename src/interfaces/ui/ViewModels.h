@@ -137,6 +137,16 @@ struct UiModel
     int8_t  rssi;
     uint8_t wifiBars;        ///< 0–4; 0 = bağlı değil
     uint8_t apActive;
+
+    /// İstasyon (ev ağı) bağlantısı KURULU mu?
+    ///
+    /// `apActive` ile birlikte bakılmak ZORUNDADIR: ikisi aynı anda 1
+    /// olabilir. Cihaz ev ağına bağlandıktan sonra kurulum AP'si bir süre
+    /// daha açık kalır (bkz. `softap::LINGER_MS`) ve ekran o pencerede
+    /// yalnızca AP'ye bakıp "KURULUM MODU" yazıyordu: bağlantı çoktan
+    /// kurulmuşken kullanıcıya hâlâ kurulum şifresi gösteriliyordu.
+    uint8_t staConnected;
+
     uint8_t faultCount;
     uint8_t emergency;
 

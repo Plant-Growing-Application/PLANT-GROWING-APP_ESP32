@@ -344,7 +344,16 @@ void drawHome(const UiModel& m)
     // AP açıkken kullanıcının tek ihtiyacı bu bilgidir. Onu yalnızca NETWORK
     // ekranına koymak, kullanıcıyı önce gezinmeye zorlar — encoder çalışmıyorsa
     // cihaza girmenin HİÇBİR YOLU KALMAZ. İlk sahada tam olarak bu yaşandı.
-    if (m.apActive != 0u && m.apSsid[0] != '\0')
+    //
+    // ── AMA YALNIZCA EV AĞINA BAĞLI DEĞİLKEN ───────────────────────────────
+    // `apActive` tek başına YETMEZ: cihaz ev ağına bağlandıktan sonra kurulum
+    // AP'si linger süresi boyunca (30-90 sn) açık kalır. Ekran o pencerede
+    // hâlâ "KURULUM MODU" ve kurulum şifresi yazıyordu — bağlantı çoktan
+    // kurulmuşken. Kullanıcı ekrana bakıp bağlanamadığını sanıyor, cihazı
+    // elle resetliyordu.
+    //
+    // Bağlıyken doğru bilgi aşağıdaki özet ve **IP adresidir**.
+    if (m.apActive != 0u && m.staConnected == 0u && m.apSsid[0] != '\0')
     {
         text(L::COL_LABEL, L::ROW0, "KURULUM MODU");
         row(L::ROW1, "Ag", m.apSsid);
@@ -610,15 +619,30 @@ void drawSetup(const UiModel& m)
     hal::oled::fillHighlight(0, L::BODY_Y - 2, L::W, 12);
     text(28, L::ROW0, "KURULUM", true);
 
-    // ── KURULUM BİTTİ ──────────────────────────────────────────────────────
-    // Ağ adı ve kurulum şifresi artık ÖLÜ BİLGİ: birazdan o AP kapanacak.
+    // ── BAĞLANTI KURULDU ───────────────────────────────────────────────────
+    //
+    // Ağ adı ve kurulum şifresi artık ÖLÜ BİLGİ: o AP birazdan kapanacak.
     // Yerine kullanıcının bundan sonra kullanacağı adres yazılır.
-    if (m.setupReboot != 0u)
+    //
+    // Koşul `setupReboot` DEĞİL, "bağlandı"dır. Yeniden başlatma iptal
+    // edilirse (config flash'a yazılamadıysa) `setupReboot` sıfıra döner ve
+    // ekran eski kurulum şifresini göstermeye GERİ DÖNÜYORDU: cihaz ev ağında,
+    // ekran hâlâ kurulum diyor. Kullanıcı bağlanamadığını sanıp resetliyordu.
+    if (m.staConnected != 0u || m.setupReboot != 0u)
     {
         row(L::ROW1, "Baglandi", m.ssid);
         row(L::ROW2, "Adres", m.ip);
-        text(L::COL_LABEL, L::ROW3, "Yeniden baslatiliyor");
-        text(L::COL_LABEL, L::ROW4, "Kendi aginiza gecin");
+
+        if (m.setupReboot != 0u)
+        {
+            text(L::COL_LABEL, L::ROW3, "Yeniden baslatiliyor");
+            text(L::COL_LABEL, L::ROW4, "Kendi aginiza gecin");
+        }
+        else
+        {
+            text(L::COL_LABEL, L::ROW3, "Kurulum tamamlandi");
+            text(L::COL_LABEL, L::ROW4, "Bas: urun sayfasi");
+        }
         return;
     }
 
