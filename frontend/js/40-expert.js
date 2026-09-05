@@ -153,21 +153,39 @@ function bindDurHints() {
 
 // ── Gelişmiş ekran: yapılandırma ───────────────────────────────────────────
 
+/// `/api/config` TEK KEZ çekilir ve BÜTÜN ayar bölümleri buradan çizilir.
+///
+/// Ayarlar artık alt sayfalara bölündü ama yapılandırma tek bir belgedir;
+/// her alt sayfa kendi isteğini atsaydı Donanım → Otomasyon → Sistem gezinen
+/// bir kullanıcı aynı 2 KB'ı üç kez indirirdi. Basit ve uzman kartları da
+/// birlikte çizilir: ikisi de aynı belgenin görünümüdür.
+///
+/// `loadRules()` BURADA DEĞİL — kurallar ayrı bir uç noktadır (~1,7 KB) ve
+/// yalnızca Otomasyon sayfasında gerekir.
 async function loadConfig() {
   try {
     const c = await api('/api/config');
     store.config = c;
 
+    // Basit görünümler
+    renderSensorCard();
+    renderHardwareCard();
+    renderAutomationSimple(c);
+
+    // Uzman görünümleri — DOM'da her zaman var, yalnızca gizli olabilirler.
+    // Gizliyken de çizmek, uzman modu açıldığında boş bir ekran görünmesini
+    // engeller (mod anahtarı veri çekmez, yalnızca `hidden` sınıfını kaldırır).
     renderSafetyConfig(c);
     renderSensorConfig(c.sensors || []);
     renderActuatorConfig(c.actuators || []);
     renderSystemConfig(c);
     bindDurHints();
-    loadRules();
   } catch (e) {
     const msg = `<p class="err">${esc(e.message)}</p>`;
-    ['safetyForm', 'sensorConfigForm', 'actuatorConfigForm', 'systemForm'].forEach((id) => {
-      if (el(id)) el(id).innerHTML = msg;
+    ['safetyForm', 'sensorConfigForm', 'actuatorConfigForm', 'systemForm',
+     'sensorCard', 'hardwareCard', 'automationForm'].forEach((id) => {
+      const n = el0(id);
+      if (n) n.innerHTML = msg;
     });
   }
 }
@@ -757,95 +775,162 @@ async function saveRules() {
 // ── Geçmiş grafiği ─────────────────────────────────────────────────────────
 
 async function loadHistory() {
-  const meta = el('chartMeta');
+  const meta = el0('chartMeta');
   txt(meta, 'Veriler alınıyor…');
   try {
     const data = await api('/api/history?count=120');
     store.historyData = data;
-    txt(meta, `${data.count} kayıt görüntülendi (${data.stored} toplam)`);
+    txt(meta, `${data.count} kayıt · cihazda toplam ${data.stored}`);
     drawChart();
   } catch (e) {
     txt(meta, 'Geçmiş verisi yüklenemedi: ' + e.message);
+    const st = el0('chartStats');
+    if (st) st.innerHTML = '';
   }
+}
+
+/// Geçerli CSS jetonunu okur. Tema değiştiğinde `<canvas>` kendiliğinden
+/// renk değiştirmez — bir CSS ağacı değil, bir bit eşlemdir. Renkleri sabit
+/// yazmak, açık temada okunamayan bir grafik demekti.
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/// En yüksek / en düşük / ortalama — grafiğin ÜSTÜNDE, sayıyla.
+///
+/// "Ne değişiyor?" sorusunun cevabı çoğu zaman eğrinin şeklinde değil bu üç
+/// sayıdadır; kullanıcıyı onları gözle tahmin etmeye zorlamıyoruz.
+function renderChartStats(values, meta) {
+  const host = el0('chartStats');
+  if (!host) return;
+  if (!values.length) { host.innerHTML = ''; return; }
+
+  const d = meta.digits === undefined ? 1 : meta.digits;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  const u = meta.unit ? ' ' + meta.unit : '';
+
+  host.innerHTML = `
+    <div class="chart-stat"><span>En düşük</span><b>${min.toFixed(d)}${esc(u)}</b></div>
+    <div class="chart-stat"><span>Ortalama</span><b>${avg.toFixed(d)}${esc(u)}</b></div>
+    <div class="chart-stat"><span>En yüksek</span><b>${max.toFixed(d)}${esc(u)}</b></div>`;
 }
 
 function drawChart() {
   const data = store.historyData;
-  if (!data || !data.rows || !data.rows.length) return;
-
-  const canvas = el('historyCanvas');
+  const canvas = el0('historyCanvas');
   if (!canvas) return;
-  const ctx = canvas.getContext('2d');
 
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = rect.width * dpr;
-  canvas.height = 260 * dpr;
-  ctx.scale(dpr, dpr);
+  const meta = SENSOR_META[store.activeChartSensor] || { unit: '', digits: 1 };
 
-  const w = rect.width, h = 260;
-  const padL = 44, padR = 16, padT = 20, padB = 30;
-  const plotW = w - padL - padR, plotH = h - padT - padB;
-  ctx.clearRect(0, 0, w, h);
+  if (!data || !data.rows || !data.rows.length) {
+    txt(el0('chartMeta'), 'Henüz geçmiş veri yok — cihaz kayıt biriktirdikçe dolar.');
+    const st = el0('chartStats');
+    if (st) st.innerHTML = '';
+    return;
+  }
 
   const fieldIdx = data.fields.indexOf(store.activeChartSensor);
   if (fieldIdx < 0) return;
 
   const rows = data.rows;
   const values = rows.map((r) => r.v[fieldIdx]);
+  renderChartStats(values, meta);
+
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const h = 240;
+  canvas.width = Math.max(1, rect.width * dpr);
+  canvas.height = h * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const w = rect.width;
+  const padL = 46, padR = 14, padT = 14, padB = 24;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  ctx.clearRect(0, 0, w, h);
+
   let minVal = Math.min(...values), maxVal = Math.max(...values);
   if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
   const padVal = (maxVal - minVal) * 0.15;
   minVal -= padVal; maxVal += padVal;
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  const accent = cssVar('--accent') || '#1f8a5f';
+  const gridC  = cssVar('--line')   || 'rgba(0,0,0,.1)';
+  const textC  = cssVar('--muted')  || '#666';
+
+  ctx.strokeStyle = gridC;
   ctx.lineWidth = 1;
-  ctx.fillStyle = '#64748b';
-  ctx.font = '11px sans-serif';
+  ctx.fillStyle = textC;
+  ctx.font = '11px system-ui, sans-serif';
   ctx.textAlign = 'right';
 
   const gridSteps = 4;
+
+  // ── EKSEN BASAMAĞI ARALIĞA GÖRE ──────────────────────────────────────────
+  // Sabit tek basamakla pH gibi dar aralıklarda beş etiketin dördü "6.3"
+  // çıkıyordu: eksen okunuyor ama HİÇBİR ŞEY söylemiyordu. Basamak sayısı
+  // adım büyüklüğünden türetilir — etiketler birbirinden ayrılana kadar.
+  const step = (maxVal - minVal) / gridSteps;
+  const axisDigits = step >= 10 ? 0 : step >= 1 ? 1 : step >= 0.1 ? 2 : 3;
+
   for (let i = 0; i <= gridSteps; i++) {
-    const y = padT + (plotH / gridSteps) * i;
-    const v = maxVal - ((maxVal - minVal) / gridSteps) * i;
+    const y = Math.round(padT + (plotH / gridSteps) * i) + 0.5;
+    const v = maxVal - step * i;
     ctx.beginPath();
     ctx.moveTo(padL, y);
     ctx.lineTo(w - padR, y);
     ctx.stroke();
-    ctx.fillText(v.toFixed(1), padL - 8, y + 4);
+    ctx.fillText(v.toFixed(axisDigits), padL - 8, y + 4);
   }
 
-  const points = rows.map((r, i) => {
-    const x = padL + (i / (rows.length - 1 || 1)) * plotW;
-    const val = r.v[fieldIdx];
-    const y = padT + plotH - ((val - minVal) / (maxVal - minVal)) * plotH;
-    return { x, y };
-  });
+  // Hedef band varsa arkasına çiz: "iyi aralık" grafikte de görünsün.
+  const targets = (typeof cropTargets === 'function') ? cropTargets() : null;
+  const bandKey = CROP_TARGET_KEY[store.activeChartSensor];
+  const band = (targets && bandKey) ? targets[bandKey] : null;
+  if (band) {
+    const yFor = (v) => padT + plotH - ((v - minVal) / (maxVal - minVal)) * plotH;
+    const y1 = Math.max(padT, yFor(band.max));
+    const y2 = Math.min(padT + plotH, yFor(band.min));
+    if (y2 > y1) {
+      ctx.fillStyle = cssVar('--ok-bg') || 'rgba(0,150,80,.10)';
+      ctx.fillRect(padL, y1, plotW, y2 - y1);
+    }
+  }
 
-  const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
-  grad.addColorStop(0, 'rgba(16,185,129,0.35)');
-  grad.addColorStop(1, 'rgba(16,185,129,0)');
+  const points = rows.map((r, i) => ({
+    x: padL + (i / (rows.length - 1 || 1)) * plotW,
+    y: padT + plotH - ((r.v[fieldIdx] - minVal) / (maxVal - minVal)) * plotH,
+  }));
 
+  // Dolgu — accent'in şeffaf hâli. `color-mix` yerine globalAlpha: eski
+  // WebView'larda `color-mix` yok ve sessizce hiçbir şey çizilmezdi.
+  ctx.save();
+  ctx.globalAlpha = 0.18;
   ctx.beginPath();
   ctx.moveTo(points[0].x, padT + plotH);
   points.forEach((p) => ctx.lineTo(p.x, p.y));
   ctx.lineTo(points[points.length - 1].x, padT + plotH);
   ctx.closePath();
-  ctx.fillStyle = grad;
+  ctx.fillStyle = accent;
   ctx.fill();
+  ctx.restore();
 
   ctx.beginPath();
   points.forEach((p, idx) => (idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-  ctx.strokeStyle = '#10b981';
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 2.2;
+  ctx.lineJoin = 'round';
   ctx.stroke();
 
-  ctx.fillStyle = '#34d399';
-  points.forEach((p) => {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-  });
+  // Nokta yalnızca SON ölçümde: 120 noktanın hepsini işaretlemek çizgiyi
+  // boncuk dizisine çeviriyordu.
+  const last = points[points.length - 1];
+  ctx.fillStyle = accent;
+  ctx.beginPath();
+  ctx.arc(last.x, last.y, 3.5, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // ── Teşhis ─────────────────────────────────────────────────────────────────
@@ -915,16 +1000,34 @@ function renderScan(r) {
                failed: 'Tarama başarısız' }[r.status] || r.status;
   txt(el('scanStatus'), st + (r.truncated ? ' (liste sınırlandı)' : ''));
 
-  const list = el('scanList');
+  const list = el0('scanList');
   if (!list) return;
 
+  // BOŞ DURUM: ağ bulunamadıysa bunu SÖYLE. Boş bir liste kutusu, kullanıcıya
+  // taramanın çalışıp çalışmadığını anlatmaz.
+  if (!r.networks.length) {
+    list.innerHTML = r.status === 'running'
+      ? '<li class="empty"><span class="empty-icon">📡</span><div>Ağlar taranıyor…</div></li>'
+      : `<li class="empty"><span class="empty-icon">🔍</span>
+           <div>Ağ bulunamadı.<br><span class="small">Cihazı yönlendiriciye yaklaştırıp
+           yeniden tarayın; 5 GHz ağlar görünmez.</span></div></li>`;
+    return;
+  }
+
   list.innerHTML = r.networks.slice().sort((a, b) => b.rssi - a.rssi).map((n) => `
-    <li class="scan-item" data-ssid="${esc(n.ssid)}">
-      <span class="scan-ssid">${n.open ? '🔓' : '🔒'} <b>${esc(n.ssid)}</b></span>
-      <span class="scan-meta">${esc(n.rssi)} dBm · kanal ${esc(n.channel)}</span>
+    <li class="scan-item" data-ssid="${esc(n.ssid)}" tabindex="0" role="button">
+      <span class="scan-ssid">${n.open ? '🔓' : '🔒'} <b title="${esc(n.ssid)}">${esc(clipText(n.ssid))}</b></span>
+      <span class="scan-meta">${sigBars(n.rssi)} kanal ${esc(n.channel)}</span>
     </li>`).join('');
 
+  const pick = (li) => {
+    el0('ssid').value = li.dataset.ssid;
+    el0('wifiPw').focus();
+  };
   list.querySelectorAll('li').forEach((li) => {
-    li.onclick = () => { el('ssid').value = li.dataset.ssid; el('wifiPw').focus(); };
+    li.onclick = () => pick(li);
+    li.onkeydown = (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(li); }
+    };
   });
 }

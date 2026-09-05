@@ -86,6 +86,28 @@ ErrCode computePlan(CropId id, GrowthStage stage, Intensity intensity, CropPlan&
     const CropProfile* p = core::cropById(id);
     if (p == nullptr)
     {
+        // ── ÜRÜNÜ BIRAKMA: BOŞ KURAL KÜMESİ GEÇERLİ BİR PLANDIR ────────────
+        //
+        // `NONE` katalogda YOKTUR (katalog yalnızca gerçek ürünleri taşır),
+        // bu yüzden buradaki erken çıkış onu da hata sayıyordu. Oysa
+        // `validateCrop()` `NONE`'ı AÇIKÇA kabul ediyor ve `CropConfig` onu
+        // "sistemin kutudan çıktığı hâl" olarak tanımlıyor.
+        //
+        // Sonuç: config katmanının desteklediği bir durum API'den
+        // ULAŞILAMIYORDU. Hasadı biten kullanıcının ürün seçimini
+        // temizlemesinin tek yolu fabrika ayarlarına dönmekti — parolayı ve
+        // Wi-Fi'yi de silen bir işlem.
+        //
+        // Ürün yoksa sulama programı da yoktur: sıfır kural DOĞRU plandır,
+        // eksik plan değil. `apply()` bunu `updateRules` ile yazar ve
+        // önceki ürünün programı temizlenir.
+        if (id == CropId::NONE)
+        {
+            out.ruleCount     = 0;
+            out.replacedCount = activeRuleCount();
+            return ErrCode::OK;
+        }
+
         out.error = ConfigError{ErrCode::CFG_VALIDATION_FAILED, "crop.crop"};
         return out.error.code;
     }

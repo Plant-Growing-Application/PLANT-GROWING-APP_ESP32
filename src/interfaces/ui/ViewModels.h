@@ -63,7 +63,19 @@ enum class ScreenId : uint8_t
     SYSTEM    = 4,
     ALERTS    = 5,
     EMERGENCY = 6,
-    COUNT     = 7,
+
+    /// Ürün seçimi ve programı başlatma — telefonsuz kurulumun ikinci yarısı.
+    CROP      = 7,
+
+    /// İlk açılış: kurulum ağının adı, şifresi ve açılacak adres.
+    ///
+    /// `EMERGENCY` gibi gezinme sırasında YOKTUR: cihaz kurulmamışken bir
+    /// kez kendiliğinden açılır, kullanıcı encoder'ı çevirince çıkılır ve
+    /// bir daha kendiliğinden gelmez. Aynı bilgiler `NETWORK` ekranında
+    /// kalıcı olarak durur.
+    SETUP     = 8,
+
+    COUNT     = 9,
 };
 
 /// Bir sensör satırı — biçimlendirilmiş, çizime hazır.
@@ -81,6 +93,20 @@ struct ActuatorLine
     uint8_t on;
     uint8_t blocked;     ///< 1 = güvenlik/kısıt engeli var
     char    why[TEXT_MAX];
+};
+
+/// Katalogda taşınabilecek en fazla ürün.
+///
+/// `core::cropCount()` bugün 6 döndürüyor. Sabit burada, katalogda büyüme
+/// olursa taşma yerine KIRPILMA olsun diye: model sabit boyutlu bir POD ve
+/// `memcmp` ile karşılaştırılıyor.
+constexpr uint8_t UI_CROPS = 8;
+
+/// Ürün seçimi ekranındaki bir satır.
+struct CropLine
+{
+    char    name[12];
+    uint8_t active;      ///< 1 = şu an uygulanmış profil
 };
 
 /// Tüm ekranların okuduğu model.
@@ -109,11 +135,29 @@ struct UiModel
     char alertText[TEXT_MAX];    ///< en ciddi aktif hata
     char emergencyWhy[TEXT_MAX];
 
+    // --- Ürün ve program (telefonsuz kurulum) ---
+    CropLine crops[UI_CROPS];
+    uint8_t  cropCount;
+    uint8_t  cropSelected;       ///< 1 = bir profil uygulanmış
+
+    /// "Salatalik Ciceklenme" — en uzun olası birleşim 20 karakter (120 px),
+    /// 128 px'lik satıra tam oturur. `TEXT_MAX` (22) burada YETMEZ: ayıraçla
+    /// birlikte 22 karakteri aşıp hem tamponda kırpılır hem ekrandan taşardı.
+    char     cropText[24];
+    uint8_t  autoMode;           ///< 1 = otomasyon AÇIK (program yürüyor)
+    char     setupUrl[16];       ///< kurulum modunda tarayıcıya yazılacak adres
+
     // --- Navigasyon ---
     ScreenId screen;
     uint8_t  cursor;         ///< ekran içi seçim
     uint8_t  editing;        ///< 1 = onay bekleniyor
-    uint8_t  reserved;
+
+    /// Kurulum tamamlandı, cihaz kontrollü biçimde yeniden başlıyor (§8.4).
+    ///
+    /// Ekranda söylenmesi ZORUNLUDUR: kullanıcı telefonu elinde, kurulum
+    /// AP'sinin kaybolmasını izleyecek. Habersiz yeniden başlayan bir cihaz,
+    /// bozulmuş bir cihazdan ayırt edilemez.
+    uint8_t  setupReboot;
 };
 
 } // namespace ui

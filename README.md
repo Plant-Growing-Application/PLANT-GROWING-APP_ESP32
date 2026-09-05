@@ -34,8 +34,12 @@ build'e dahil değil.
   sistem o bitkinin **o dönemdeki** hedeflerini ve sulama/ışık/ısıtma
   programını kendisi kurar (`docs/CROP_PROFILES.md`)
 - Eşik ve çizelge kurallarıyla otomatik sulama yapar (kural motoru)
-- **İki seviyeli web arayüzü:** basit modda 3 sekme ve düz Türkçe tavsiyeler,
-  uzman modunda kural düzenleyici ve teşhis ekranları
+- **İki seviyeli web arayüzü:** dört hedef (Bahçem · Bitkim · Kontrol ·
+  Ayarlar), gelişim yolculuğu ve düz Türkçe tavsiyeler; uzman modunda kural
+  düzenleyici, kalibrasyon ve teşhis ekranları
+- **Açık / koyu tema:** tercih tarayıcıda saklanır, ilk boyamadan önce
+  uygulanır (yanlış temayla tek kare bile görünmez), `Sistem` seçiliyken
+  işletim sisteminin gece modunu canlı izler
 - 128×64 OLED sunar ve geçmiş sensör verisini halka dosyada saklar (~12 gün)
 
 ---
@@ -150,7 +154,31 @@ başarılı → `RUNNING`.
    menzildeki herkes hesaplayabilirdi)
 3. Telefondan AP'ye bağlan → `http://192.168.4.1`
 4. Arayüz parolası belirle (**yalnızca AP üzerinden** kabul edilir)
-5. Wi-Fi ağını seç ve kaydet → cihaz ev ağına geçer
+5. Wi-Fi ağını seç ve kaydet → cihaz ev ağına bağlanır
+6. Bağlantı kurulunca kurulum **biter**: arayüz yeni adresi gösterir, cihaz
+   birkaç saniye içinde kendini yeniden başlatır ve kurulum AP'si kapanır
+7. Telefonu kendi Wi-Fi ağına al → cihazın yeni adresine git
+   (adres OLED ekranda ve seri portta da yazar)
+
+Altıncı adım bilinçli bir tasarım kararıdır (ARCHITECTURE §8.4): kurulumun
+tanımlı bir bitiş noktası yoksa cihaz `AP_STA` modunda takılır, kurulum ağı
+açık kalır ve kullanıcı iki ağ arasında, cihazın yeni adresini bilmeden
+ortada kalır. Yeniden başlatma yalnızca **kurulum oturumunda** yapılır: ağ
+geçici koptuğunda açılan kurtarma AP'sinde yapılmaz, yoksa zayıf sinyalli bir
+kurulum sonsuz yeniden başlatma döngüsüne girerdi.
+
+### Ağ koptuğunda ne oluyor
+
+| Olay | Süre | Ne yapılır |
+|---|---|---|
+| Bağlantı denemesi sonuçsuz | 12 sn | emniyet valfi: deneme iptal, backoff'a geçilir |
+| Yeniden deneme aralığı | 1 → 2 → 4 → 8 → 16 → **20 sn tavan** | ±%20 jitter; arayüzde geri sayım gösterilir |
+| Kalıcı kopma | **45 sn** | kurtarma AP'si açılır, STA denemesi arka planda sürer |
+| Yanlış şifre | 3 deneme | durur ve kullanıcıya söyler (1000. deneme de başarısız olurdu) |
+
+Beklemeyi kısaltmak bilinçli bir karardır: backoff'un işi **ulaşılamayan** bir
+ağı sonsuz denememektir, kullanıcıyı bekletmek değil. Kullanıcı beklemek
+istemiyorsa **Şimdi Dene** backoff'u da kimlik hatası durdurmasını da atlar.
 
 ### Komut yolu — iyimser güncelleme YOK
 
@@ -220,7 +248,7 @@ bunu söyler.
 pio run
 pio run -t upload
 
-# Web varliklari (gzip'lenip data/ uretilir)
+# Web varliklari (aciklamalar temizlenir, gzip'lenip data/ uretilir)
 python tools/build_assets.py
 pio run -t uploadfs
 
@@ -254,6 +282,24 @@ gibi besler:
 Sanal saat varsayılan olarak **60× hızlı** akar (`--speed`); 30 dakikalık bir
 sulama çevrimi 30 saniyede izlenebilir. `--port` ile bağlantı noktası
 değiştirilir.
+
+`--setup` cihazı **ilk kurulumdaymış gibi** başlatır: kurulum AP'si açık,
+kayıtlı ağ yok. Wi-Fi kaydedildiğinde firmware'in zinciri taklit edilir
+(bağlanıyor → bağlandı → yeniden başlatma), böylece kurulum devir teslim
+ekranı donanım olmadan denenebilir.
+
+Varsayılan olarak `frontend/` altındaki **kaynaklar** servis edilir: dosyayı
+kaydedip sayfayı yenilemek yeterlidir. `--dist` ise `data/` altındaki
+**gerçekten cihaza giden** paketi servis eder:
+
+```bash
+python tools/build_assets.py
+python tools/mock_device.py --dist
+```
+
+Bu ayrım önemlidir çünkü `build_assets.py` yayın sırasında açıklamaları
+temizler (aşağıya bakın); o dönüşüm bir şeyi bozarsa hata yalnızca cihazda
+görünürdü. Yayın paketini aynı sahte cihazla açabilmek o riski masaya getirir.
 
 > Bu bir **simülatördür, firmware değildir**: güvenlik zinciri ve aktüatör
 > kısıtları basitleştirilmiştir. Buradaki davranış firmware'in doğru olduğunun
@@ -290,6 +336,11 @@ değiştirilir.
   profili uygulama, hedef bantlı ölçüm kartları, tavsiye motoru, sensör açma
   ve kalibrasyon, geçmiş grafiği, uzman modu, mobil yerleşim
   (iyimser güncelleme yasağı dahil)
+- Arayüz yeniden tasarlandı (nömorfik tasarım sistemi, açık/koyu tema,
+  gelişim yolculuğu, alt gezinme). Doğrulananlar: 7 ekran genişliği (320 →
+  1440 px) yatay taşmasız, iki temada da WCAG AA kontrastı **ölçülerek**
+  sağlandı, kopma/bayatlama/yeniden bağlanma, tema kalıcılığı ve YAYIN
+  paketiyle (`--dist`) regresyon
 - Sistem geneli kod denetimi yapıldı; bulunan 11 kusurun **10'u kapatıldı**
   (TASK-071 · 072 · 073), kalan biri ISSUE-037 olarak kayıtlı
 

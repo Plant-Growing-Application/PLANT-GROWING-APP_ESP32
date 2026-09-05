@@ -1,4 +1,4 @@
-/* SALIXUS — çekirdek: sözlükler, durum deposu, bağlantı, komut yolu
+/* SALIXUS — çekirdek: sözlükler, tema, durum deposu, bağlantı, komut yolu
  *
  * ══ MUTLAK KURAL: İYİMSER GÜNCELLEME YASAK ════════════════════════════════
  *   Tıkla → kart "BEKLİYOR" olur → komut gider → cihazdan ack ve gerçek
@@ -7,14 +7,9 @@
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * ══ İKİ SEVİYELİ ARAYÜZ ═══════════════════════════════════════════════════
- * Önceki sürümde altı sekme eşit ağırlıktaydı ve "Ayarlar" altında altı dev
- * bölüm vardı: güvenlik eşikleri, 8 slotluk kural düzenleyici, milisaniye
- * cinsinden süre kutuları, POSIX TZ dizesi, FreeRTOS stack sayaçları.
- * Bunların hepsi GEREKLİ ama hiçbiri "çilek yetiştirmek isteyen biri"nin
- * ilk ekranda görmesi gereken şey değil.
- *
- * Çözüm SİLMEK DEĞİL, KATMANLAMAK: basit mod üç sekme gösterir, uzman modu
- * eskisinin tamamını geri açar. Tercih `localStorage`'da saklanır.
+ * Dört hedef: Bahçem · Bitkim · Kontrol · Ayarlar. Teknik ekranlar Ayarlar
+ * altındaki alt sayfalarda ve `data-expert` işaretlidir. Hiçbir işlev
+ * silinmedi — yalnızca varsayılan olarak görünmüyor.
  */
 
 // ── DOM yardımcıları ───────────────────────────────────────────────────────
@@ -25,6 +20,11 @@ function el(id) {
   return n;
 }
 
+/// Sessiz arama — öge OLMAYABİLİR. `el()` her başarısızlığı konsola yazar ki
+/// bir kimliği yeniden adlandırıp güncellemeyi unutmak sessizce geçmesin;
+/// isteğe bağlı ögelerde o gürültü yanlış alarma dönüşür.
+const el0 = (id) => document.getElementById(id);
+
 const show = (n, on) => n && n.classList.toggle('hidden', !on);
 const txt  = (n, s) => { if (n) n.textContent = s; };
 
@@ -34,6 +34,28 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
   ));
+}
+
+/// Ağ adı gibi KULLANICININ YAZDIĞI metinlerin ekranda kapladığı yeri sınırlar.
+///
+/// ══ NEDEN GEREKLİ ═════════════════════════════════════════════════════════
+/// Wi-Fi standardı SSID'ye 32 karaktere kadar izin verir ve boşluk şartı
+/// yoktur: "MisafirAgi_2.4GHz_UstKat_Yeni" tek kelimedir. Izgara hücresi
+/// böyle bir kelimeyi bölemez, hücre genişler ve YANINDAKİ sütunları
+/// ezer — kart dağılır.
+///
+/// CSS üç noktası (`text-overflow`) dar ekranda bunu zaten yapar; buradaki
+/// sınır GENİŞ ekranda da geçerlidir ve tek bir ağ adının kartın yarısını
+/// yutmasını engeller. Tam ad `title` ile erişilebilir kalır.
+///
+/// DİKKAT: bu YALNIZCA GÖSTERİMDİR. Cihaza gönderilen SSID hiçbir yerde
+/// kısaltılmaz — kırpılmış bir ağ adıyla bağlanma denemesi HER ZAMAN
+/// başarısız olur.
+const NAME_MAX_CHARS = 22;
+
+function clipText(s, max = NAME_MAX_CHARS) {
+  const v = String(s == null ? '' : s);
+  return v.length > max ? v.slice(0, max - 1) + '…' : v;
 }
 
 function fmtUptime(ms) {
@@ -78,15 +100,25 @@ function timeToMin(s) {
 // buradan Türkçeye çevrilir. Jargonun arayüze sızmaması bu tablolara bağlı.
 
 const SENSOR_META = {
-  waterTemp: { label: 'Su Sıcaklığı', short: 'Su', unit: '°C', digits: 1, min: 5, max: 40 },
-  flow:      { label: 'Su Akışı', short: 'Akış', unit: 'L/dk', digits: 2, min: 0, max: 8 },
-  ph:        { label: 'pH (Asitlik)', short: 'pH', unit: '', digits: 2, min: 4, max: 9 },
-  ec:        { label: 'Besin Yoğunluğu (EC)', short: 'EC', unit: 'mS/cm', digits: 2, min: 0, max: 4 },
-  level:     { label: 'Su Seviyesi', short: 'Seviye', unit: '', digits: 0, min: 0, max: 2 },
-  humidity:  { label: 'Ortam Nemi', short: 'Nem', unit: '%', digits: 0, min: 0, max: 100 },
-  airTemp:   { label: 'Hava Sıcaklığı', short: 'Hava', unit: '°C', digits: 1, min: -10, max: 50 },
-  light:     { label: 'Işık', short: 'Işık', unit: 'lx', digits: 0, min: 0, max: 50000 },
+  waterTemp: { label: 'Su Sıcaklığı', short: 'Su Sıc.', icon: '🌡', unit: '°C', digits: 1, min: 5, max: 40 },
+  flow:      { label: 'Su Akışı', short: 'Akış', icon: '🚿', unit: 'L/dk', digits: 2, min: 0, max: 8 },
+  ph:        { label: 'pH (Asitlik)', short: 'pH', icon: '🧪', unit: '', digits: 2, min: 4, max: 9 },
+  ec:        { label: 'Besin Yoğunluğu (EC)', short: 'Besin', icon: '🧂', unit: 'mS/cm', digits: 2, min: 0, max: 4 },
+  level:     { label: 'Su Seviyesi', short: 'Su', icon: '💧', unit: '', digits: 0, min: 0, max: 2 },
+  humidity:  { label: 'Ortam Nemi', short: 'Nem', icon: '💨', unit: '%', digits: 0, min: 0, max: 100 },
+  airTemp:   { label: 'Hava Sıcaklığı', short: 'Hava', icon: '🌤', unit: '°C', digits: 1, min: -10, max: 50 },
+  light:     { label: 'Işık', short: 'Işık', icon: '☀️', unit: 'lx', digits: 0, min: 0, max: 50000 },
 };
+
+/// Panelin "Bugün" satırında gösterilecek ölçümler ve SIRALARI.
+///
+/// Hepsini göstermiyoruz: sekiz kart bir özet değil, bir duvardır. Buradaki
+/// dördü kullanıcının günlük olarak müdahale ettiği şeylerdir; kalanlar
+/// Bitkim ekranında tam kartlarıyla durur. Takılı olmayan bir sensör
+/// listeden DÜŞER ve yerine sıradaki gelir — "Yok" yazan bir kutu, bilgi
+/// değil gürültüdür.
+const VITAL_ORDER = ['level', 'waterTemp', 'ph', 'ec', 'airTemp', 'humidity', 'light', 'flow'];
+const VITAL_COUNT = 4;
 
 /// Hedef bandı OLAN sensörler. Ürün profili yalnızca bunlar için "iyi/kötü"
 /// söyleyebilir; akış ve seviye ürüne değil DONANIMA bağlıdır.
@@ -103,6 +135,28 @@ const ACT_META = {
   growLight:    { name: 'Büyütme Işığı', desc: 'Günlük ışık süresi', icon: '💡' },
   heater:       { name: 'Isıtıcı', desc: 'Besin çözeltisi sıcaklığı', icon: '🔥' },
   nutrientPump: { name: 'Besin Pompası', desc: 'Gübre dozajı', icon: '🧪' },
+};
+
+/// Aktüatörün MEVCUT durumunu KİM belirledi (`core::ControlSource`).
+///
+/// Bu alan her telemetri paketinde geliyordu ve arayüz onu HİÇ okumuyordu.
+/// Oysa kullanıcının en sık sorduğu soru bu: "pompayı ben mi açtım, program
+/// mı?" Cevap pakette hazır duruyordu.
+const SRC_TEXT = {
+  0: '',                       // NONE — henüz kimse sürmedi
+  1: 'Otomatik program',
+  2: 'Sizin komutunuz',
+  3: 'Güvenlik sistemi',
+};
+
+/// Aynı bilgi, rozete sığan hâli. "OTOMATİK PROGRAM" dar bir satırda cihaz
+/// adını iki satıra kırıyordu; rozette bağlam zaten belli.
+const SRC_SHORT = { 0: '', 1: 'Otomatik', 2: 'Elle', 3: 'Güvenlik' };
+
+/// Ölçüm durumunun TEK SÖZCÜKLÜK karşılığı — kompakt kartlar için.
+/// Uzun cümle `sensorStatus().text` içinde kalır.
+const LEVEL_WORD = {
+  ok: 'İdeal', warn: 'Dikkat', bad: 'Sorun', off: 'Yok', unknown: '—',
 };
 
 /// Ayarlarda "bu cihaz bağlı mı" diye sorulabilecek olanlar.
@@ -257,13 +311,124 @@ const store = {
   catalog: null,      // /api/crops yanıtı (bir kez alınır)
   config: null,       // /api/config yanıtı
   linked: false,
+  lastStateAt: 0,     // son `state` paketinin alındığı an (bayatlık sayacı)
   pending: new Map(), // reqId -> { target, timer }
   rejected: null,
+  quick: null,        // ana sayfadaki hızlı sulama: { want, at } — sonucu bildirmek için
+  lastBlock: {},      // aktüatör -> { code, at }: cihazın bildirdiği son engel nedeni
   seq: 1,
   historyData: null,
   activeChartSensor: 'ph',
   rules: [],          // kural düzenleyicinin YEREL kopyası
+  handover: null,     // kurulum bitti: { ssid, ip } — cihaz yeniden başlıyor
 };
+
+// ── Tema ───────────────────────────────────────────────────────────────────
+//
+// ══ NEDEN localStorage ═════════════════════════════════════════════════════
+// Tema bir GÖRÜNTÜLEME tercihidir, cihaz durumu değil. Cihaza yazmak üç şeyi
+// bozardı: (1) aynı cihaza bakan iki kişi birbirinin temasını değiştirirdi,
+// (2) NVS'e her dokunuş yazma döngüsü harcar, (3) AP modunda henüz yetki
+// yokken tema uygulanamazdı. Tarayıcı tarafında saklamak doğru katman.
+//
+// ══ ÜÇ DEĞER, İKİ SONUÇ ════════════════════════════════════════════════════
+// Tercih `light | dark | auto`; UYGULANAN tema her zaman `light` veya `dark`.
+// `auto` işletim sistemini izler ve sistem gece moduna geçtiğinde canlı
+// olarak değişir.
+//
+// İlk damgalama `index.html` içindeki satır içi betiktedir — ilk boyamadan
+// önce çalışır, bu yüzden yanlış temayla bir kare bile görünmez.
+
+const THEME_KEY = 'salixus.theme';
+const THEME_TEXT = { light: 'Açık', dark: 'Koyu', auto: 'Sistem' };
+
+/// Kaydedilmiş tercih: `light` · `dark` · `auto` (varsayılan).
+function themePref() {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return (v === 'light' || v === 'dark') ? v : 'auto';
+  } catch (e) { return 'auto'; }   // gizli sekme / depolama kapalı
+}
+
+const prefersDark = () =>
+  !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+/// Tercihi UYGULANAN temaya indirger.
+const resolvedTheme = () => {
+  const p = themePref();
+  return p === 'auto' ? (prefersDark() ? 'dark' : 'light') : p;
+};
+
+/// `<html data-theme>`, tarayıcı çubuğu rengi ve ilgili kontroller.
+///
+/// Grafik yeniden çizilir: `<canvas>` bir CSS ağacı değildir, tema
+/// değişince kendiliğinden renk değiştirmez — eski renklerle kalırdı.
+function applyTheme() {
+  const t = resolvedTheme();
+  document.documentElement.setAttribute('data-theme', t);
+
+  const meta = document.querySelector('meta[name="theme-color"]:not([media])');
+  if (meta) meta.setAttribute('content', t === 'dark' ? '#1a2028' : '#e9edf3');
+
+  paintThemeControls();
+  if (typeof drawChart === 'function' && store.historyData) drawChart();
+}
+
+function setTheme(pref) {
+  try { localStorage.setItem(THEME_KEY, pref); } catch (e) { /* yoksay */ }
+  applyTheme();
+}
+
+/// Başlıktaki düğme ile Görünüm ekranındaki seçiciyi eşitler.
+function paintThemeControls() {
+  const pref = themePref();
+  const dark = resolvedTheme() === 'dark';
+
+  const icon = el0('themeIcon');
+  if (icon) {
+    // Düğme SONRAKİ durumu gösterir: koyudayken güneş, açıktayken ay.
+    icon.innerHTML = dark
+      ? '<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>'
+      : '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.6 6.6 0 0 0 10.5 10.5z"></path>';
+  }
+  const btn = el0('themeBtn');
+  if (btn) {
+    const next = dark ? 'Açık' : 'Koyu';
+    const label = next + ' temaya geç';
+    btn.title = pref === 'auto'
+      ? label + ' (şu an: sistem tercihi)'
+      : label;
+    btn.setAttribute('aria-label', label);
+  }
+
+  document.querySelectorAll('[data-theme-pick]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.themePick === pref);
+  });
+}
+
+/// Başlıktaki düğme: GÖRÜNEN temayı ters çevirir. Her tıklama bir değişim.
+///
+/// ── NEDEN ÜÇLÜ DÖNGÜ DEĞİL ──────────────────────────────────────────────────
+/// Önce `Açık → Koyu → Sistem → Açık` diye dönüyordu. Sistem tercihi koyu
+/// olan bir kullanıcıda "Koyu" ve "Sistem" adımları AYNI görünüyordu: ikinci
+/// tıklamada ekranda hiçbir şey değişmiyor, açığa dönmek için üçüncü tıklama
+/// gerekiyordu. Bir aç/kapa düğmesinin bazen hiçbir şey yapmaması, düğmenin
+/// bozuk olduğu anlamına gelir.
+///
+/// Simge düğmesi artık yalnızca iki uç arasında gidip geliyor; üç seçenekli
+/// tercih (Açık · Koyu · Sistem) Ayarlar → Görünüm ekranında, adları
+/// yazılı ve hangisinin seçili olduğu görünür hâlde duruyor.
+function toggleTheme() {
+  setTheme(resolvedTheme() === 'dark' ? 'light' : 'dark');
+}
+
+// Sistem gece moduna geçerse `auto` seçiliyken CANLI izle.
+if (window.matchMedia) {
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const onChange = () => { if (themePref() === 'auto') applyTheme(); };
+  if (mq.addEventListener) mq.addEventListener('change', onChange);
+  else if (mq.addListener) mq.addListener(onChange);   // eski WebKit
+}
 
 // ── Basit / Uzman modu ─────────────────────────────────────────────────────
 
@@ -281,20 +446,16 @@ function setExpert(on) {
 
 /// `data-expert` işaretli her şeyi moda göre gösterir/gizler.
 ///
-/// Gizlenen bir sekme AÇIKKEN uzman modu kapatılırsa kullanıcı boş bir
-/// ekranda kalırdı; o durumda ana sekmeye dönüyoruz.
+/// Artık hiçbir SEKME uzman modda değil — teknik bölümler Ayarlar altındaki
+/// alt sayfaların içinde. Bu yüzden "gizlenen sekmedeyken boş ekranda kalma"
+/// durumu yapısal olarak imkânsız; eski geri dönüş kodu gereksizleşti.
 function applyExpertMode() {
   const on = isExpert();
   document.querySelectorAll('[data-expert]').forEach((n) => {
     n.classList.toggle('hidden', !on);
   });
-  const t = el('expertToggle');
+  const t = el0('expertToggle');
   if (t) t.checked = on;
-
-  if (!on) {
-    const activeTab = document.querySelector('.tab-btn.active');
-    if (activeTab && activeTab.dataset.expert) switchView('garden');
-  }
 }
 
 // ── WebSocket ──────────────────────────────────────────────────────────────
@@ -306,16 +467,94 @@ let reconnectTimer = null;
 
 function setLinked(on, reason) {
   store.linked = on;
-  document.body.classList.toggle('stale', !on);
-  show(el('linkBar'), !on);
+
+  // ── BEKLENEN KOPMA ALARM DEĞİLDİR ────────────────────────────────────────
+  // Kurulum devir tesliminde bağlantının kesilmesi PLANLIDIR: cihaz yeniden
+  // başlıyor. Kırmızı "bağlantı kesildi" bandı burada yalan söyler ve
+  // kullanıcıya tam da her şey yolundayken bir şeyin bozulduğunu düşündürür.
+  // Durum rozeti yine de doğruyu söyler: canlı bağlantı yok.
+  if (store.handover) {
+    document.body.classList.remove('stale');
+    show(el('linkBar'), false);
+    const p = el0('connPill');
+    const l = el0('connLabel');
+    if (p && l) { p.classList.toggle('offline', !on); txt(l, on ? 'Canlı' : 'Kopuk'); }
+    return;
+  }
+
+  // ── BANT YALNIZCA OTURUM AÇIKKEN ─────────────────────────────────────────
+  // Giriş ekranında henüz bir bağlantı BEKLENMİYOR. Eskiden açılışta
+  // `setLinked(false)` çağrılıyor ve kullanıcı daha parolasını yazmadan
+  // kırmızı bir "bağlantı kesildi — gösterilen veriler eski" bandı
+  // görüyordu: doğru olmayan, üstelik korkutan bir uyarı.
+  const inApp = !!store.token;
+  document.body.classList.toggle('stale', inApp && !on);
+  show(el('linkBar'), inApp && !on);
   if (!on) txt(el('linkText'), reason || 'Bağlantı kesildi — gösterilen veriler eski');
 
-  const cp = el('connPill');
-  const cl = el('connLabel');
+  const cp = el0('connPill');
+  const cl = el0('connLabel');
   if (cp && cl) {
     cp.classList.toggle('offline', !on);
     txt(cl, on ? 'Canlı' : 'Kopuk');
   }
+
+  // ── KOPUNCA KONTROLLER KİLİTLENİR ────────────────────────────────────────
+  // Güç düğmelerinin `disabled` durumu `store.linked`'e bakılarak ÇİZİM
+  // sırasında belirlenir — ama bağlantı koptuğunda çizimi tetikleyecek bir
+  // `state` paketi de gelmez. Sonuç: bağlantı yokken düğmeler etkin görünür,
+  // kullanıcı basar ve komut hiçbir yere gitmez.
+  //
+  // `sendCmd` bunu zaten yakalıyor ("Bağlantı yok" der), ama basılabilir
+  // görünen bir düğme yalan söyler. Durum değiştiğinde yeniden çiziyoruz.
+  if (store.state) { render(); }
+}
+
+// ── Kurulum devir teslimi ──────────────────────────────────────────────────
+//
+// ══ NEDEN AYRI BİR EKRAN ═══════════════════════════════════════════════════
+// Kurulumun son adımı bir AĞ DEĞİŞİKLİĞİDİR: telefon `Sera-XXXX` ağında,
+// cihaz ise artık ev ağında. Kullanıcı telefonunu kendi ağına almadan cihaza
+// BİR DAHA ulaşamaz ve yeni adresi bilmiyorsa aramanın hiçbir yolu yoktur.
+//
+// Bu yüzden son paketteki adres yakalanır ve ekranda TUTULUR: soket kopar,
+// yeniden bağlanma denemeleri boşa gider, ama ekrandaki adres durur.
+function enterHandover(net) {
+  if (store.handover) { return; }   // ilk paket geçerli; tekrarları yok say
+
+  store.handover = { ssid: net.ssid || '', ip: net.ip || '' };
+
+  // Yeniden bağlanma zincirini durdur: cihaz kapanıyor, denemek boşuna ve
+  // her deneme ekranda bir hata daha üretir.
+  clearTimeout(reconnectTimer);
+  try { if (ws) { ws.onclose = null; ws.onerror = null; ws.close(); } }
+  catch (e) { /* zaten kapalı */ }
+  ws = null;
+  setLinked(false);
+
+  renderHandover();
+}
+
+/// Devir teslim ekranını çizer ve gösterir.
+function renderHandover() {
+  const h = store.handover;
+  const box = el0('handover');
+  if (!h || !box) { return; }
+
+  const addr = h.ip && h.ip !== '0.0.0.0' ? h.ip : '';
+
+  const nameEl = el0('hoSsid');
+  txt(nameEl, clipText(h.ssid) || 'ağınıza');
+  if (nameEl) { nameEl.title = h.ssid || ''; }
+  const link = el0('hoLink');
+  if (link) {
+    // Adres alınamadıysa TAHMİN YOK: yanlış bir adres, adres olmamasından
+    // beterdir — kullanıcı ona güvenip cihazın bozulduğunu sanır.
+    txt(link, addr ? 'http://' + addr : 'Cihaz ekranında yazan adres');
+    if (addr) { link.href = 'http://' + addr; link.classList.remove('dead'); }
+    else      { link.removeAttribute('href'); link.classList.add('dead'); }
+  }
+  show(box, true);
 }
 
 function connect() {
@@ -356,11 +595,63 @@ function scheduleReconnect() {
   reconnectTimer = setTimeout(connect, wait);
 }
 
+// ── TELEMETRİ BEKÇİSİ ──────────────────────────────────────────────────────
+//
+// ══ NEDEN `onclose` YETMEZ ═════════════════════════════════════════════════
+// Bir soket YARI ÖLEBİLİR: erişim noktası kapanır, cihazın fişi çekilir ya da
+// ağ değişir — ve TCP kapanış el sıkışması hiç gelmez. Tarayıcı soketi
+// dakikalarca `OPEN` (veya `CLOSING`) sayar, `onclose` tetiklenmez.
+//
+// Sonuç, bu proje için kabul edilemez olan şeydir: arayüz "Canlı" yazar,
+// ölçümler DONMUŞTUR ve kullanıcı ekrandaki sayıyı ŞU ANKİ gerçek durum
+// sanar. Pompanın "kapalı" göründüğü ekran on dakika öncesine ait olabilir.
+//
+// Bu yüzden bağlantının canlılığı soketin iddiasına değil, VERİ AKIŞINA
+// bakılarak ölçülür: cihaz `telemetryIntervalMs` (varsayılan 1 sn) periyoduyla
+// ve her kritik değişimde yayın yapar. Bu kadar süre hiç paket gelmediyse
+// bağlantı fiilen ölüdür, soket ne derse desin.
+//
+// Eşik cömert: yavaş bir ağda birkaç paketin gecikmesi yanlış alarm
+// üretmemeli. 15 saniye, en yavaş telemetri periyodunun (60 sn'lik üst
+// sınırın değil, gerçekçi ayarların) kat kat üstüdür.
+const STALE_AFTER_MS = 15000;
+const WATCHDOG_TICK_MS = 3000;
+
+/// Soketi bırakır ve yeni bir bağlantı kurar. `onclose` devre dışı bırakılır:
+/// aksi hâlde ölü soketin geç gelen kapanış olayı İKİNCİ bir yeniden bağlanma
+/// zincirlerdi ve iki soket birden açılırdı.
+function forceReconnect(reason) {
+  setLinked(false, reason);
+  try {
+    if (ws) { ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close(); }
+  } catch (e) { /* zaten kapalı */ }
+  ws = null;
+  clearTimeout(reconnectTimer);
+  backoffStep = 0;
+  reconnectTimer = setTimeout(connect, 500);
+}
+
+setInterval(() => {
+  // Devir teslimde cihaz KASITLI olarak kapanıyor: bekçinin işi yok.
+  if (store.handover) { return; }
+  if (!store.token || !store.linked || !store.lastStateAt) { return; }
+  if (Date.now() - store.lastStateAt < STALE_AFTER_MS) { return; }
+  forceReconnect('Cihazdan veri gelmiyor — bağlantı yenileniyor');
+}, WATCHDOG_TICK_MS);
+
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !store.linked && store.token) {
+  if (document.visibilityState !== 'visible') { return; }
+
+  if (!store.linked && store.token && !store.handover) {
     backoffStep = 0;
     connect();
   }
+
+  // Tema, sekmeye DÖNÜNCE de yeniden çözülür. `matchMedia` olayı normalde
+  // yeterlidir ama bazı tarayıcılar onu gizli sekmeye göndermez: kullanıcı
+  // telefonunu gece moduna alıp geri döndüğünde arayüz eski temada kalırdı.
+  // Maliyeti bir öznitelik karşılaştırması.
+  if (themePref() === 'auto') { applyTheme(); }
 });
 
 function onState(msg) {
@@ -370,18 +661,65 @@ function onState(msg) {
     store.pending.clear();
   }
 
-  // Cihaz ürün/dönem değiştirdiyse (otomatik dönem ilerlemesi) hedef bantlar
+  // Cihaz ürün/dönem DEĞİŞTİRDİYSE (otomatik dönem ilerlemesi) hedef bantlar
   // bayatlamıştır; yeniden çekiyoruz. Aksi hâlde panel meyve dönemindeyken
   // çiçeklenme hedeflerine göre "iyi/kötü" derdi.
+  //
+  // İLK PAKETTE ÇEKMİYORUZ: `prev` yokken "değişti" saymak, girişte
+  // `afterLogin()`'in zaten yaptığı işi ikinci kez yapmaktı. İlk yükleme
+  // oturum açmanın işidir; buranın işi DEĞİŞİMİ yakalamak.
   const prev = store.state && store.state.crop;
   const now  = msg.crop;
-  if (now && (!prev || prev.key !== now.key || prev.stage !== now.stage)) {
+  if (now && prev && (prev.key !== now.key || prev.stage !== now.stage)) {
     loadCrop();
   }
 
+  // ── ENGEL NEDENLERİ ANLIKTIR, YAKALANMAZSA KAYBOLUR ─────────────────────
+  //
+  // `block` cihazın SON deneme sonucudur. Otomasyon motoru saniyede birkaç
+  // kez değerlendirdiği için bir sonraki başarılı turda sıfırlanır: neden
+  // ekranda bir kare görünüp yok olur.
+  //
+  // Kullanıcının sorusu ("pompaya bastım, neden çalışmadı?") ise o kare
+  // geçtikten SONRA soruluyor. Cevabı, geldiği anda saklıyoruz.
+  if (Array.isArray(msg.actuators)) {
+    const now = Date.now();
+    msg.actuators.forEach((a) => {
+      if (a.block) { store.lastBlock[a.id] = { code: a.block, at: now }; }
+    });
+  }
+
   store.state = msg;
+  store.lastStateAt = Date.now();
+
+  // ── KURULUM DEVİR TESLİMİ (§8.4) ────────────────────────────────────────
+  // Cihaz ev ağına bağlandı ve yeni ayarlarla yeniden başlıyor. Bu paket,
+  // telefon HÂLÂ kurulum ağındayken gelen son pakettir: yeni adresi burada
+  // söylemezsek kullanıcı cihazı bir daha bulamaz.
+  if (msg.network && msg.network.setupReboot) { enterHandover(msg.network); }
+
   render();
 }
+
+// ── "Ne kadar eski?" sayacı ────────────────────────────────────────────────
+//
+// Bağlantı koptuğunda ekranda DURAN sayılar hâlâ okunabilir olmalı — ama
+// kullanıcı onları ANLIK sanmamalı. "Bağlantı kesildi" tek başına bunu
+// söylemez; "son güncelleme 3 dakika önce" söyler.
+
+function staleAgeText() {
+  if (!store.lastStateAt) return '';
+  const s = Math.round((Date.now() - store.lastStateAt) / 1000);
+  if (s < 5) return '';
+  if (s < 60) return ` — son güncelleme ${s} sn önce`;
+  if (s < 3600) return ` — son güncelleme ${Math.floor(s / 60)} dk önce`;
+  return ` — son güncelleme ${Math.floor(s / 3600)} sa önce`;
+}
+
+setInterval(() => {
+  if (store.linked || !store.token || store.handover) return;
+  txt(el0('linkText'), 'Bağlantı kesildi, yeniden bağlanılıyor' + staleAgeText());
+}, 1000);
 
 function onAck(msg) {
   const p = store.pending.get(msg.reqId);

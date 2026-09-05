@@ -24,6 +24,7 @@ degisimleri de ayni carpani kullanir ki her sey tutarli gorunsun.
 
 import argparse
 import base64
+import gzip
 import hashlib
 import json
 import math
@@ -55,6 +56,31 @@ def bundle_js() -> bytes:
     for p in parts:
         chunks.append(f"/* ===== {p.name} ===== */\n" + p.read_text(encoding="utf-8"))
     return "\n".join(chunks).encode("utf-8")
+
+
+# ── KAYNAK MI, YAYIN MI ─────────────────────────────────────────────────────
+#
+# Varsayilan KAYNAKTIR: gelistirirken dosyayi kaydedip sayfayi yenilemek
+# yeterli olmali, arada bir yapi adimi olmamali.
+#
+# `--dist` ise `data/` altindaki GERCEKTEN CIHAZA GIDEN dosyalari servis eder.
+# Bu ayrim onemli: `build_assets.py` yayin sirasinda aciklamalari temizliyor
+# ve o donusum kodu bozarsa hata YALNIZCA cihazda gorunurdu. Yayin paketini
+# ayni sahte cihazla test edebilmek, o riski masaya getirir.
+DIST = ROOT / "data"
+SERVE_DIST = False
+
+
+def asset(name: str) -> bytes:
+    """Bir varligi kaynaktan veya yayin (`data/`) klasorunden okur."""
+    if not SERVE_DIST:
+        return bundle_js() if name == "app.js" else (FRONT / name).read_bytes()
+
+    gz = DIST / (name + ".gz")
+    if not gz.is_file():
+        raise SystemExit(
+            f"HATA: {gz} yok. Once 'python tools/build_assets.py' calistirin.")
+    return gzip.decompress(gz.read_bytes())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -131,6 +157,11 @@ class Device:
         self.version = 1
 
         self.config = {
+            # Ag bolumu: firmware'in `/api/config` semasiyla ayni (§8.2).
+            # `password` ASLA donmez; yalnizca "ayarlanmis mi" bilgisi doner.
+            "network": {"ssid": "SahteSeraAgi", "ipMode": "dhcp", "staticIp": "0.0.0.0",
+                        "gateway": "0.0.0.0", "subnet": "255.255.255.0", "dns": "0.0.0.0",
+                        "passwordSet": True},
             "safety": {"flowVerifyDelayMs": 10000, "flowMinRate": 0.5,
                        "maxRuntimeGraceMs": 5000, "maxRuntimeViolations": 3,
                        "requireLevelSensor": True},
@@ -192,6 +223,17 @@ class Device:
                         "cycles": 0, "block": 0, "source": 0}
                     for a in ACT_IDS}
         self.rule_state = {}             # kural indeksi -> histerezis tarafı
+
+        # ── AG / KURULUM BENZETIMI (§8.4) ──────────────────────────────────
+        # `--setup` ile baslatildiginda cihaz ILK KURULUM'daymis gibi davranir:
+        # kurulum AP'si acik, kayitli ag yok. Wi-Fi kaydedildiginde firmware'in
+        # yaptigi zincir birebir taklit edilir:
+        #     connecting -> connected + setupReboot -> yeniden baslatma
+        # Arayuzun devir teslim ekrani donanim olmadan boyle test edilir.
+        self.net = {"state": "connected", "ssid": "SahteSeraAgi", "ip": "192.168.1.42",
+                    "apActive": False, "apClients": 0, "provisioning": False,
+                    "setupReboot": False, "rebootIn": 0, "retryIn": 0}
+        self.net_at = 0.0                # bir sonraki ag gecisinin zamani (mono)
 
         self.latched = False
         self.latch_reason = 0
@@ -304,9 +346,43 @@ class Device:
 
     # ── Fiziksel benzetim ──────────────────────────────────────────────────
 
+    # ── Ag durum makinesi (kurulum yolu) ───────────────────────────────────
+
+    def net_tick(self):
+        """Firmware'in `NetworkFsm` kurulum yolunun kucuk bir taklidi.
+
+        GERCEK ZAMAN kullanir (sanal saat DEGIL): kullanicinin ekranda gordugu
+        geri sayim sanal saat carpanina gore hizlanmamali.
+        """
+        if self.net_at == 0.0 or time.monotonic() < self.net_at:
+            return
+
+        st = self.net["state"]
+        if st == "connecting":
+            # Baglandi: kurulum oturumundaysak yeniden baslatma planlanir.
+            self.net.update(state="connected", ip="192.168.1.42")
+            if self.net["provisioning"]:
+                self.net.update(setupReboot=True, rebootIn=4)
+                self.net_at = time.monotonic() + 4.0
+                self.log(0, 0, "ilk kurulum tamamlandi - yeniden baslatiliyor")
+            else:
+                self.net_at = 0.0
+        elif self.net["setupReboot"]:
+            # "Yeniden baslatma": AP kapanir, kurulum oturumu biter.
+            self.net.update(setupReboot=False, rebootIn=0, provisioning=False,
+                            apActive=False, apClients=0)
+            self.net_at = 0.0
+            self.log(0, 0, "yeniden baslatildi - istasyon modunda")
+        else:
+            self.net_at = 0.0
+
     def tick(self, dt_real):
         dt = dt_real * self.speed          # sanal saniye
         self.vt += dt
+
+        self.net_tick()
+        if self.net["setupReboot"] and self.net_at:
+            self.net["rebootIn"] = max(0, int(round(self.net_at - time.monotonic())))
 
         pump = self.act["waterPump"]["on"]
         heat = self.act["heater"]["on"]
@@ -431,9 +507,14 @@ class Device:
                  "block": self.act[a]["block"], "runMs": self.act[a]["run_ms"],
                  "cycles": self.act[a]["cycles"]} for a in ACT_IDS],
             "safety": {"interlocks": interlocks, "latched": self.latched, "reason": reason},
-            "network": {"state": "connected", "ssid": "SahteSeraAgi", "rssi": -47,
-                        "apActive": False, "apClients": 0, "retries": 0,
-                        "lastError": 0, "ip": "192.168.1.42"},
+            "network": {"state": self.net["state"], "ssid": self.net["ssid"],
+                        "rssi": -47 if self.net["state"] == "connected" else 0,
+                        "apActive": self.net["apActive"], "apClients": self.net["apClients"],
+                        "retries": 0, "lastError": 0, "ip": self.net["ip"],
+                        "retryIn": self.net.get("retryIn", 0),
+                        "provisioning": self.net["provisioning"],
+                        "setupReboot": self.net["setupReboot"],
+                        "rebootIn": self.net["rebootIn"]},
             "time": {"valid": True, "epoch": int(time.time())},
             "crop": {"key": self.crop["crop"], "stage": self.crop["stage"],
                      "day": self.crop.get("daysSincePlanting", 0)},
@@ -450,6 +531,15 @@ class Device:
         key = body.get("crop", self.crop["crop"])
         stage = body.get("stage", self.crop["stage"])
         intensity = body.get("intensity", self.crop["intensity"])
+
+        # URUNU BIRAKMA: bos kural kumesi GECERLI bir plandir.
+        # `CropService::computePlan()` ile ayni dal — katalogda `none`
+        # bulunmaz ama config katmani onu kabul eder.
+        if key == "none":
+            return {"applied": applied, "stage": stage, "ruleCount": 0,
+                    "replacedCount": len(self.rules),
+                    "automationMode": self.config["automation"]["mode"],
+                    "rules": []}
 
         prof = self.profile(key)
         if prof is None:
@@ -705,11 +795,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._err(0x0902, status=400)
 
         if path in ("/", "/index.html"):
-            return self._send(200, (FRONT / "index.html").read_bytes(), "text/html")
+            return self._send(200, asset("index.html"), "text/html")
         if path == "/app.css":
-            return self._send(200, (FRONT / "app.css").read_bytes(), "text/css")
+            return self._send(200, asset("app.css"), "text/css")
         if path == "/app.js":
-            return self._send(200, bundle_js(), "application/javascript")
+            return self._send(200, asset("app.js"), "application/javascript")
 
         if path == "/api/auth/status":
             return self._send(200, {"setupMode": False})
@@ -833,6 +923,22 @@ class Handler(BaseHTTPRequestHandler):
                 DEV.config["actuators"][i].update({k: v for k, v in body.items() if k != "index"})
                 return self._send(200, {"ok": True})
 
+            if path == "/api/config/network":
+                DEV.config["network"].update(
+                    {k: v for k, v in body.items() if k != "password"})
+                if body.get("password"):
+                    DEV.config["network"]["passwordSet"] = True
+
+                # Kurulum oturumundaysak firmware'in yaptigini yap: baglanmayi
+                # dene, basarinca yeniden baslat (§8.4). Degilse yalnizca
+                # ayarlari yaz — calisan bir cihaz ag ayari degisti diye
+                # kendini yeniden baslatmaz.
+                if DEV.net["provisioning"]:
+                    DEV.net.update(state="connecting", ssid=body.get("ssid", ""), ip="0.0.0.0")
+                    DEV.net_at = time.monotonic() + 2.0
+                    DEV.log(0, 0, "kurulum: aga baglaniliyor")
+                return self._send(200, {"ok": True})
+
             if path == "/api/config/automation":
                 DEV.config["automation"].update(body)
                 DEV.log(0, 1, f"otomasyon modu: {DEV.config['automation']['mode']}")
@@ -888,14 +994,25 @@ def sim_loop():
 
 
 def main():
-    global DEV
+    global DEV, SERVE_DIST
     ap = argparse.ArgumentParser(description="SALIXUS sahte cihaz sunucusu")
     ap.add_argument("--port", type=int, default=8099)
     ap.add_argument("--speed", type=float, default=60.0,
                     help="sanal saat carpani (varsayilan 60 = 30 dk cevrim 30 sn'de gorunur)")
+    ap.add_argument("--setup", action="store_true",
+                    help="cihazi ILK KURULUM'da baslat: kurulum AP'si acik, kayitli ag yok "
+                         "(devir teslim ekranini test etmek icin)")
+    ap.add_argument("--dist", action="store_true",
+                    help="kaynak yerine data/ altindaki YAYIN paketini servis et "
+                         "(once: python tools/build_assets.py)")
     args = ap.parse_args()
 
+    SERVE_DIST = args.dist
     DEV = Device(args.speed)
+    if args.setup:
+        DEV.net.update(state="apOnly", ssid="", ip="0.0.0.0",
+                       apActive=True, apClients=1, provisioning=True)
+        DEV.config["network"].update(ssid="", passwordSet=False)
     threading.Thread(target=sim_loop, daemon=True).start()
 
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
@@ -905,6 +1022,7 @@ def main():
     # UnicodeEncodeError ile dusuruyordu.
     print("")
     print(f"  SALIXUS sahte cihaz  ->  http://127.0.0.1:{args.port}")
+    print(f"  Varlik kaynagi: {'data/ (YAYIN paketi)' if SERVE_DIST else 'frontend/ (kaynak)'}")
     print(f"  Parola: herhangi bir sey  |  Sanal saat: {args.speed:.0f}x")
     print("  Ctrl+C ile durdurun")
     print("")

@@ -1,37 +1,62 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0a0f14">
+<meta name="theme-color" content="#e9edf3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a2028" media="(prefers-color-scheme: dark)">
 <title>SALIXUS — Sera Kontrol</title>
+
+<!--
+  ── TEMA, İLK BOYAMADAN ÖNCE ────────────────────────────────────────────────
+  Bu betik `<link>`'ten ÖNCE ve eşzamanlı çalışır. Tercih `localStorage`'da
+  durur; `<html data-theme>` gövde çizilmeden damgalanır.
+
+  NEDEN BURADA VE NEDEN CSS'TE DEĞİL: sayfa önce açık temayla boyanıp sonra
+  koyuya atlarsa (FOUC) her yenilemede göz alan bir sıçrama olur. CSS
+  `prefers-color-scheme` bunu çözer ama KULLANICI SEÇİMİNİ çözemez — seçim
+  yalnızca JavaScript'in okuyabileceği bir yerde durabilir.
+
+  Yan fayda: `data-theme` HER ZAMAN açıkça yazıldığı için `app.css` koyu
+  jetonları tek bir seçicide tutar; medya sorgusu + öznitelik seçici olarak
+  iki kez tekrarlanmaz (~1,2 KB gzip tasarrufu).
+-->
+<script>
+(function () {
+  var pref = 'auto';
+  try { pref = localStorage.getItem('salixus.theme') || 'auto'; } catch (e) { /* gizli sekme */ }
+  var dark = pref === 'dark' ||
+    (pref !== 'light' && window.matchMedia &&
+     window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+})();
+</script>
+
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
 
 <!--
-  ── İKİ SEVİYELİ ARAYÜZ (TASK-070) ────────────────────────────────────────
-  BASİT mod varsayılandır: Bahçem · Kontrol · Ayarlar.
-  UZMAN modu `data-expert` işaretli her şeyi açar (grafikler, ağ detayı,
-  kural düzenleyici, aktüatör kısıtları, güvenlik eşikleri, teşhis).
+  ── DÖRT HEDEF ──────────────────────────────────────────────────────────────
+  Bahçem · Bitkim · Kontrol · Ayarlar. Önceki sürümde uzman modunda YEDİ
+  sekme tek bir yatay şeritteydi ve 375 px'de son ikisi ekranın dışında
+  kalıyordu — var olan ama görülemeyen bir gezinme.
 
-  Hiçbir işlev SİLİNMEDİ — yalnızca varsayılan olarak görünmüyor. Uzman
-  modundaki ekranlar önceki sürümün ekranlarıyla birebir aynıdır.
+  Hiçbir işlev silinmedi; teknik ekranlar Ayarlar altındaki alt sayfalara
+  taşındı ve `data-expert` işaretiyle uzman moduna bağlı kaldı.
 -->
 
-<!-- Bağlantı Bandı -->
+<!-- Bağlantı bandı -->
 <div id="linkBar" class="linkbar hidden" role="status" aria-live="polite">
   <div class="linkbar-content">
-    <svg class="icon pulse-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-      <circle cx="12" cy="12" r="10"></circle>
-      <line x1="12" y1="8" x2="12" y2="12"></line>
-      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    <svg class="pulse-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
     </svg>
     <span id="linkText">Bağlantı kesildi — gösterilen veriler eski</span>
   </div>
 </div>
 
-<!-- Güvenlik Bandı -->
+<!-- Güvenlik bandı -->
 <div id="safetyBar" class="safetybar hidden" role="alert"></div>
 
 <!-- ══ GİRİŞ ══════════════════════════════════════════════════════════════ -->
@@ -40,48 +65,32 @@
     <div class="card auth-card">
       <div class="brand-badge">
         <div class="brand-logo-glow">
-          <svg class="brand-icon" viewBox="0 0 32 32" width="36" height="36" fill="none">
-            <path d="M16 2C9.5 2 4 7.5 4 14c0 7 12 16 12 16s12-9 12-16c0-6.5-5.5-12-12-12z" fill="url(#brandGrad)" opacity="0.2"/>
-            <path d="M16 5C10.5 5 6 9.5 6 15c0 6 10 13.5 10 13.5s10-7.5 10-13.5c0-5.5-4.5-10-10-10z" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
-            <path d="M16 9v11M16 14l-4-3M16 17l4-3" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <defs>
-              <linearGradient id="brandGrad" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#10b981"/>
-                <stop offset="1" stop-color="#047857"/>
-              </linearGradient>
-            </defs>
+          <svg viewBox="0 0 32 32" width="30" height="30" fill="none" aria-hidden="true">
+            <path d="M16 5C10.5 5 6 9.5 6 15c0 6 10 13.5 10 13.5s10-7.5 10-13.5c0-5.5-4.5-10-10-10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="stroke:var(--accent)"/>
+            <path d="M16 10v10M16 14l-3-2M16 17l3-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="stroke:var(--accent)"/>
           </svg>
         </div>
-        <div class="brand-meta">
-          <span class="brand-title">SALIXUS</span>
-          <span class="brand-sub">Sera ve Topraksız Tarım Kontrolü</span>
+        <div>
+          <div class="auth-title">SALIXUS</div>
+          <div class="auth-tagline">Sera ve Topraksız Tarım Kontrolü</div>
         </div>
       </div>
 
-      <div class="auth-body">
-        <p id="loginHint" class="auth-hint">Devam etmek için parolanızı girin.</p>
+      <p id="loginHint" class="muted small" style="margin-bottom:16px;">Devam etmek için cihaz parolanızı girin.</p>
 
-        <div class="form-group">
-          <label for="pw">Cihaz Parolası</label>
-          <input id="pw" type="password" placeholder="••••••••" autocomplete="current-password">
-        </div>
-
-        <div class="form-group" id="pw2Group">
-          <label for="pw2" id="pw2Label" class="hidden">Parola (Tekrar)</label>
-          <input id="pw2" type="password" class="hidden" placeholder="••••••••" autocomplete="new-password">
-        </div>
-
-        <button id="loginBtn" class="btn btn-primary btn-block">Giriş Yap</button>
-        <p id="loginErr" class="form-feedback err"></p>
+      <div class="form-group">
+        <label for="pw">Cihaz Parolası</label>
+        <input id="pw" type="password" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <div class="form-group hidden" id="pw2Label">
+        <label for="pw2">Parolayı Tekrarlayın</label>
+        <input id="pw2" class="hidden" type="password" autocomplete="new-password" placeholder="••••••••">
       </div>
 
-      <div class="auth-footer">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-        </svg>
-        <span>Yerel Ağ Güvenliği (İnternete Açmayın)</span>
-      </div>
+      <button id="loginBtn" class="btn btn-primary btn-block btn-lg">Giriş Yap</button>
+      <p id="loginErr" class="form-feedback"></p>
+
+      <p class="auth-foot">🔒 Yerel ağ bağlantısı — cihazı internete açmayın</p>
     </div>
   </div>
 </section>
@@ -91,10 +100,12 @@
   <header class="app-header">
     <div class="header-inner">
       <div class="header-brand">
-        <svg class="brand-icon-sm" viewBox="0 0 32 32" width="24" height="24" fill="none">
-          <path d="M16 4C9.5 4 5 8.5 5 14c0 6 11 14 11 14s11-8 11-14c0-5.5-4.5-10-11-10z" stroke="#10b981" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M16 8v12M16 13l-4-3M16 16l4-3" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
-        </svg>
+        <span class="brand-mark">
+          <svg viewBox="0 0 32 32" width="21" height="21" fill="none" aria-hidden="true">
+            <path d="M16 5C10.5 5 6 9.5 6 15c0 6 10 13.5 10 13.5s10-7.5 10-13.5c0-5.5-4.5-10-10-10z" stroke-width="2.2" stroke-linecap="round" style="stroke:var(--accent)"/>
+            <path d="M16 10v10M16 14l-3-2M16 17l3-2" stroke-width="2" stroke-linecap="round" style="stroke:var(--accent)"/>
+          </svg>
+        </span>
         <span class="header-title">SALIXUS</span>
         <span class="header-tag" id="headCropTag">SERA</span>
       </div>
@@ -102,125 +113,182 @@
       <div class="header-status">
         <div class="status-pill" id="connPill">
           <span class="status-dot"></span>
-          <span id="connLabel" class="status-text">Canlı</span>
+          <span id="connLabel">Canlı</span>
         </div>
-        <div class="mode-pill" id="headModePill">
-          <span id="headMode">Çalışıyor</span>
-        </div>
+        <div class="mode-pill" id="headModePill"><span id="headMode">Çalışıyor</span></div>
+        <!-- Tema anahtarı BAŞLIKTA: en sık kullanılan görünüm ayarı, üç
+             dokunuş uzakta olmamalı. Ayarlar → Görünüm'de de var. -->
+        <button id="themeBtn" class="btn-icon btn" type="button" title="Temayı değiştir" aria-label="Temayı değiştir">
+          <svg id="themeIcon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"></svg>
+        </button>
       </div>
     </div>
 
-    <nav class="tabs-nav" role="tablist">
-      <button class="tab-btn active" data-view="garden" role="tab">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22V12"></path><path d="M12 12c0-4 3-7 7-7 0 4-3 7-7 7z"></path><path d="M12 16c0-3-2.5-5-5.5-5 0 3 2.5 5 5.5 5z"></path></svg>
+    <nav class="tabs-nav" role="tablist" aria-label="Ana gezinme">
+      <button class="tab-btn active" data-view="home" role="tab" aria-selected="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"></path><path d="M5 9.5V21h14V9.5"></path></svg>
         <span>Bahçem</span>
       </button>
-      <button class="tab-btn" data-view="control" role="tab">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+      <button class="tab-btn" data-view="plant" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M12 22V11"></path><path d="M12 11c0-4 3-7 7-7 0 4-3 7-7 7z"></path><path d="M12 15c0-3-2.5-5-5.5-5 0 3 2.5 5 5.5 5z"></path></svg>
+        <span>Bitkim</span>
+      </button>
+      <button class="tab-btn" data-view="control" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
         <span>Kontrol</span>
       </button>
-      <button class="tab-btn" data-view="settings" role="tab">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      <button class="tab-btn" data-view="settings" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.1 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z"></path></svg>
         <span>Ayarlar</span>
-      </button>
-
-      <button class="tab-btn" data-view="charts" data-expert="1" role="tab">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"></path><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path></svg>
-        <span>Grafikler</span>
-      </button>
-      <button class="tab-btn" data-view="network" data-expert="1" role="tab">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
-        <span>Ağ</span>
-      </button>
-      <button class="tab-btn" data-view="advanced" data-expert="1" role="tab">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10"></path><path d="M4 12h16"></path><path d="M4 18h7"></path><circle cx="18" cy="6" r="2"></circle><circle cx="15" cy="18" r="2"></circle></svg>
-        <span>Gelişmiş</span>
-      </button>
-      <button class="tab-btn" data-view="diagnostics" data-expert="1" role="tab">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
-        <span>Teşhis</span>
       </button>
     </nav>
   </header>
 
   <main class="content-wrapper">
 
-    <!-- ══ BAHÇEM ═══════════════════════════════════════════════════════ -->
-    <div id="v-garden" class="page">
-      <!-- Tek cümlelik genel durum: kullanıcının bakması gereken TEK yer -->
-      <div id="headline" class="headline">
-        <div class="headline-icon" id="headlineIcon">🌱</div>
-        <div class="headline-text">
-          <b id="headlineTitle">Bağlanıyor…</b>
-          <span id="headlineSub" class="muted small">Cihazdan durum bekleniyor</span>
+    <!-- ══ BAHÇEM — bir bakışta bahçenin durumu ═════════════════════════ -->
+    <div id="v-home" class="page">
+
+      <!--
+        Kahraman kart. Kullanıcının bakması gereken TEK yer:
+        halka = genel sağlık · başlık = ne olduğu · alt satır = ne yapılacağı
+        `cropCard` = gelişim yolculuğu (ürün seçilmemişse kurulum çağrısı)
+      -->
+      <div id="headline" class="hero">
+        <div class="hero-top">
+          <div class="ring" id="heroRing">
+            <div class="ring-inner">
+              <span class="ring-emoji" id="headlineIcon">🌱</span>
+              <span class="ring-pct" id="heroPct"></span>
+              <span class="ring-cap" id="heroCap"></span>
+            </div>
+          </div>
+          <div class="hero-head">
+            <div class="hero-crop" id="heroCrop">Bahçem</div>
+            <!--
+              Canlılık göstergesi. Yalnızca cihaz GERÇEKTEN canlı veri
+              gönderirken hareket eder; bağlantı koptuğunda ya da sistem
+              duraklatıldığında donar ve nedenini yazar. Hareket eden bir
+              gösterge "her şey akıyor" demektir — bunu bayat veriyle
+              söylemek yalan olurdu.
+            -->
+            <div class="hero-life" id="heroLife" hidden>
+              <span class="life-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span id="heroLifeText"></span>
+            </div>
+            <div class="hero-title" id="headlineTitle">Bağlanıyor…</div>
+            <div class="hero-sub" id="headlineSub">Cihazdan durum bekleniyor</div>
+          </div>
         </div>
+        <div id="cropCard"></div>
       </div>
 
-      <!-- Aktif ürün — profil seçilmemişse kurulum çağrısına dönüşür -->
-      <section class="section-block">
-        <div id="cropCard" class="card crop-card">
-          <p class="muted">Ürün bilgisi alınıyor…</p>
-        </div>
-      </section>
-
-      <!-- Yapılacaklar: ölçümlerden türetilen düz Türkçe tavsiyeler -->
+      <!-- Bugün yapılacaklar. HER ZAMAN çizilir — boşken de. Kullanıcının
+           "bir şey var mı?" sorusu için güvenebileceği tek bir yer olmalı;
+           kaybolan bir bölüm o güveni veremez. Kahraman kart yalnızca
+           SAYAR, metni tekrarlamaz. -->
       <section class="section-block" id="adviceBlock">
         <div class="section-header">
           <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-            <h2>Bugün ne yapmalıyım?</h2>
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+            <h2>Bugün yapılacaklar</h2>
           </div>
+          <span id="adviceCount" class="section-badge badge-ok">✓</span>
         </div>
         <div id="adviceList" class="advice-list"></div>
       </section>
 
-      <!-- Hızlı eylem: en sık yapılan iki şey -->
-      <section class="section-block">
-        <div class="quick-actions">
-          <button id="quickWater" class="btn btn-primary btn-lg">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
-            <span>Şimdi Sula</span>
-          </button>
-          <button id="quickStop" class="btn btn-outline btn-lg">Sulamayı Durdur</button>
-        </div>
-        <p id="quickMsg" class="form-feedback"></p>
-      </section>
-
-      <!-- Ölçümler: trafik ışığı + düz cümle -->
+      <!-- Bugünkü ölçümler — kompakt. Ayrıntı Bitkim ekranında. -->
       <section class="section-block">
         <div class="section-header">
           <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-width="2" aria-hidden="true"><path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z"></path></svg>
+            <h2>Bugün</h2>
+          </div>
+          <button class="btn btn-sm btn-ghost" data-goto="plant">Tümü ›</button>
+        </div>
+        <div class="vitals" id="vitals"></div>
+      </section>
+
+      <!-- Şu anda ne çalışıyor -->
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-width="2" aria-hidden="true"><path d="M13 2 4.1 12.9a1 1 0 0 0 .8 1.6H11l-1 7.5 8.9-10.9a1 1 0 0 0-.8-1.6H12z"></path></svg>
+            <h2>Şu anda</h2>
+          </div>
+          <button class="btn btn-sm btn-ghost" data-goto="control">Kontrol ›</button>
+        </div>
+        <div class="card" id="runningCard"><p class="muted small">Yükleniyor…</p></div>
+      </section>
+
+      <!-- En sık yapılan iki şey -->
+      <section class="section-block">
+        <div class="btn-group" style="margin-top:0;">
+          <button id="quickWater" class="btn btn-primary" style="flex:1 1 160px;">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z"></path></svg>
+            <span>Şimdi Sula</span>
+          </button>
+          <button id="quickStop" class="btn btn-outline" style="flex:1 1 160px;">Sulamayı Durdur</button>
+        </div>
+        <p id="quickMsg" class="form-feedback"></p>
+      </section>
+    </div>
+
+    <!-- ══ BİTKİM — ölçümler + geçmiş ═══════════════════════════════════ -->
+    <div id="v-plant" class="page hidden">
+      <section class="section-block">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-width="2" aria-hidden="true"><path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z"></path></svg>
             <h2>Ölçümler</h2>
           </div>
           <span class="section-badge">Canlı</span>
         </div>
-        <div class="grid sensor-grid" id="sensorGrid">
-          <div class="card skeleton-card"><p class="muted">Sensör verileri alınıyor…</p></div>
+        <p class="section-note">
+          Renkli nokta ve alt satır, ölçümün <b>yetiştirdiğiniz ürünün o dönemdeki
+          hedef aralığına</b> göre yorumudur. Ürün seçilmemişse yalnızca sayı
+          gösterilir — sisteme ait olmayan bir "ideal" uydurulmaz.
+        </p>
+        <div class="crop-chips" id="cropTargets" style="margin:0 4px 12px;"></div>
+        <div class="sensor-grid" id="sensorGrid">
+          <div class="card skeleton-card">Sensör verileri alınıyor…</div>
         </div>
       </section>
 
-      <!-- Sistem sayaçları: yalnızca uzman modunda -->
-      <section class="section-block" data-expert="1">
+      <!--
+        Geçmiş grafiği artık UZMAN MODUNA BAĞLI DEĞİL. "Sıcaklık gece düşüyor
+        mu" sorusu teknik bir soru değildir; grafiği gizlemek fazla düzeltmeydi.
+      -->
+      <section class="section-block">
         <div class="section-header">
           <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            <h2>Sistem</h2>
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path></svg>
+            <h2>Geçmiş</h2>
           </div>
+          <button id="chartRefreshBtn" class="btn btn-sm">Yenile</button>
         </div>
-        <div class="stats-grid">
-          <div class="card stat-card">
-            <div class="stat-info"><span class="stat-label">Sistem Modu</span><b id="sMode" class="stat-val">—</b></div>
+        <div class="card chart-card">
+          <div class="chart-controls">
+            <!-- Sıra ve kapsam cihazdaki `SLOT_ORDER` ile aynıdır
+                 (`services/HistoryStore.h`). -->
+            <div class="sensor-selectors" id="chartSensors">
+              <button class="chip-btn active" data-sensor="ph">pH</button>
+              <button class="chip-btn" data-sensor="ec">Besin</button>
+              <button class="chip-btn" data-sensor="waterTemp">Su Sıc.</button>
+              <button class="chip-btn" data-sensor="airTemp">Hava Sıc.</button>
+              <button class="chip-btn" data-sensor="humidity">Nem</button>
+              <button class="chip-btn" data-sensor="light">Işık</button>
+              <button class="chip-btn" data-sensor="flow">Akış</button>
+              <button class="chip-btn" data-sensor="level">Seviye</button>
+            </div>
           </div>
-          <div class="card stat-card">
-            <div class="stat-info"><span class="stat-label">Çalışma Süresi</span><b id="sUptime" class="stat-val">—</b></div>
+          <div class="chart-stats" id="chartStats"></div>
+          <div class="chart-canvas-wrapper">
+            <canvas id="historyCanvas" height="240" aria-label="Geçmiş ölçüm grafiği"></canvas>
+            <div id="chartTooltip" class="chart-tooltip hidden"></div>
           </div>
-          <div class="card stat-card">
-            <div class="stat-info"><span class="stat-label">Cihaz Saati</span><b id="sClock" class="stat-val">—</b></div>
-          </div>
-          <div class="card stat-card">
-            <div class="stat-info"><span class="stat-label">Boş Bellek</span><b id="sHeap" class="stat-val">—</b></div>
-          </div>
+          <p class="chart-meta-info" id="chartMeta"><span class="muted small">Yükleniyor…</span></p>
         </div>
       </section>
     </div>
@@ -230,48 +298,43 @@
       <section class="section-block">
         <div class="section-header">
           <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke-width="2" aria-hidden="true"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
             <h2>Cihazlar</h2>
           </div>
           <span class="muted small">Gerçek röle durumu</span>
         </div>
-        <p class="section-note muted small">
-          Butona bastığınızda kart <b>BEKLİYOR</b> yazar ve yalnızca cihaz
-          gerçekten açtığında <b>ÇALIŞIYOR</b>'a döner. Bir cihaz açılmıyorsa
-          nedeni kartın üzerinde yazar.
+        <p class="section-note">
+          Düğmeye bastığınızda komut <b>cihaza</b> gider; cihaz güvenlik
+          kilitlerini kontrol edip röleyi sürer. Kart bu sırada
+          <b>cihaz uyguluyor</b> yazar ve yalnızca röle <b>gerçekten</b>
+          kapandığında <b>çalışıyor</b>'a döner — sizden bir onay beklenmez.
+          Bir cihaz açılmıyorsa nedeni kartın üzerinde yazar.
         </p>
-        <div class="grid act-grid" id="actuatorGrid">
-          <div class="card skeleton-card"><p class="muted">Cihazlar yükleniyor…</p></div>
+        <div class="device-list" id="actuatorGrid">
+          <div class="card skeleton-card">Cihazlar yükleniyor…</div>
         </div>
       </section>
 
       <section class="section-block">
         <div class="card danger-card">
           <div class="danger-header">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#ef4444" stroke-width="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-              <line x1="12" y1="9" x2="12" y2="13"></line>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke-width="2" aria-hidden="true">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>
             </svg>
             <div>
               <h3>Acil Durdurma</h3>
-              <p class="muted small">
-                Tüm cihazları anında keser ve kilitler. Sistem yalnızca sizin
-                onayınızla ve koşullar güvenliyse normale döner.
-              </p>
+              <p class="muted small">Tüm cihazları anında keser ve kilitler. Sistem yalnızca
+                sizin onayınızla ve koşullar güvenliyse normale döner.</p>
             </div>
           </div>
-          <!--
-            Aktif kilitler BASMADAN ÖNCE burada listelenir. Eskiden kullanıcı
-            "Temizle"ye basıyor, komut kuyruğa alınıyor, cihaz koşullar
-            düzelmediği için reddediyor ve bunu yalnızca olay günlüğüne
-            yazıyordu — düğme "işe yaramıyor" görünüyordu (TASK-074).
-          -->
-          <div id="interlockList" class="advice-list hidden"></div>
+
+          <!-- Aktif kilitler BASMADAN ÖNCE burada listelenir (TASK-074). -->
+          <div id="interlockList" class="advice-list hidden" style="margin-bottom:14px;"></div>
 
           <div class="danger-actions">
             <button id="estopBtn" class="btn btn-danger btn-lg">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><rect x="9" y="9" width="6" height="6"></rect></svg>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><rect x="9" y="9" width="6" height="6" rx="1"></rect></svg>
               <span>ACİL DURDUR</span>
             </button>
             <button id="eclearBtn" class="btn btn-outline">Acil Durumu Temizle</button>
@@ -281,119 +344,277 @@
       </section>
     </div>
 
-    <!-- ══ AYARLAR (BASİT) ══════════════════════════════════════════════ -->
+    <!-- ══ AYARLAR — kategori listesi ═══════════════════════════════════ -->
     <div id="v-settings" class="page hidden">
-      <!-- Ürün -->
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 22V12"></path><path d="M12 12c0-4 3-7 7-7 0 4-3 7-7 7z"></path></svg>
-            <h2>Ne yetiştiriyorsunuz?</h2>
-          </div>
-        </div>
-        <div class="card form-card" id="cropSettingsCard">
-          <p class="muted">Yükleniyor…</p>
-        </div>
-      </section>
+      <div class="settings-list">
+        <button class="settings-row" data-set="crop">
+          <span class="settings-ico">🌱</span>
+          <span class="settings-txt"><b>Bahçe</b><span>Ürün, gelişim dönemi, sulama yoğunluğu</span></span>
+          <svg class="settings-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+        </button>
+        <button class="settings-row" data-set="hardware">
+          <span class="settings-ico">🔌</span>
+          <span class="settings-txt"><b>Donanım</b><span>Hangi sensörler ve cihazlar bağlı</span></span>
+          <svg class="settings-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+        </button>
+        <button class="settings-row" data-set="automation">
+          <span class="settings-ico">🤖</span>
+          <span class="settings-txt"><b>Otomasyon</b><span>Program kendisi çalışsın mı</span></span>
+          <svg class="settings-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+        </button>
+        <button class="settings-row" data-set="network">
+          <span class="settings-ico">📡</span>
+          <span class="settings-txt"><b>Bağlantı</b><span>Wi-Fi ağı ve bağlantı durumu</span></span>
+          <svg class="settings-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+        </button>
+        <button class="settings-row" data-set="appearance">
+          <span class="settings-ico">🎨</span>
+          <span class="settings-txt"><b>Görünüm</b><span>Açık / koyu tema, uzman modu</span></span>
+          <svg class="settings-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+        </button>
+        <button class="settings-row" data-set="account">
+          <span class="settings-ico">🔒</span>
+          <span class="settings-txt"><b>Parola</b><span>Cihaz parolası, oturum</span></span>
+          <svg class="settings-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+        </button>
+        <button class="settings-row" data-set="system">
+          <span class="settings-ico">🧰</span>
+          <span class="settings-txt"><b>Sistem</b><span>Cihaz bilgisi, teşhis, fabrika ayarları</span></span>
+          <svg class="settings-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+        </button>
+      </div>
+    </div>
 
-      <!-- Takılı sensörler -->
+    <!-- ══ AYARLAR › BAHÇE ══════════════════════════════════════════════ -->
+    <div id="v-set-crop" class="page hidden">
+      <div class="subpage-head">
+        <button class="btn btn-icon" data-back="1" aria-label="Geri">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+        </button>
+        <h2>Bahçe</h2>
+      </div>
       <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
-            <h2>Takılı sensörler</h2>
-          </div>
-        </div>
-        <p class="section-note muted small">
+        <p class="section-note">
+          Ne yetiştirdiğinizi söyleyin; cihaz o bitkinin hedef pH/besin
+          değerlerini, sulama programını ve ışık süresini sizin için kursun.
+        </p>
+        <div class="card form-card" id="cropSettingsCard"><p class="muted">Yükleniyor…</p></div>
+      </section>
+    </div>
+
+    <!-- ══ AYARLAR › DONANIM ════════════════════════════════════════════ -->
+    <div id="v-set-hardware" class="page hidden">
+      <div class="subpage-head">
+        <button class="btn btn-icon" data-back="1" aria-label="Geri">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+        </button>
+        <h2>Donanım</h2>
+      </div>
+
+      <section class="section-block">
+        <div class="section-header"><div class="section-title-wrap"><h2>Takılı sensörler</h2></div></div>
+        <p class="section-note">
           Yalnızca gerçekten <b>bağlı</b> olanları işaretleyin. İşaretlenmemiş
-          bir sensör okunmaz ve "takılı değil" olarak görünür; işaretlenip de
-          takılı olmayan bir sensör "okunamıyor" der.
+          bir sensör okunmaz ve "takılı değil" görünür; işaretlenip de takılı
+          olmayan bir sensör "okunamıyor" der.
           <br>Su seviyesi ve su akışı burada <b>yok</b>: ikisi güvenlik
           zincirinin girdisidir ve kapatılamaz.
         </p>
-        <div class="card form-card" id="sensorCard">
-          <p class="muted">Yükleniyor…</p>
-        </div>
+        <div class="card form-card" id="sensorCard"><p class="muted">Yükleniyor…</p></div>
       </section>
 
-      <!-- Bağlı donanım -->
       <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M9 9h6v6H9z"></path></svg>
-            <h2>Bağlı cihazlar</h2>
-          </div>
-        </div>
-        <p class="section-note muted small">
+        <div class="section-header"><div class="section-title-wrap"><h2>Bağlı cihazlar</h2></div></div>
+        <p class="section-note">
           Yalnızca gerçekten <b>kablolu</b> olanları işaretleyin. Bağlı olmayan
           bir cihaz için kural üretilmez — arayüzde açılıp hiçbir şey yapmayan
           bir düğme kalmasın diye.
         </p>
-        <div class="card form-card" id="hardwareCard">
-          <p class="muted">Yükleniyor…</p>
-        </div>
+        <div class="card form-card" id="hardwareCard"><p class="muted">Yükleniyor…</p></div>
       </section>
 
-      <!-- Otomatik mod -->
+      <!-- Kalibrasyon: ölçüm doğruluğu donanım konusudur, uzman işidir. -->
+      <section class="section-block" data-expert="1">
+        <div class="section-header">
+          <div class="section-title-wrap"><h2>Sensör Kalibrasyonu</h2></div>
+          <span class="section-badge">Uzman</span>
+        </div>
+        <p class="section-note">
+          İşlenmiş değer = <b>ham × ölçek + kayma</b>. pH probu için iki nokta
+          (pH 4 / pH 7) kalibrasyonu bu iki alana indirgenir.
+          <b>Geçerli aralık</b> fiziksel olarak mümkün olan sınırdır — hedef
+          aralık DEĞİLDİR; dışına çıkan ölçüm kullanılamaz sayılır ve o sensöre
+          bağlı kurallar çalışmaz.
+        </p>
+        <div class="cfg-act-grid" id="sensorConfigForm">
+          <div class="card skeleton-card">Yükleniyor…</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ══ AYARLAR › OTOMASYON ══════════════════════════════════════════ -->
+    <div id="v-set-automation" class="page hidden">
+      <div class="subpage-head">
+        <button class="btn btn-icon" data-back="1" aria-label="Geri">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+        </button>
+        <h2>Otomasyon</h2>
+      </div>
+
       <section class="section-block">
         <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="7"></circle><path d="M12 8v4l2.5 2.5"></path></svg>
-            <h2>Otomatik çalışma</h2>
-          </div>
+          <div class="section-title-wrap"><h2>Otomatik çalışma</h2></div>
           <span class="section-badge" id="autoBadge">—</span>
         </div>
-        <div class="card form-card" id="automationForm">
-          <p class="muted">Yükleniyor…</p>
+        <div class="card form-card" id="automationForm"><p class="muted">Yükleniyor…</p></div>
+      </section>
+
+      <section class="section-block" data-expert="1">
+        <div class="section-header">
+          <div class="section-title-wrap"><h2>Sulama Programı</h2></div>
+          <span class="section-badge" id="rulesBadge">—</span>
+        </div>
+        <p class="section-note">
+          Kurallar <b>veri</b>, motor <b>koddur</b>. Bir kural yalnızca
+          <b>"şu cihaz açık olsun"</b> der; asgari/azami süre, bekleme ve
+          güvenlik kilitleri kuralın <b>dışında</b> uygulanır. Kurallar yalnızca
+          <b>otomatik</b> modda değerlendirilir.
+          <br><b>Not:</b> kuralları elle değiştirdiğinizde ürün profili
+          <b>özel</b>'e düşer ve dönem otomatik ilerlemesi durur.
+        </p>
+        <div id="rulesList"><div class="card skeleton-card">Kurallar yükleniyor…</div></div>
+        <div class="btn-group">
+          <button id="addRule" class="btn btn-secondary">+ Kural Ekle</button>
+          <button id="saveRules" class="btn btn-primary">Kuralları Kaydet</button>
+          <button id="reloadRules" class="btn btn-outline">Cihazdan Yeniden Yükle</button>
+        </div>
+        <p id="rulesMsg" class="form-feedback"></p>
+      </section>
+
+      <section class="section-block" data-expert="1">
+        <div class="section-header">
+          <div class="section-title-wrap"><h2>Cihaz Süre Kısıtları</h2></div>
+          <span class="section-badge">Donanım Koruması</span>
+        </div>
+        <p class="section-note">
+          Bu kısıtları <b>ActuatorManager</b> uygular; otomasyon motoru bunları
+          bilmez. Güvenlik kilidi bu kısıtları <b>ezer</b>: izin kalkarsa asgari
+          süre beklenmeden derhal durur.
+        </p>
+        <div class="cfg-act-grid" id="actuatorConfigForm">
+          <div class="card skeleton-card">Yükleniyor…</div>
         </div>
       </section>
 
-      <!-- Wi-Fi -->
-      <section class="section-block">
+      <section class="section-block" data-expert="1">
         <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
-            <h2>Wi-Fi</h2>
-          </div>
+          <div class="section-title-wrap"><h2>Güvenlik Eşikleri</h2></div>
+          <span class="section-badge">Uzman</span>
         </div>
+        <div class="card form-card" id="safetyForm"><p class="muted">Yükleniyor…</p></div>
+      </section>
+    </div>
+
+    <!-- ══ AYARLAR › BAĞLANTI ═══════════════════════════════════════════ -->
+    <div id="v-set-network" class="page hidden">
+      <div class="subpage-head">
+        <button class="btn btn-icon" data-back="1" aria-label="Geri">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+        </button>
+        <h2>Bağlantı</h2>
+      </div>
+
+      <section class="section-block">
         <div class="card">
           <div class="scan-header">
             <button id="scanBtn" class="btn btn-secondary">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21.5 2v6h-6"></path><path d="M21.3 15.6a10 10 0 1 1-.5-8.4"></path></svg>
               <span>Ağları Tara</span>
             </button>
-            <span id="scanStatus" class="scan-status-text muted small"></span>
+            <span id="scanStatus" class="muted small"></span>
           </div>
           <div class="scan-list-wrapper"><ul id="scanList" class="scan-list"></ul></div>
-          <div class="wifi-form">
-            <div class="form-group">
-              <label for="ssid">Ağ Adı (SSID)</label>
-              <input id="ssid" type="text" placeholder="Wi-Fi ağ adı" autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="wifiPw">Wi-Fi Parolası</label>
-              <input id="wifiPw" type="password" placeholder="••••••••" autocomplete="off">
-            </div>
-            <div class="btn-group">
-              <button id="saveWifi" class="btn btn-primary">Kaydet ve Bağlan</button>
-              <button id="retryNow" class="btn btn-secondary" data-expert="1">Şimdi Dene</button>
-              <button id="forgetWifi" class="btn btn-outline-danger" data-expert="1">Ağı Unut</button>
-            </div>
-            <p id="netMsg" class="form-feedback"></p>
+          <div class="form-group" style="margin-top:14px;">
+            <label for="ssid">Ağ Adı</label>
+            <input id="ssid" type="text" placeholder="Wi-Fi ağ adı" autocomplete="off">
           </div>
+          <div class="form-group">
+            <label for="wifiPw">Wi-Fi Parolası</label>
+            <input id="wifiPw" type="password" placeholder="••••••••" autocomplete="off">
+          </div>
+          <div class="btn-group">
+            <button id="saveWifi" class="btn btn-primary">Kaydet ve Bağlan</button>
+            <button id="retryNow" class="btn btn-secondary" data-expert="1">Şimdi Dene</button>
+            <button id="forgetWifi" class="btn btn-outline-danger" data-expert="1">Ağı Unut</button>
+          </div>
+          <p id="netMsg" class="form-feedback"></p>
         </div>
       </section>
 
-      <!-- Parola -->
       <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-            <h2>Parola</h2>
+        <div class="section-header"><div class="section-title-wrap"><h2>Bağlantı Durumu</h2></div></div>
+        <div class="card" id="netCard"><p class="muted">Ağ bilgileri alınıyor…</p></div>
+      </section>
+    </div>
+
+    <!-- ══ AYARLAR › GÖRÜNÜM ════════════════════════════════════════════ -->
+    <div id="v-set-appearance" class="page hidden">
+      <div class="subpage-head">
+        <button class="btn btn-icon" data-back="1" aria-label="Geri">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+        </button>
+        <h2>Görünüm</h2>
+      </div>
+
+      <section class="section-block">
+        <div class="section-header"><div class="section-title-wrap"><h2>Tema</h2></div></div>
+        <div class="card form-card">
+          <div class="seg seg-wrap" id="themeSeg" role="group" aria-label="Tema seçimi">
+            <button class="seg-btn" data-theme-pick="light">☀️ Açık</button>
+            <button class="seg-btn" data-theme-pick="dark">🌙 Koyu</button>
+            <button class="seg-btn" data-theme-pick="auto">🖥 Sistem</button>
+          </div>
+          <span class="field-hint dim">
+            Seçiminiz bu tarayıcıda saklanır ve sayfa yenilendiğinde, bağlantı
+            koptuğunda veya cihaz yeniden başladığında korunur. <b>Sistem</b>
+            seçiliyken telefonunuzun/bilgisayarınızın gece modunu izler.
+          </span>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header"><div class="section-title-wrap"><h2>Uzman modu</h2></div></div>
+        <div class="card form-card">
+          <div class="switch-row">
+            <div>
+              <b>Teknik ayarları göster</b>
+              <p class="muted small">
+                Sulama programı düzenleyicisi, cihaz süre kısıtları, güvenlik
+                eşikleri, sensör kalibrasyonu, sistem parametreleri ve teşhis
+                ekranlarını açar. Hiçbir şey silinmedi — yalnızca varsayılan
+                olarak gizli.
+              </p>
+            </div>
+            <label class="switch">
+              <input id="expertToggle" type="checkbox" aria-label="Uzman modu">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
           </div>
         </div>
+      </section>
+    </div>
+
+    <!-- ══ AYARLAR › PAROLA ═════════════════════════════════════════════ -->
+    <div id="v-set-account" class="page hidden">
+      <div class="subpage-head">
+        <button class="btn btn-icon" data-back="1" aria-label="Geri">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+        </button>
+        <h2>Parola</h2>
+      </div>
+      <section class="section-block">
         <div class="card form-card">
-          <p class="section-note muted small">
+          <p class="section-note" style="margin-left:0;">
             Parola değiştiğinde <b>tüm oturumlar kapanır</b> — bu tarayıcı dahil.
             Bağlantı şifreli değildir (HTTPS yok): parolayı yalnızca güvendiğiniz
             bir ağdayken değiştirin.
@@ -417,30 +638,66 @@
           <p id="pwMsg" class="form-feedback"></p>
         </div>
       </section>
+    </div>
 
-      <!-- Uzman modu anahtarı -->
+    <!-- ══ AYARLAR › SİSTEM ═════════════════════════════════════════════ -->
+    <div id="v-set-system" class="page hidden">
+      <div class="subpage-head">
+        <button class="btn btn-icon" data-back="1" aria-label="Geri">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+        </button>
+        <h2>Sistem</h2>
+      </div>
+
       <section class="section-block">
-        <div class="card form-card expert-toggle-card">
-          <div>
-            <h3>Uzman modu</h3>
-            <p class="muted small">
-              Grafikler, ağ detayları, kural düzenleyici, cihaz süre kısıtları,
-              güvenlik eşikleri ve teşhis ekranlarını açar. Hiçbir şey
-              silinmedi — yalnızca varsayılan olarak gizli.
-            </p>
-          </div>
-          <label class="switch">
-            <input id="expertToggle" type="checkbox">
-            <span class="switch-track"><span class="switch-thumb"></span></span>
-          </label>
+        <div class="section-header"><div class="section-title-wrap"><h2>Cihaz</h2></div></div>
+        <div class="stats-grid">
+          <div class="stat-card"><span class="stat-label">Sistem Modu</span><b id="sMode" class="stat-val">—</b></div>
+          <div class="stat-card"><span class="stat-label">Çalışma Süresi</span><b id="sUptime" class="stat-val">—</b></div>
+          <div class="stat-card"><span class="stat-label">Cihaz Saati</span><b id="sClock" class="stat-val">—</b></div>
+          <div class="stat-card"><span class="stat-label">Boş Bellek</span><b id="sHeap" class="stat-val">—</b></div>
         </div>
       </section>
 
-      <!-- Fabrika -->
+      <section class="section-block" data-expert="1">
+        <div class="section-header">
+          <div class="section-title-wrap"><h2>Sistem Parametreleri</h2></div>
+          <span class="section-badge">Uzman</span>
+        </div>
+        <div class="card form-card" id="systemForm"><p class="muted">Yükleniyor…</p></div>
+      </section>
+
+      <section class="section-block" data-expert="1">
+        <div class="section-header">
+          <div class="section-title-wrap"><h2>Görev Sağlığı</h2></div>
+          <button id="refreshDiag" class="btn btn-sm">Yenile</button>
+        </div>
+        <div class="task-grid" id="tasksCard">
+          <div class="card skeleton-card">Görev verileri alınıyor…</div>
+        </div>
+      </section>
+
+      <section class="section-block" data-expert="1">
+        <div class="section-header"><div class="section-title-wrap"><h2>Aktif Hatalar</h2></div></div>
+        <div class="card" id="faultCard"><p class="muted">Aktif hata taranıyor…</p></div>
+      </section>
+
+      <section class="section-block" data-expert="1">
+        <div class="section-header"><div class="section-title-wrap"><h2>Olay Günlüğü</h2></div></div>
+        <div class="card table-card">
+          <div class="table-responsive">
+            <table class="log-table">
+              <thead><tr><th>Zaman</th><th>Olay</th><th>Detay</th></tr></thead>
+              <tbody id="logBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <section class="section-block">
         <div class="card danger-card">
           <div class="danger-header">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ef4444" stroke-width="2">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke-width="2" aria-hidden="true">
               <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
             </svg>
             <div>
@@ -453,184 +710,6 @@
       </section>
     </div>
 
-    <!-- ══ GRAFİKLER (UZMAN) ════════════════════════════════════════════ -->
-    <div id="v-charts" class="page hidden">
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M3 3v18h18"></path><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path></svg>
-            <h2>Geçmiş Ölçümler</h2>
-          </div>
-          <button id="chartRefreshBtn" class="btn btn-sm">Yenile</button>
-        </div>
-        <div class="card chart-card">
-          <div class="chart-controls">
-            <!--
-              Sıra ve kapsam cihazdaki `SLOT_ORDER` ile aynıdır
-              (`services/HistoryStore.h`). Bir sensör oraya eklenirse buraya
-              da eklenmeli; aksi hâlde kaydedilir ama çizilemez.
-            -->
-            <div class="sensor-selectors" id="chartSensors">
-              <button class="chip-btn active" data-sensor="ph">pH</button>
-              <button class="chip-btn" data-sensor="ec">Besin (EC)</button>
-              <button class="chip-btn" data-sensor="waterTemp">Su Sıcaklığı</button>
-              <button class="chip-btn" data-sensor="airTemp">Hava Sıcaklığı</button>
-              <button class="chip-btn" data-sensor="humidity">Nem</button>
-              <button class="chip-btn" data-sensor="light">Işık</button>
-              <button class="chip-btn" data-sensor="flow">Su Akışı</button>
-              <button class="chip-btn" data-sensor="level">Su Seviyesi</button>
-            </div>
-            <div class="chart-meta-info" id="chartMeta"><span class="muted small">Yükleniyor…</span></div>
-          </div>
-          <div class="chart-canvas-wrapper">
-            <canvas id="historyCanvas" height="260"></canvas>
-            <div id="chartTooltip" class="chart-tooltip hidden"></div>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <!-- ══ AĞ (UZMAN) ═══════════════════════════════════════════════════ -->
-    <div id="v-network" class="page hidden">
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
-            <h2>Ağ Durumu</h2>
-          </div>
-        </div>
-        <div class="card net-status-card" id="netCard"><p class="muted">Ağ bilgileri alınıyor…</p></div>
-      </section>
-    </div>
-
-    <!-- ══ GELİŞMİŞ (UZMAN) ═════════════════════════════════════════════ -->
-    <div id="v-advanced" class="page hidden">
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            <h2>Güvenlik Eşikleri</h2>
-          </div>
-        </div>
-        <div class="card form-card" id="safetyForm"><p class="muted">Yükleniyor…</p></div>
-      </section>
-
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
-            <h2>Sensör Kalibrasyonu</h2>
-          </div>
-          <span class="section-badge">Ölçüm Doğruluğu</span>
-        </div>
-        <p class="section-note muted small">
-          İşlenmiş değer = <b>ham × ölçek + kayma</b>. pH probu için iki nokta
-          (pH 4 / pH 7) kalibrasyonu bu iki alana indirgenir.
-          <b>Geçerli aralık</b> fiziksel olarak mümkün olan sınırdır — hedef
-          aralık DEĞİLDİR; dışına çıkan ölçüm kullanılamaz sayılır ve o sensöre
-          bağlı kurallar çalışmaz.
-        </p>
-        <div class="grid cfg-act-grid" id="sensorConfigForm">
-          <div class="card skeleton-card"><p class="muted">Yükleniyor…</p></div>
-        </div>
-      </section>
-
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M4 6h10"></path><path d="M4 12h16"></path><path d="M4 18h7"></path></svg>
-            <h2>Otomasyon Kuralları</h2>
-          </div>
-          <span class="section-badge" id="rulesBadge">—</span>
-        </div>
-        <p class="section-note muted small">
-          Kurallar <b>veri</b>, motor <b>koddur</b>. Bir kural yalnızca
-          <b>"şu cihaz açık olsun"</b> der; asgari/azami süre, bekleme ve
-          güvenlik kilitleri kuralın <b>dışında</b> uygulanır. Kurallar yalnızca
-          <b>OTOMATİK</b> modda değerlendirilir.
-          <br><b>Not:</b> kuralları elle değiştirdiğinizde ürün profili
-          <b>ÖZEL</b>'e düşer ve dönem otomatik ilerlemesi durur.
-        </p>
-        <div id="rulesList"><div class="card skeleton-card"><p class="muted">Kurallar yükleniyor…</p></div></div>
-        <div class="btn-group">
-          <button id="addRule" class="btn btn-secondary">+ Kural Ekle</button>
-          <button id="saveRules" class="btn btn-primary">Kuralları Kaydet</button>
-          <button id="reloadRules" class="btn btn-outline">Cihazdan Yeniden Yükle</button>
-        </div>
-        <p id="rulesMsg" class="form-feedback"></p>
-      </section>
-
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
-            <h2>Cihaz Süre Kısıtları</h2>
-          </div>
-          <span class="section-badge">Donanım Koruması</span>
-        </div>
-        <p class="section-note muted small">
-          Bu kısıtları <b>ActuatorManager</b> uygular; otomasyon motoru bunları
-          bilmez. Güvenlik kilidi bu kısıtları <b>ezer</b>: izin kalkarsa asgari
-          süre beklenmeden derhal durur.
-        </p>
-        <div class="grid cfg-act-grid" id="actuatorConfigForm">
-          <div class="card skeleton-card"><p class="muted">Yükleniyor…</p></div>
-        </div>
-      </section>
-
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="3"></circle></svg>
-            <h2>Sistem Parametreleri</h2>
-          </div>
-        </div>
-        <div class="card form-card" id="systemForm"><p class="muted">Yükleniyor…</p></div>
-      </section>
-    </div>
-
-    <!-- ══ TEŞHİS (UZMAN) ═══════════════════════════════════════════════ -->
-    <div id="v-diagnostics" class="page hidden">
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
-            <h2>Görev Sağlığı</h2>
-          </div>
-          <button id="refreshDiag" class="btn btn-sm">Yenile</button>
-        </div>
-        <div class="grid task-grid" id="tasksCard">
-          <div class="card skeleton-card"><p class="muted">Görev verileri alınıyor…</p></div>
-        </div>
-      </section>
-
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"></circle></svg>
-            <h2>Aktif Hatalar</h2>
-          </div>
-        </div>
-        <div class="card" id="faultCard"><p class="muted">Aktif hata taranıyor…</p></div>
-      </section>
-
-      <section class="section-block">
-        <div class="section-header">
-          <div class="section-title-wrap">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
-            <h2>Olay Günlüğü</h2>
-          </div>
-        </div>
-        <div class="card table-card">
-          <div class="table-responsive">
-            <table class="log-table">
-              <thead><tr><th>Zaman</th><th>Olay</th><th>Detay</th></tr></thead>
-              <tbody id="logBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-    </div>
   </main>
 </section>
 
@@ -639,11 +718,13 @@
      her zaman bir ÖNİZLEMEDİR: cihaz `POST /api/crop/preview` ile ne
      değişeceğini söyler, kullanıcı onaylamadan hiçbir şey yazılmaz.
 -->
-<div id="wizard" class="modal hidden" role="dialog" aria-modal="true">
+<div id="wizard" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="wizTitle">
   <div class="modal-card">
     <div class="modal-head">
       <h2 id="wizTitle">Ne yetiştireceksiniz?</h2>
-      <button id="wizClose" class="btn btn-sm btn-outline">Kapat</button>
+      <button id="wizClose" class="btn btn-icon" aria-label="Kapat">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+      </button>
     </div>
     <div class="wiz-steps" id="wizSteps"></div>
     <div class="modal-body" id="wizBody"></div>
@@ -651,6 +732,36 @@
       <button id="wizBack" class="btn btn-outline">Geri</button>
       <span id="wizMsg" class="form-feedback"></span>
       <button id="wizNext" class="btn btn-primary">Devam</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Kurulum devir teslimi ────────────────────────────────────────────────
+     Cihaz ev ağına bağlandı ve yeniden başlıyor. Telefon hâlâ kurulum
+     ağında olduğu için bu ekran, kullanıcının cihaza bir daha ulaşmasını
+     sağlayan TEK bilgiyi taşır: yeni adres. Kapatma düğmesi YOKTUR —
+     yanlışlıkla kapatmak, adresi kaybetmek demektir.                       -->
+<div id="handover" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="hoTitle">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="hoTitle">✔ Kurulum tamamlandı</h2>
+    </div>
+    <div class="modal-body">
+      <p>Cihaz <b id="hoSsid">ağınıza</b> bağlandı ve yeni ayarlarıyla yeniden başlıyor.
+         Bu birkaç saniye sürer.</p>
+
+      <div class="ho-addr">
+        <span class="muted small">Cihazın yeni adresi</span>
+        <a id="hoLink" class="ho-link mono" target="_blank" rel="noopener">—</a>
+      </div>
+
+      <ol class="ho-steps">
+        <li>Telefonunuzu <b>kendi Wi-Fi ağınıza</b> geri alın — kurulum ağı kapanıyor.</li>
+        <li>Yukarıdaki adrese gidin ve aynı parolayla girin.</li>
+        <li>Adresi unutursanız cihazın ekranında yazar.</li>
+      </ol>
+
+      <p class="muted small ho-foot">Bu sayfanın bağlantısının kesilmesi normaldir.</p>
     </div>
   </div>
 </div>

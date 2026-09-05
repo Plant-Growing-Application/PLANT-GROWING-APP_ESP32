@@ -121,19 +121,47 @@ async function doLogin() {
 /// olmadan sensör kartları "iyi/kötü" diyemez, bağlı cihaz listesi olmadan
 /// kontrol kartları "bu cihaz bağlı değil" uyarısını gösteremez.
 async function afterLogin() {
+  switchView('home');
   await loadCrop();
   try { store.config = await api('/api/config'); } catch (e) { /* panel yine çizilir */ }
-  loadRules();
+  loadRules();   // panelin "kurallar hazır ama manuel modda" uyarısı için
   render();
 }
 
 // ── Başlatma ───────────────────────────────────────────────────────────────
 
 function init() {
+  // Tema İLK: `index.html` içindeki betik `<html data-theme>`'i zaten
+  // damgaladı; buradaki çağrı yalnızca kontrolleri (başlık düğmesi, seçici)
+  // o değerle eşitler.
+  applyTheme();
   applyExpertMode();
 
+  // --- Gezinme ---
   document.querySelectorAll('.tab-btn').forEach((t) => {
     t.onclick = () => switchView(t.dataset.view);
+  });
+
+  // Ayarlar kategorileri ve geri düğmeleri. Olay DELEGASYONU değil doğrudan
+  // bağlama: bu ögeler statiktir ve yeniden çizilmezler.
+  document.querySelectorAll('[data-set]').forEach((b) => {
+    b.onclick = () => openSettings(b.dataset.set);
+  });
+  document.querySelectorAll('[data-back]').forEach((b) => {
+    b.onclick = () => switchView('settings');
+  });
+  // `data-goto` kısayolları (ölçüm kutuları, "Tümü ›" bağlantıları) her
+  // çizimde YENİDEN ÜRETİLİR. Tek tek bağlamak, `renderVitals()` sonrası
+  // ölü dinleyiciler bırakırdı; bu yüzden delegasyon.
+  document.addEventListener('click', (ev) => {
+    const t = ev.target.closest && ev.target.closest('[data-goto]');
+    if (t) switchView(t.dataset.goto);
+  });
+
+  // --- Tema ---
+  el('themeBtn').onclick = toggleTheme;
+  document.querySelectorAll('[data-theme-pick]').forEach((b) => {
+    b.onclick = () => setTheme(b.dataset.themePick);
   });
 
   el('loginBtn').onclick = doLogin;
@@ -179,7 +207,17 @@ function init() {
       });
       el('wifiPw').value = '';
       m.className = 'form-feedback msg';
-      txt(m, '✔ Wi-Fi bilgileri kaydedildi, bağlanılıyor…');
+
+      // ── NE OLACAĞINI ÖNCEDEN SÖYLE ─────────────────────────────────────
+      // İlk kurulumda bağlantı kurulur kurulmaz cihaz kendini yeniden
+      // başlatır ve kurulum ağı kapanır (§8.4). Bunu önceden söylemezsek
+      // kullanıcı, tam da her şey yolundayken kopan bir sayfa görür ve
+      // kurulumun başarısız olduğunu sanar.
+      const inSetup = store.state && store.state.network && store.state.network.provisioning;
+      txt(m, inSetup
+        ? '✔ Kaydedildi. Cihaz ağa bağlanıyor; bağlanır bağlanmaz yeniden '
+          + 'başlayacak ve kurulum ağı kapanacak. Yeni adres bu ekranda yazacak.'
+        : '✔ Wi-Fi bilgileri kaydedildi, bağlanılıyor…');
     } catch (e) {
       m.className = 'form-feedback err';
       txt(m, e.message);

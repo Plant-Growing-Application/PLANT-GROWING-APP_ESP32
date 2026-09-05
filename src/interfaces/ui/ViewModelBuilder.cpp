@@ -4,7 +4,9 @@
 #include <string.h>
 #include <time.h>
 
+#include "core/CropProfile.h"
 #include "domain/models/SafetyState.h"
+#include "services/ConfigService.h"
 #include "services/sensors/WaterLevelSensor.h"
 
 namespace interfaces {
@@ -21,6 +23,98 @@ void copyTo(char* dst, size_t cap, const char* src)
     if (cap == 0) { return; }
     strncpy(dst, (src != nullptr) ? src : "", cap - 1);
     dst[cap - 1] = '\0';
+}
+
+/// UTF-8 Türkçe metni OLED'in basabileceği ASCII'ye indirger.
+///
+/// ── NEDEN GEREKLİ ───────────────────────────────────────────────────────────
+/// Panelin yerleşik 5×7 fontu ASCII'dir. "Çilek" kaynakta UTF-8'dir ve 'Ç'
+/// İKİ bayttır (0xC3 0x87): `print()` bunu iki ayrı bozuk glif olarak basar,
+/// ekranda "Ãilek" görünür. Dahası `textWidth()` bayt sayar, yani sağa
+/// yaslama da kayar.
+///
+/// Ekran kodunun tamamı bu yüzden zaten ASCII yazıyor ("kapali", "ACIL
+/// DURDUR"). Ürün adları ise kataloğdan geliyor ve katalog web arayüzü için
+/// düzgün Türkçe tutuyor — doğrusu da bu. Dönüşüm bu iki dünyanın sınırında,
+/// tam da modele kopyalanırken yapılır.
+///
+/// Bilinmeyen çok baytlı diziler ATILIR: bozuk glif basmaktansa harfi hiç
+/// basmamak yeğdir.
+void copyAscii(char* dst, size_t cap, const char* src)
+{
+    if (cap == 0) { return; }
+    if (src == nullptr) { dst[0] = '\0'; return; }
+
+    size_t o = 0;
+    for (size_t i = 0; src[i] != '\0' && o + 1u < cap; )
+    {
+        const unsigned char c = static_cast<unsigned char>(src[i]);
+
+        if (c < 0x80u) { dst[o++] = src[i++]; continue; }
+
+        // İki baytlık dizi: Türkçe harflerin tamamı bu aralıkta.
+        const unsigned char c2 = static_cast<unsigned char>(src[i + 1]);
+        char                r  = '\0';
+
+        if (c == 0xC3u)
+        {
+            switch (c2)
+            {
+                case 0x87u: r = 'C'; break;   // Ç
+                case 0xA7u: r = 'c'; break;   // ç
+                case 0x96u: r = 'O'; break;   // Ö
+                case 0xB6u: r = 'o'; break;   // ö
+                case 0x9Cu: r = 'U'; break;   // Ü
+                case 0xBCu: r = 'u'; break;   // ü
+                default:    r = '\0'; break;
+            }
+        }
+        else if (c == 0xC4u)
+        {
+            switch (c2)
+            {
+                case 0x9Eu: r = 'G'; break;   // Ğ
+                case 0x9Fu: r = 'g'; break;   // ğ
+                case 0xB0u: r = 'I'; break;   // İ
+                case 0xB1u: r = 'i'; break;   // ı
+                default:    r = '\0'; break;
+            }
+        }
+        else if (c == 0xC5u)
+        {
+            switch (c2)
+            {
+                case 0x9Eu: r = 'S'; break;   // Ş
+                case 0x9Fu: r = 's'; break;   // ş
+                default:    r = '\0'; break;
+            }
+        }
+
+        if (r != '\0') { dst[o++] = r; }
+
+        // Diziyi bir bütün olarak atla: devam baytlarını tek tek işlemek
+        // her birini ayrı bir bozuk karakter olarak basardı.
+        i += (c2 == '\0') ? 1u : 2u;
+    }
+    dst[o] = '\0';
+}
+
+/// Gelişim dönemi → OLED'de okunabilir KISA ad.
+///
+/// `core::stageKeyOf()` KULLANILMAZ: o, kablo üzerindeki sözlüktür
+/// ("seedling", "vegetative") ve makine okuyucular içindir. Ekranda
+/// "Cilek - vegetative" yazmak, projenin baştan sona kaçındığı jargonu
+/// tam da en dar ekrana taşımak olurdu.
+const char* stageShort(core::GrowthStage s)
+{
+    switch (s)
+    {
+        case core::GrowthStage::SEEDLING:   return "Fide";
+        case core::GrowthStage::VEGETATIVE: return "Gelisme";
+        case core::GrowthStage::FLOWERING:  return "Ciceklenme";
+        case core::GrowthStage::FRUITING:   return "Meyve";
+        default:                            return "Fide";
+    }
 }
 
 const char* labelOf(SensorId id)
@@ -210,6 +304,7 @@ void build(const core::SystemState& s, ScreenId screen, uint8_t cursor, bool edi
     out.emergency  = s.safety.emergencyLatched;
     out.rssi       = s.network.rssi;
     out.apActive   = s.network.apActive;
+    out.setupReboot = s.network.setupReboot;
     out.wifiBars   = barsFor(s.network.rssi, s.network.state == core::NetState::CONNECTED);
 
     // --- Sensörler ---
@@ -274,6 +369,62 @@ void build(const core::SystemState& s, ScreenId screen, uint8_t cursor, bool edi
     {
         snprintf(out.alertText, sizeof(out.alertText), "%u aktif hata",
                  s.system.activeFaultCount);
+    }
+
+    // --- Ürün kataloğu ve program durumu (telefonsuz kurulum) ---
+    //
+    // Katalog SABİTTİR ama modele kopyalanır: ekranların tek okuduğu yer
+    // `UiModel` olmalı (`DrawFn` sözleşmesi). Ekranın katalogda dolaşması,
+    // çizim katmanına veri erişimi sokmanın ilk adımı olurdu.
+    {
+        const core::CropConfig& cc = services::config::get().crop;
+
+        const uint8_t n = core::cropCount();
+        out.cropCount = (n > UI_CROPS) ? UI_CROPS : n;
+
+        for (uint8_t i = 0; i < out.cropCount; ++i)
+        {
+            const core::CropProfile* p = core::cropAt(i);
+            if (p == nullptr) { continue; }
+            copyAscii(out.crops[i].name, sizeof(out.crops[i].name), p->name);
+            out.crops[i].active = (p->id == cc.crop) ? 1u : 0u;
+        }
+
+        out.cropSelected = (cc.crop != core::CropId::NONE) ? 1u : 0u;
+
+        if (cc.crop == core::CropId::NONE)
+        {
+            copyTo(out.cropText, sizeof(out.cropText), "Urun secilmedi");
+        }
+        else if (cc.crop == core::CropId::CUSTOM)
+        {
+            // Kurallar elle düzenlenmiş: profil adı artık bu kural kümesini
+            // anlatmıyor, bunu söylemek gerekir.
+            copyTo(out.cropText, sizeof(out.cropText), "Ozel program");
+        }
+        else
+        {
+            const core::CropProfile* p = core::cropById(cc.crop);
+            char                     nm[12] = {0};
+            copyAscii(nm, sizeof(nm), (p != nullptr) ? p->name : "?");
+            snprintf(out.cropText, sizeof(out.cropText), "%s %s", nm,
+                     stageShort(cc.stage));
+        }
+
+        // Program yürüyor mu? Cihazın BİLDİRDİĞİ mod — config'teki istek
+        // değil (P5).
+        out.autoMode = (s.automation.mode == core::AutomationMode::AUTO) ? 1u : 0u;
+    }
+
+    // Kurulum modunda tarayıcıya yazılacak adres. AP'nin kendi IP'si
+    // sabittir; istasyon IP'si varsa o daha faydalıdır.
+    if (s.network.apActive != 0u && s.network.ipv4 == 0u)
+    {
+        copyTo(out.setupUrl, sizeof(out.setupUrl), "192.168.4.1");
+    }
+    else
+    {
+        copyTo(out.setupUrl, sizeof(out.setupUrl), out.ip);
     }
 }
 

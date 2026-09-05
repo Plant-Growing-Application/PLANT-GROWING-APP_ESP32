@@ -65,6 +65,19 @@ enum class CommandType : uint8_t
 
     /// Kayıtlı Wi-Fi bilgilerini sil (§8.2 "ağı unut")
     NETWORK_FORGET = 9,
+
+    /// Ürün profilini uygula — OLED'den ürün seçimi. target = `CropId`
+    ///
+    /// ── NEDEN KOMUT, NEDEN DOĞRUDAN ÇAĞRI DEĞİL ────────────────────────────
+    /// Profil uygulamak kural kümesini YENİDEN YAZAR ve NVS'e dokunur. `ui`
+    /// task'i bunu kendi bağlamında yapsaydı, flash yazımı boyunca ekran ve
+    /// girdi donar; üstelik `app_core` aynı anda kuralları okuyor olabilirdi.
+    /// Tek yazar kuralı (P1) gereği yol kuyruktan geçer.
+    ///
+    /// Dönem, yoğunluk ve dikim tarihi TAŞINMAZ: tek encoder ile tarih
+    /// girilmez (bkz. `Navigation.h`). `app_core` makul varsayılanları
+    /// uygular; ince ayar web arayüzünün işidir.
+    CROP_APPLY = 10,
 };
 
 /// Komut sonucu — ARCHITECTURE §10.4 sözleşmesi.

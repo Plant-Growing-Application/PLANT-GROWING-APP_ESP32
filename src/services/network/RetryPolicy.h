@@ -6,8 +6,18 @@
 // alınmadı**. Yanlış şifreyle sonsuz deneme radyo enerjisi ve CPU harcar ve
 // hiçbir zaman başarılı olmaz.
 //
-//   Taban 1 sn, ×2, TAVAN 60 sn:  1 → 2 → 4 → 8 → 16 → 32 → 60 → 60 ...
+//   Taban 1 sn, ×2, TAVAN 20 sn:  1 → 2 → 4 → 8 → 16 → 20 → 20 ...
 //   Jitter ±%20 — tavanı AŞMAZ.
+//
+// ── TAVAN NEDEN 60 SANİYE DEĞİL ─────────────────────────────────────────────
+// Tavan önce 60 sn'ydi ve sahada şu yaşandı: internet birkaç saniyeliğine
+// gitti, geri geldi — ama cihaz 60 saniyelik beklemenin ortasındaydı ve
+// dokunacak bir şey yokken bir dakika daha "bağlantı yok" gösterdi.
+//
+// Backoff'un amacı, ULAŞILAMAYAN bir ağı sonsuz denemekten kaçınmaktır;
+// kullanıcıyı bekletmek değil. 20 sn bu amacı korur (dakikada 3 deneme,
+// radyo ve CPU için ihmal edilebilir) ve ağ döndüğünde en kötü ihtimalle
+// 20 saniyede geri bağlanılır.
 //
 // **Jitter neden var:** aynı ortamdaki birden fazla cihaz elektrik kesintisi
 // sonrası aynı anda açılırsa hepsi aynı saniyelerde dener ve AP'yi gereksiz
@@ -28,7 +38,7 @@ namespace net {
 namespace retry {
 
 constexpr uint32_t BASE_DELAY_MS   = 1000u;
-constexpr uint32_t MAX_DELAY_MS    = 60000u;
+constexpr uint32_t MAX_DELAY_MS    = 20000u;  ///< tavan — gerekçe yukarıda
 constexpr uint32_t FAST_RETRY_MS   = 500u;    ///< LINK_LOST ilk denemesi
 constexpr uint8_t  MAX_AUTH_TRIES  = 3u;      ///< kimlik hatasında üst sınır
 constexpr uint32_t STABLE_MS       = 30000u;  ///< sayacı sıfırlamak için gereken süre
@@ -37,7 +47,9 @@ constexpr uint8_t  JITTER_PERCENT  = 20u;
 /// Üstel taban gecikme — jitter'sız, tavanlı.
 ///
 /// `attempt` 0'dan başlar. Kaydırma 6 ile sınırlı: `1000 << 6 = 64000` zaten
-/// tavanı aşar, daha fazla kaydırma taşma riski üretir.
+/// tavanı aşar, daha fazla kaydırma taşma riski üretir. (Tavan 20 sn'ye
+/// indikten sonra sınır 5. denemede zaten devreye girer; kaydırma sınırı
+/// TAŞMA koruması olarak duruyor.)
 constexpr uint32_t baseDelayMs(uint8_t attempt)
 {
     return ((attempt >= 6u) ? MAX_DELAY_MS : (BASE_DELAY_MS << attempt)) > MAX_DELAY_MS
@@ -84,8 +96,9 @@ constexpr bool shouldStop(DisconnectClass c, uint8_t authFailures)
 
 static_assert(baseDelayMs(0) == 1000u, "ilk gecikme 1 sn");
 static_assert(baseDelayMs(1) == 2000u, "ikinci gecikme 2 sn");
-static_assert(baseDelayMs(5) == 32000u, "altinci gecikme 32 sn");
-static_assert(baseDelayMs(6) == MAX_DELAY_MS, "tavan 60 sn");
+static_assert(baseDelayMs(4) == 16000u, "besinci gecikme 16 sn");
+static_assert(baseDelayMs(5) == MAX_DELAY_MS, "altinci denemede tavana oturur");
+static_assert(baseDelayMs(6) == MAX_DELAY_MS, "tavan 20 sn");
 static_assert(baseDelayMs(200) == MAX_DELAY_MS, "buyuk deneme sayisinda TASMA YOK");
 
 // Jitter sınırları: taban 10 sn için [8 sn, 12 sn] aralığında kalmalı.

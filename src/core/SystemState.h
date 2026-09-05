@@ -227,6 +227,22 @@ struct NetworkStatus
     uint8_t  apClients;
     uint8_t  retryCount;
     uint8_t  usingStaticIp;
+
+    // ── İLK KURULUM (§8.4) ─────────────────────────────────────────────────
+    // Kurulum, "bağlandı"dan farklı bir durumdur: cihaz kurulum AP'sini
+    // kimlik bilgisi olmadığı için açmıştır ve bağlantı kurulunca kontrollü
+    // biçimde yeniden başlayacaktır. Kullanıcı bunu BİLMELİDİR — habersiz
+    // yeniden başlayan bir cihaz, bozulmuş bir cihazdan ayırt edilemez.
+    uint8_t  provisioning;   ///< kurulum oturumu sürüyor
+    uint8_t  setupReboot;    ///< kurulum bitti, kontrollü reset bekleniyor
+    uint8_t  rebootIn;       ///< reset'e kalan saniye; 0 = her an
+
+    /// Bir sonraki bağlanma denemesine kalan saniye; 0 = bekleyen deneme yok.
+    ///
+    /// `nextRetryAt` cihazın monotonik saatindedir ve arayüz onu tek başına
+    /// yorumlayamaz. Sessiz bekleme kullanıcıya "bozuk" izlenimi verir;
+    /// sayılan bir bekleme vermez.
+    uint8_t  retryIn;
 };
 
 /// Sahip: `io_sense` task'ı (SensorService — TASK-027)

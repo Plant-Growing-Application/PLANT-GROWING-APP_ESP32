@@ -13,11 +13,25 @@ using hal::InputEventType;
 
 /// Gezinilebilir ekranlar. `EMERGENCY` bu listede YOKTUR — oraya yalnızca
 /// olay veya BACK ile girilir, encoder ile "denk gelinmez".
+/// `SETUP` de listede YOKTUR: `EMERGENCY` gibi olayla girilir (ilk açılış),
+/// encoder ile çıkılır. Aynı bilgiler `NETWORK` ekranında kalıcı durur, o
+/// yüzden gezinme sırasında ikinci kez yer kaplamasına gerek yok.
+///
+/// `CROP` doğrudan `HOME`'un yanındadır: telefonu olmayan kullanıcının ilk
+/// işi ürün seçmek ve programı başlatmaktır, altıncı ekranda aramak değil.
 constexpr ScreenId ORDER[] = {
-    ScreenId::HOME, ScreenId::SENSORS, ScreenId::CONTROL,
+    ScreenId::HOME, ScreenId::CROP, ScreenId::SENSORS, ScreenId::CONTROL,
     ScreenId::NETWORK, ScreenId::SYSTEM, ScreenId::ALERTS,
 };
 constexpr uint8_t ORDER_LEN = sizeof(ORDER) / sizeof(ORDER[0]);
+
+/// `CROP` ekranındaki satır sayısı: katalog + "BASLAT".
+///
+/// Katalog boyutu çalışma anında `core::cropCount()` ile bilinir ama
+/// navigasyon ürün tablosunu TANIMAZ (bkz. `UiAction::APPLY_CROP`).
+/// `UiService` gerçek sayıyı buraya bildirir; bildirilmediyse 0 ürün
+/// varsayılır ve yalnızca "BASLAT" satırı kalır.
+uint8_t g_cropCount = 0;
 
 /// Her ekranda kaç seçilebilir öğe var? 0 = seçim yok.
 ///
@@ -33,6 +47,7 @@ uint8_t itemCount(ScreenId s)
          : (s == ScreenId::SENSORS)   ? core::MAX_SENSORS
          : (s == ScreenId::SYSTEM)    ? 1u   // yeniden başlat
          : (s == ScreenId::EMERGENCY) ? 1u   // onayla
+         : (s == ScreenId::CROP)      ? static_cast<uint8_t>(g_cropCount + 1u)  // + BASLAT
                                       : 0u;
 }
 
@@ -45,7 +60,8 @@ uint8_t itemCount(ScreenId s)
 /// yapmazdı — kullanıcı cihazı takılmış sanardı (ISSUE-036).
 bool isActionable(ScreenId s)
 {
-    return s == ScreenId::CONTROL || s == ScreenId::SYSTEM || s == ScreenId::EMERGENCY;
+    return s == ScreenId::CONTROL || s == ScreenId::SYSTEM ||
+           s == ScreenId::EMERGENCY || s == ScreenId::CROP;
 }
 
 uint8_t   g_index      = 0;      ///< ORDER içindeki konum
@@ -80,6 +96,14 @@ ActionRequest actionFor(ScreenId s, uint8_t cursor)
             return {UiAction::TOGGLE_ACTUATOR, cursor};
         }
         return {UiAction::EMERGENCY_STOP, 0};
+    }
+
+    if (s == ScreenId::CROP)
+    {
+        // Son satır programı başlatır/durdurur; öncekiler ürün seçer.
+        // İmleç doğrudan KATALOG İNDEKSİDİR; kimliğe çeviren `UiService`.
+        if (cursor < g_cropCount) { return {UiAction::APPLY_CROP, cursor}; }
+        return {UiAction::TOGGLE_AUTOMATION, 0};
     }
 
     // SENSORS'ta imleç yalnızca kaydırma konumudur — onaylanacak bir eylem yok.
@@ -118,6 +142,10 @@ ActionRequest handle(const hal::InputEvent& ev, Millis now, bool emergencyActive
             // onayladım" durumunu engeller.
             if (g_confirm) { resetConfirm(); break; }
 
+            // Kurulum ekranı gezinme sırasında değildir; çevirmek oradan
+            // ÇIKAR. `g_index` zaten HOME'u gösteriyor.
+            if (g_screen == ScreenId::SETUP) { g_index = 0; goTo(ORDER[0], now); break; }
+
             if (items > 0u)
             {
                 // Ekran içi imleç. Uçlarda DURUR — dairesel değil.
@@ -150,6 +178,17 @@ ActionRequest handle(const hal::InputEvent& ev, Millis now, bool emergencyActive
                 if (emergencyActive) { goTo(ScreenId::EMERGENCY, now); }
                 else if (g_confirm)  { resetConfirm(); }
                 else                 { g_index = 0; goTo(ScreenId::HOME, now); }
+                break;
+            }
+
+            // Kurulum ekranında basmak KURULUMU SÜRDÜRÜR: Wi-Fi bilgilerini
+            // okuyan kullanıcının bir sonraki işi ürün seçmektir. Burada
+            // hiçbir şey yapmayan bir düğme bırakmak, ekranı takılmış
+            // gösterirdi.
+            if (g_screen == ScreenId::SETUP)
+            {
+                g_index = 1;                       // ORDER[1] == CROP
+                goTo(ScreenId::CROP, now);
                 break;
             }
 
@@ -187,6 +226,11 @@ void tick(Millis now, bool emergencyActive)
     if (g_screen == ScreenId::EMERGENCY || g_confirm || emergencyActive) { return; }
     if (g_screen == ScreenId::HOME) { return; }
 
+    // Kurulum ekranından da otomatik dönüş YOK: kullanıcı o sırada Wi-Fi
+    // şifresini telefonuna yazıyor olabilir ve ekranın altından kayması,
+    // şifreyi baştan okumak için cihaza geri gitmek demektir.
+    if (g_screen == ScreenId::SETUP) { return; }
+
     if (core::hasElapsed(now, g_lastInput, core::millisecs(IDLE_RETURN_MS)))
     {
         g_index = 0;
@@ -197,6 +241,16 @@ void tick(Millis now, bool emergencyActive)
 void onEmergency(Millis now)
 {
     if (g_screen != ScreenId::EMERGENCY) { goTo(ScreenId::EMERGENCY, now); }
+}
+
+void setCropCount(uint8_t n)
+{
+    g_cropCount = (n > UI_CROPS) ? UI_CROPS : n;
+}
+
+void onSetupNeeded(Millis now)
+{
+    if (g_screen != ScreenId::SETUP) { goTo(ScreenId::SETUP, now); }
 }
 
 ScreenId screen()     { return g_screen; }

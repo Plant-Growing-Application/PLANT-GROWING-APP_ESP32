@@ -65,6 +65,17 @@ enum class UiAction : uint8_t
     EMERGENCY_STOP  = 2,
     EMERGENCY_CLEAR = 3,
     RESTART         = 4,
+
+    /// `param` = KATALOG İNDEKSİ (CropId değil).
+    ///
+    /// Navigasyon katalogu tanımaz; yalnızca "listedeki kaçıncı satır"
+    /// bilgisini taşır. İndeksi kimliğe çevirmek `UiService`'in işidir —
+    /// aynı ayrım aktüatörlerde de var ve navigasyonu ürün tablosundan
+    /// bağımsız tutuyor.
+    APPLY_CROP        = 5,
+
+    /// Sulama programını başlat/durdur (otomasyon modu).
+    TOGGLE_AUTOMATION = 6,
 };
 
 struct ActionRequest
@@ -83,6 +94,8 @@ void drawNetwork(const UiModel& m);
 void drawSystem(const UiModel& m);
 void drawAlerts(const UiModel& m);
 void drawEmergency(const UiModel& m);
+void drawCrop(const UiModel& m);
+void drawSetup(const UiModel& m);
 
 /// Bir ekranı tam olarak çizer (durum çubuğu + gövde) ve panele gönderir.
 void renderScreen(const UiModel& m);

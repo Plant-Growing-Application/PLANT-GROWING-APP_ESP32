@@ -6,8 +6,10 @@
 #include "core/BoardPins.h"
 #include "core/Command.h"
 #include "core/CommandQueue.h"
+#include "core/CropProfile.h"
 #include "core/Diagnostics.h"
 #include "core/StateStore.h"
+#include "services/ConfigService.h"
 #include "hal/InputDevices.h"
 #include "hal/OledPanel.h"
 #include "interfaces/ui/Navigation.h"
@@ -26,6 +28,14 @@ UiModel g_lastDrawn{};
 bool    g_hasDrawn   = false;
 bool    g_lastEmerg  = false;
 uint32_t g_redraws   = 0;
+
+/// Kurulum ekranı BİR KEZ açılır.
+///
+/// Her turda "kurulum gerekli mi" diye bakıp ekranı oraya taşımak, kullanıcı
+/// başka bir ekrana geçtiği anda onu geri çekerdi: cihaz kullanılamaz hâle
+/// gelirdi. Latch, "ilk açılışta göster" ile "sürekli dayat" arasındaki farkı
+/// tutan şeydir.
+bool g_setupShown = false;
 
 char g_apSsid[TEXT_MAX]    = {0};
 char g_apPassword[16]      = {0};
@@ -122,6 +132,44 @@ void dispatch(const ActionRequest& a, const core::SystemState& s, Millis now)
             break;
         }
 
+        case UiAction::APPLY_CROP:
+        {
+            // `param` KATALOG İNDEKSİDİR; kimliğe burada çevriliyor.
+            // Navigasyonun ürün tablosunu tanımaması bilinçli (bkz.
+            // `UiAction::APPLY_CROP`).
+            const core::CropProfile* p = core::cropAt(a.param);
+            if (p == nullptr)
+            {
+                core::diag::log(core::LogLevel::WARNING, ErrCode::WEB_INVALID_REQUEST,
+                                a.param, "OLED: katalogda olmayan urun");
+                return;
+            }
+            cmd.type   = core::CommandType::CROP_APPLY;
+            cmd.target = static_cast<uint8_t>(p->id);
+            break;
+        }
+
+        case UiAction::TOGGLE_AUTOMATION:
+        {
+            // ── ÜRÜN YOKKEN PROGRAM BAŞLATILMAZ ────────────────────────────
+            // Kural kümesi boşken otomatik moda geçmek hiçbir şey çalıştırmaz
+            // ama ekranda "calisiyor" yazar — kullanıcı sulamanın kurulduğunu
+            // sanır. Ekran bu durumda zaten "Once bir urun secin" diyor;
+            // burada da komutu üretmiyoruz.
+            if (services::config::get().crop.crop == core::CropId::NONE)
+            {
+                core::diag::log(core::LogLevel::INFO, ErrCode::WEB_INVALID_REQUEST, 0,
+                                "OLED: urun secilmeden program baslatilamaz");
+                return;
+            }
+
+            cmd.type = core::CommandType::SET_AUTOMATION_MODE;
+            // Cihazın BİLDİRDİĞİ moda göre tersine çevir — istenen durumu
+            // kendimiz üretmiyoruz (aktüatörlerdeki kararın aynısı).
+            cmd.param = (s.automation.mode == core::AutomationMode::AUTO) ? 0u : 1u;
+            break;
+        }
+
         case UiAction::EMERGENCY_CLEAR: cmd.type = core::CommandType::EMERGENCY_CLEAR; break;
         case UiAction::RESTART:         cmd.type = core::CommandType::SYSTEM_RESTART;  break;
 
@@ -143,7 +191,8 @@ core::ErrCode begin()
 {
     nav::begin();
     memset(&g_lastDrawn, 0, sizeof(g_lastDrawn));
-    g_hasDrawn = false;
+    g_hasDrawn   = false;
+    g_setupShown = false;
 
     pinMode(board::STATUS_LED, OUTPUT);
     digitalWrite(board::STATUS_LED, LOW);
@@ -178,6 +227,28 @@ void tick(Millis now)
     // uyarıyı görmek için ekran değiştirmesi gerekmez.
     if (emergency && !g_lastEmerg) { nav::onEmergency(now); }
     g_lastEmerg = emergency;
+
+    // Navigasyon `CROP` ekranında kaç satır olduğunu bilmeli. Katalog
+    // sabit ama sayıyı BURADAN veriyoruz: navigasyon ürün tablosunu
+    // tanımıyor ve katalog büyürse orada değişecek bir şey olmuyor.
+    nav::setCropCount(core::cropCount());
+
+    // ── İLK AÇILIŞ: KURULUM EKRANI ─────────────────────────────────────────
+    //
+    // Koşul "AP açık VE ürün seçilmemiş": ikisi birden ancak kutudan yeni
+    // çıkmış (ya da fabrika ayarlarına dönmüş) bir cihazda doğrudur.
+    // Yalnızca AP'ye baksaydık, ev ağı düşüp AP'ye geri dönen KURULU bir
+    // cihaz da kurulum ekranına atlar ve kullanıcının baktığı ölçümü
+    // ekrandan silerdi.
+    //
+    // Acil durum bu ekranı EZER: acil durumdayken kurulum göstermek,
+    // uyarıyı gizlemek olurdu.
+    if (!g_setupShown && !emergency && s.network.apActive != 0u &&
+        services::config::get().crop.crop == core::CropId::NONE)
+    {
+        g_setupShown = true;
+        nav::onSetupNeeded(now);
+    }
 
     // 1) Girdi olayları → navigasyon → (varsa) komut.
     hal::InputEvent ev;

@@ -162,6 +162,21 @@ size_t writeStateJson(const core::SystemState& s, char* out, size_t outLen)
     net["apClients"] = s.network.apClients;
     net["retries"]   = s.network.retryCount;
     net["lastError"] = static_cast<uint16_t>(s.network.lastError);
+
+    // ── KURULUM DURUMU (§8.4) ──────────────────────────────────────────────
+    // `setupReboot` arayüzün bağlantı kopmasını AÇIKLAYABİLMESİ için vardır:
+    // telefon kurulum AP'sindeyken cihaz yeniden başlayacak ve WebSocket
+    // kopacaktır. Bunu önceden söylemek ile söylememek arasındaki fark,
+    // "kurulum tamamlandı" ile "cihaz bozuldu" arasındaki farktır.
+    // Bekleme SAYILIR: "Yeniden Denenecek" yazip sessiz kalmak, kullaniciya
+    // cihazin pes ettigini dusundurur. Kalan saniye ve "Simdi Dene" birlikte,
+    // beklemeyi katlanilir kilar.
+    net["retryIn"]      = s.network.retryIn;
+
+    net["provisioning"] = s.network.provisioning != 0u;
+    net["setupReboot"]  = s.network.setupReboot != 0u;
+    net["rebootIn"]     = s.network.rebootIn;
+
     char ipbuf[16];
     ipToStr(s.network.ipv4, ipbuf, sizeof(ipbuf));
     net["ip"] = ipbuf;

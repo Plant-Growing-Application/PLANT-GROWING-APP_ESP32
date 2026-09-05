@@ -651,8 +651,8 @@ web dosyaları servis edilemez ve bu durum API'den bildirilir.
 | Konu | Karar | Mevcut projedeki problem |
 |---|---|---|
 | **Bloklama** | `WiFi.begin()` çağrılır ve **hemen dönülür**. Bağlantı sonucu event ile gelir. FSM'de bekleme yoktur. | `connect()` içinde 5 sn'ye kadar `while + delay(50)` — task kilitleniyordu |
-| **Backoff** | Üstel: 1, 2, 4, 8, 16, 32, 60 s (tavan). Rastgele ±%20 jitter. | Sabit 1 sn'de bir sonsuz deneme — radyo ve güç israfı |
-| **AP fallback** | Kalıcı kopmada AP açılır, **STA denemesi arka planda sürer** (AP_STA). Ağ geri gelince otomatik STA'ya döner. | Yalnızca boot'ta bir kez AP'ye düşülüyordu; çalışma sırasında kopma kalıcıydı |
+| **Backoff** | Üstel: 1, 2, 4, 8, 16, 20 s (tavan). Rastgele ±%20 jitter. Tavan 60 sn'den 20 sn'ye indirildi: backoff'un işi ulaşılamayan bir ağı sonsuz denememektir, kullanıcıyı bekletmek değil — ağ döndüğünde en kötü ihtimalle 20 sn'de geri bağlanılır. | Sabit 1 sn'de bir sonsuz deneme — radyo ve güç israfı |
+| **AP fallback** | Kalıcı kopmada (**45 sn**) AP açılır, **STA denemesi arka planda sürer** (AP_STA). Ağ geri gelince otomatik STA'ya döner. Eşik 90 sn'ydi: internet gittiğinde cihaza ulaşılamayan bir buçuk dakika demekti. | Yalnızca boot'ta bir kez AP'ye düşülüyordu; çalışma sırasında kopma kalıcıydı |
 | **Event işleme** | Radyo event'i → `NetworkEventQueue` → FSM. Event handler'da iş yapılmaz. | Event handler içinde EEPROM yazma yapılıyordu |
 | **Disconnect nedeni** | `reason` kodu saklanır ve ayrıştırılır: yanlış şifre → **yeniden denemez**, kullanıcıya bildirir. AP bulunamadı → denemeye devam eder. | Disconnect event'i hiç işlenmiyordu; yanlış şifreyle sonsuz deneme |
 | **Tarama** | Asenkron; sonuç tamponda tutulur ve zaman damgalıdır. API "hazır değil" durumunu **açık bir durum alanıyla** döndürür. | 202 ara-durumu frontend'de işlenmiyordu → ilk tarama hep hata |
@@ -665,6 +665,26 @@ web dosyaları servis edilemez ve bu durum API'den bildirilir.
 `network` alt-state'i şunları içerir: FSM durumu, SSID, IP, gateway, RSSI, AP aktif mi,
 bağlantı süresi, son kopma nedeni, deneme sayısı, sonraki deneme zamanı. RSSI periyodik
 okunur ve hem OLED'de hem web'de sinyal göstergesi olarak sunulur.
+
+### 8.4 İlk kurulumun bitişi: kontrollü yeniden başlatma
+
+Kurulum AP'sinde Wi-Fi bilgisi girilip bağlantı kurulduğunda kurulum **bitmiş**
+sayılır ve cihaz kendini kontrollü biçimde yeniden başlatır. Eski davranışta
+böyle bir bitiş noktası yoktu: cihaz `AP_STA` modunda kalıyor, kurulum AP'si
+linger süresince açık duruyor ve kullanıcı iki ağ arasında, cihazın yeni
+adresini bilmeden ortada kalıyordu.
+
+| Konu | Karar | Gerekçe |
+|---|---|---|
+| **Tetikleyici** | Yalnızca **kurulum oturumunda** ilk `STA_GOT_IP`. Oturum, AP'nin *kimlik bilgisi olmadığı için* açılmasıyla başlar: ilk açılış veya "ağı unut". | AP fallback'te kayıtlı ve daha önce çalışmış bir ağ vardır; her dönüşte reset atmak, sinyali zayıf bir kurulumu yeniden başlatma döngüsüne sokar. |
+| **Nefes payı** | Reset'ten önce 4 sn beklenir; bu sürede AP açık TUTULUR ve durum hemen yayınlanır. | Kullanıcının telefonu hâlâ kurulum AP'sindedir. "Bağlandı, yeni adres X" mesajını GÖRMESİ gerekir; anında reset, tarayıcıda yalnızca kopmuş bir bağlantı bırakır. |
+| **Kayıt garantisi** | `config::isDirty()` temizlenene kadar reset ERTELENİR; `store` task'ından anında yazma istenir. Üst sınır 20 sn. | `ConfigService` yazmayı 2 sn geciktirir. Yazılmadan reset atmak SSID'yi siler ve cihaz kurulum AP'sine geri döner. |
+| **Sınır aşılırsa** | Yeniden başlatma **iptal** edilir, ERROR loglanır. | Cihaz bağlı ve erişilebilirdir; kimlik bilgisini kaybetme riskine girmektense AP'nin linger ile kapanmasını beklemek yeğdir. |
+| **Reset yolu** | `net` doğrudan reset ATMAZ; `SYSTEM_RESTART` komutunu kuyruğa koyar, işi `app_core` + `SystemSupervisor` yapar. | Aktüatörlerin önce güvenli duruma alınması gerekir (§14.3). Radyo task'ının röle durumunu bilme yetkisi yoktur. |
+| **Kullanıcıya bildirim** | `network.provisioning`, `network.setupReboot`, `network.rebootIn` yayınlanır; web arayüzü devir teslim ekranını, OLED "KURULUM TAMAM + adres" ekranını gösterir. | Habersiz yeniden başlayan bir cihaz, bozulmuş bir cihazdan ayırt edilemez. Beklenen kopma için "bağlantı kesildi" alarmı da gösterilmez. |
+
+Yeniden başlayan cihaz `BOOT → CONNECTING → CONNECTED` yolunu izler: AP hiç
+açılmaz, radyo saf `STA` olur ve kurulum tanımlı bir noktada biter.
 
 ---
 

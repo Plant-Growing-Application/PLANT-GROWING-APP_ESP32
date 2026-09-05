@@ -36,6 +36,50 @@ namespace L = layout;
 
 void text(int16_t x, int16_t y, const char* s) { hal::oled::drawText(x, y, s); }
 
+/// Yerleşik 5×7 fontta bir karakterin kapladığı genişlik (1 px boşlukla).
+constexpr int16_t CHAR_W = 6;
+
+/// `row()` kesme tamponu. 128 px / 6 px = 21 karakter; sonlandırıcıyla pay.
+constexpr size_t VALUE_MAX = 26;
+
+/// Değeri verilen genişliğe SIĞDIRIR; sığmıyorsa keser ve ".." ekler.
+///
+/// ── NEDEN GEREKLİ ───────────────────────────────────────────────────────────
+/// Uzun bir ağ adı ("MisafirAgi_2.4GHz_UstKat" gibi) 128 px'lik panele
+/// sığmaz: sağa yaslanan değer etiketin üzerine biner, kalan kısım ekranın
+/// dışına taşar ve sürücü onu ortadan keser. Satır okunmaz hâle gelir —
+/// sahada "ekran karışıyor" olarak görüldü.
+///
+/// KESİLDİĞİNİ SÖYLEMEK ŞART: sessizce kısaltılmış bir ağ adı, kullanıcıya
+/// yanlış ağa bağlanıldığı izlenimi verir. ".." bunu iki karakterle anlatır.
+///
+/// Sığan değerler KOPYALANMAZ; işaretçi olduğu gibi döner.
+const char* fitValue(const char* value, int16_t availPx, char* buf, size_t cap)
+{
+    if (availPx < 0) { availPx = 0; }
+
+    size_t maxChars = static_cast<size_t>(availPx / CHAR_W);
+    if (maxChars > cap - 1) { maxChars = cap - 1; }
+
+    const size_t len = strlen(value);
+    if (len <= maxChars) { return value; }
+
+    // ".." için iki karakter ayrılır. O kadar bile yer yoksa düz kırpılır:
+    // "..", bilginin tamamının yerini alacak kadar değerli değildir.
+    if (maxChars <= 2u)
+    {
+        memcpy(buf, value, maxChars);
+        buf[maxChars] = '\0';
+        return buf;
+    }
+
+    memcpy(buf, value, maxChars - 2u);
+    buf[maxChars - 2u] = '.';
+    buf[maxChars - 1u] = '.';
+    buf[maxChars]      = '\0';
+    return buf;
+}
+
 /// Bir satırı "etiket ......... değer" olarak yazar.
 ///
 /// DEGER SAGA YASLANIR ve ekrandan TASMAZ.
@@ -46,8 +90,8 @@ void text(int16_t x, int16_t y, const char* s) { hal::oled::drawText(x, y, s); }
 /// goruldu.
 ///
 /// Saga yaslama ile ayni IP x=50'den baslar ve tam oturur. Deger etiketin
-/// uzerine binecek kadar uzunsa etiketin hemen sagindan baslar (kirpilir
-/// ama etiket okunur kalir).
+/// uzerine binecek kadar uzunsa `fitValue()` onu keser ve ".." ekler: etiket
+/// okunur kalir, satir tasmaz.
 void row(int16_t y, const char* label, const char* value)
 {
     text(L::COL_LABEL, y, label);
@@ -56,12 +100,17 @@ void row(int16_t y, const char* label, const char* value)
 
     const int16_t labelEnd = static_cast<int16_t>(
         L::COL_LABEL + hal::oled::textWidth(label, 1) + 4);
-    const int16_t valueW = static_cast<int16_t>(hal::oled::textWidth(value, 1));
+
+    // Etiketten sonra kalan alana SIĞDIRILIR; taşan değer kesilir.
+    char        buf[VALUE_MAX];
+    const char* shown  = fitValue(value, static_cast<int16_t>(L::W - labelEnd),
+                                  buf, sizeof(buf));
+    const int16_t valueW = static_cast<int16_t>(hal::oled::textWidth(shown, 1));
 
     int16_t x = static_cast<int16_t>(L::W - valueW);
     if (x < labelEnd) { x = labelEnd; }
 
-    text(x, y, value);
+    text(x, y, shown);
 }
 
 /// Seçilebilir satır. İmleç `>` ile gösterilir; onay bekleniyorsa `?`.
@@ -138,6 +187,17 @@ void drawStatusBar(const UiModel& m)
 // ── HOME: özet ──────────────────────────────────────────────────────────────
 void drawHome(const UiModel& m)
 {
+    // Kurulum bitti ve cihaz yeniden başlıyor: kurulum bilgisini göstermenin
+    // anlamı kalmadı — kullanıcının ihtiyacı artık YENİ ADRES.
+    if (m.setupReboot != 0u)
+    {
+        text(L::COL_LABEL, L::ROW0, "KURULUM TAMAM");
+        row(L::ROW1, "Ag", m.ssid);
+        row(L::ROW2, "Adres", m.ip);
+        text(L::COL_LABEL, L::ROW3, "Yeniden baslatiliyor");
+        return;
+    }
+
     // ── KURULUM MODU: bağlantı bilgisi HOME'DA ─────────────────────────────
     //
     // AP açıkken kullanıcının tek ihtiyacı bu bilgidir. Onu yalnızca NETWORK
@@ -364,6 +424,107 @@ void drawEmergency(const UiModel& m)
     selectableRow(L::ROW4, 0, m.cursor, m.editing != 0u, "Onayla ve temizle", "");
 }
 
+// ── SETUP: ilk açılış — telefonu cihaza bağlamak için gereken her şey ──────
+//
+// Bu ekran cihazın KENDİ ürettiği kurulum şifresini gösterir (TASK-038).
+// Kullanıcının ev ağı şifresi burada da, başka hiçbir ekranda da GÖSTERİLMEZ
+// — `UiModel` içinde onun için alan bile yoktur.
+//
+// Üç bilgi ve tek bir sonraki adım: ağ adı, şifre, adres. Fazlası 128×64'te
+// okunmaz.
+void drawSetup(const UiModel& m)
+{
+    hal::oled::drawRect(0, L::BODY_Y - 2, L::W, 12, true);
+    text(28, L::ROW0, "KURULUM");
+
+    // ── KURULUM BİTTİ ──────────────────────────────────────────────────────
+    // Ağ adı ve kurulum şifresi artık ÖLÜ BİLGİ: birazdan o AP kapanacak.
+    // Yerine kullanıcının bundan sonra kullanacağı adres yazılır.
+    if (m.setupReboot != 0u)
+    {
+        row(L::ROW1, "Baglandi", m.ssid);
+        row(L::ROW2, "Adres", m.ip);
+        text(L::COL_LABEL, L::ROW3, "Yeniden baslatiliyor");
+        text(L::COL_LABEL, L::ROW4, "Kendi aginiza gecin");
+        return;
+    }
+
+    if (m.apSsid[0] != '\0')
+    {
+        row(L::ROW1, "Ag", m.apSsid);
+        row(L::ROW2, "Sifre", m.apPassword);
+        row(L::ROW3, "Adres", m.setupUrl[0] ? m.setupUrl : "192.168.4.1");
+    }
+    else
+    {
+        // AP kapalıysa gösterilecek bir kurulum bilgisi yok. Boş satırlar
+        // yerine ne olduğunu söylüyoruz.
+        text(L::COL_LABEL, L::ROW1, "Kurulum agi kapali");
+        text(L::COL_LABEL, L::ROW2, "Ag ekranina bakin");
+    }
+
+    // Telefonu olmayan kullanıcı için çıkış yolu: basmak doğrudan ürün
+    // seçimine götürür.
+    text(L::COL_LABEL, L::ROW4, "Bas: urun sec");
+}
+
+// ── CROP: ürün seçimi + programı başlat ────────────────────────────────────
+//
+// Telefonsuz kurulumun ikinci yarısı. Katalog 6 ürün, ekran 4 satır alıyor
+// (son iki satır aktif ürün ve ipucu için) — `SENSORS` ile aynı kayan
+// pencere.
+//
+// "BASLAT" **her zaman son öğedir**: kaydırmayla yeri değişmez.
+void drawCrop(const UiModel& m)
+{
+    const int16_t rows[] = {L::ROW0, L::ROW1, L::ROW2, L::ROW3};
+
+    const uint8_t total  = static_cast<uint8_t>(m.cropCount + 1u);   // +1 = BASLAT
+    const uint8_t cursor = (m.cursor < total) ? m.cursor : static_cast<uint8_t>(total - 1u);
+
+    // Dört satır liste, beşinci satır durum/ipucu.
+    const uint8_t listRows = static_cast<uint8_t>(UI_VISIBLE_ROWS - 1u);
+    const uint8_t start    = windowStart(cursor, total, listRows);
+
+    uint8_t drawn = 0;
+    for (uint8_t k = start; k < total && drawn < listRows; ++k, ++drawn)
+    {
+        if (k < m.cropCount)
+        {
+            // Uygulanmış profil işaretlenir: kullanıcı hangisinin seçili
+            // olduğunu görmeden yeniden seçmek zorunda kalmamalı.
+            selectableRow(rows[drawn], k, cursor, m.editing != 0u, m.crops[k].name,
+                          m.crops[k].active ? "AKTIF" : "");
+        }
+        else
+        {
+            // Program yürüyorsa düğme DURDUR'a döner: tek satır hem durumu
+            // hem eylemi söyler.
+            selectableRow(rows[drawn], k, cursor, m.editing != 0u,
+                          m.autoMode ? "DURDUR" : "BASLAT",
+                          m.autoMode ? "calisiyor" : "kapali");
+        }
+    }
+
+    // Liste dört satır (ROW0–ROW3); beşinci satır durum/ipucu içindir.
+    const int16_t lastRow = L::ROW4;
+
+    if (m.editing != 0u)
+    {
+        text(L::COL_LABEL, lastRow, "Onaylamak icin bas");
+    }
+    else if (cursor >= m.cropCount && m.cropSelected == 0u)
+    {
+        // ÖNCEDEN söylüyoruz. Basıp hiçbir şey olmaması, düğmenin bozuk
+        // olduğu izlenimi verirdi (§12.2).
+        text(L::COL_LABEL, lastRow, "Once bir urun secin");
+    }
+    else
+    {
+        text(L::COL_LABEL, lastRow, m.cropText);
+    }
+}
+
 // ── Ortak çizim ────────────────────────────────────────────────────────────
 void renderScreen(const UiModel& m)
 {
@@ -383,6 +544,8 @@ void renderScreen(const UiModel& m)
         case ScreenId::SYSTEM:    drawSystem(m);    break;
         case ScreenId::ALERTS:    drawAlerts(m);    break;
         case ScreenId::EMERGENCY: drawEmergency(m); break;
+        case ScreenId::CROP:      drawCrop(m);      break;
+        case ScreenId::SETUP:     drawSetup(m);     break;
         default:                  drawHome(m);      break;
     }
 

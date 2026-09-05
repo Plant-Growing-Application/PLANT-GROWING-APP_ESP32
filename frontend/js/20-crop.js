@@ -13,31 +13,62 @@
 
 // ── Veri çekme ─────────────────────────────────────────────────────────────
 
-async function loadCrop() {
+/// Aynı anda birden fazla `loadCrop()` çağrısı TEK isteğe indirgenir.
+///
+/// Girişte iki yol birden tetikliyordu: `afterLogin()` ve WS'in bağlanır
+/// bağlanmaz gönderdiği ilk `state` paketi. İkisi de `await`'e girdiği için
+/// hiçbiri diğerini göremiyor ve `/api/crop` + `/api/crops` İKİŞER kez
+/// çekiliyordu — katalog 5 KB, yani her açılışta boşuna 10 KB. AP modunda
+/// bu, gözle görülür bir gecikmedir.
+let cropInFlight = null;
+
+function loadCrop() {
+  if (!cropInFlight) {
+    cropInFlight = loadCropOnce().finally(() => { cropInFlight = null; });
+  }
+  return cropInFlight;
+}
+
+async function loadCropOnce() {
   try {
     store.crop = await api('/api/crop');
   } catch (e) {
     store.crop = null;
   }
 
-  // `CUSTOM` iken hangi profilden türediğini ADIYLA söylemek istiyoruz
-  // ("Özel (Çilek temelli)"). Ad yalnızca katalogda var; henüz çekilmediyse
-  // burada çekiyoruz. Aksi hâlde kullanıcıya ham anahtar ("strawberry")
-  // gösterilirdi.
-  if (store.crop && store.crop.crop === 'custom' && !store.catalog) {
-    try { await loadCatalog(); } catch (e) { /* ad yerine anahtar gösterilir */ }
+  // ── KATALOG ÜRÜN SEÇİLİYSE HER ZAMAN GEREKLİ ─────────────────────────────
+  //
+  // Eskiden yalnızca `CUSTOM` profilin ADINI çözmek için çekiliyordu. Gelişim
+  // yolculuğu ise TÜM dönemleri ve sürelerini ister: `/api/crop` yalnızca
+  // İÇİNDE BULUNULAN dönemin hedeflerini döner, diğer dönemleri değil.
+  //
+  // Katalog sabittir ve bir kez alınır (~5 KB); her ürün değişiminde değil.
+  if (store.crop && cropSelected() && !store.catalog) {
+    try { await loadCatalog(); } catch (e) { /* yolculuk çizilmez, kart çizilir */ }
   }
 
   renderCropCard();
+  renderCropTargets();
   renderCropSettings();
   render();
 }
 
 /// Katalog SABİTTİR; bir kez alınır ve saklanır (~5 KB).
-async function loadCatalog() {
-  if (store.catalog) return store.catalog;
-  store.catalog = await api('/api/crops');
-  return store.catalog;
+///
+/// Bekçi `store.catalog`'a değil UÇUŞTAKİ İSTEĞE bakar: değer ancak
+/// `await` döndükten SONRA yazılır, o yüzden eşzamanlı iki çağrının ikisi de
+/// `null` görüp ikisi de indirirdi. Sabit bir belgeyi iki kez çekmek,
+/// ESP32'nin tek çekirdekli web sunucusunda bedava değildir.
+let catalogInFlight = null;
+
+function loadCatalog() {
+  if (store.catalog) { return Promise.resolve(store.catalog); }
+  if (!catalogInFlight) {
+    catalogInFlight = api('/api/crops')
+      .then((c) => { store.catalog = c; return c; })
+      .finally(() => { catalogInFlight = null; });
+  }
+  return catalogInFlight;
 }
 
 const cropTargets = () => (store.crop && store.crop.targets) || null;
@@ -64,6 +95,196 @@ function catalogName(key) {
   return c ? c.name : key;
 }
 
+/// Aktif ürünün KATALOG profili. `CUSTOM` iken türediği profile düşer —
+/// saksıdaki bitki hâlâ o bitkidir, yalnızca kurallar elle değişmiştir.
+function activeProfile() {
+  if (!store.catalog || !store.catalog.crops || !store.crop) return null;
+  const key = store.crop.crop === 'custom'
+    ? (store.crop.derivedFrom || '')
+    : store.crop.crop;
+  return store.catalog.crops.find((c) => c.key === key) || null;
+}
+
+// ── Gelişim yolculuğu ──────────────────────────────────────────────────────
+//
+// ══ UYDURMA YOK ════════════════════════════════════════════════════════════
+// Yüzde YALNIZCA gerçek veriden hesaplanır ve veri tutarsızsa GÖSTERİLMEZ.
+// Hesap, cihazın kendi algoritmasının aynısıdır (`core::stageForDay`,
+// CropProfile.cpp): dönem süreleri kümülatif toplanır.
+//
+//     dönem başlangıcı = Σ süre[0 .. i-1]
+//     dönemdeki gün    = dikimden beri geçen gün − dönem başlangıcı
+//
+// HANGİ DURUMDA YÜZDE YOK:
+//   · süre 0  → son dönem, süresiz ("hasada kadar")
+//   · dönemdeki gün negatif veya süreyi aşıyor → kullanıcı dönemi dikim
+//     tarihiyle ÇELİŞECEK şekilde elle seçmiş. Böyle bir durumda %140 veya
+//     %-30 göstermek yerine hiçbir oran göstermiyoruz: yanlış bir sayı,
+//     sayı olmamasından kötüdür.
+//   · katalog yok → yolculuk hiç çizilmez
+//
+// GÖSTERİLEN DÖNEM HER ZAMAN CİHAZINKİDİR (`store.crop.stage`). Günden kendi
+// dönemimizi hesaplayıp onu göstermek, cihazın uyguladığı hedeflerden farklı
+// bir dönem anlatmak olurdu (P5 — cihaz doğruluk kaynağıdır).
+
+function journeyInfo() {
+  const prof = activeProfile();
+  const c = store.crop;
+  if (!prof || !c || !Array.isArray(prof.stages) || !prof.stages.length) return null;
+
+  const stages = prof.stages;
+  const si = Math.max(0, stages.findIndex((s) => s.stage === c.stage));
+
+  let startDay = 0;
+  for (let i = 0; i < si; i++) startDay += (+stages[i].durationDays || 0);
+
+  const dur  = +stages[si].durationDays || 0;
+  const day  = typeof c.daysSincePlanting === 'number' ? c.daysSincePlanting : null;
+  const into = (day === null) ? null : day - startDay;
+
+  const consistent = into !== null && into >= 0 && dur > 0 && into <= dur;
+
+  return {
+    stages: stages.map((s, i) => ({
+      key: s.stage,
+      label: STAGE_TEXT[s.stage] || s.stage,
+      state: i < si ? 'done' : (i === si ? 'now' : ''),
+    })),
+    index: si,
+    day: day,
+    daysInStage: into,
+    stageDays: dur,
+    /// null = oran gösterilemez
+    pct: consistent ? Math.max(3, Math.min(100, Math.round((into / dur) * 100))) : null,
+    finalStage: dur === 0 || si >= stages.length - 1,
+    nextLabel: si + 1 < stages.length
+      ? (STAGE_TEXT[stages[si + 1].stage] || stages[si + 1].stage)
+      : null,
+  };
+}
+
+/// Yolculuk şeridini çizer. Katalog yoksa boş dizge döner — çağıran yeri
+/// boş bırakır, "veri yok" kutusu koymaz.
+function renderJourney() {
+  const j = journeyInfo();
+  if (!j) return '';
+
+  const track = j.stages.map((s) => `
+    <div class="journey-stage ${s.state}">
+      <span class="journey-node"></span>
+      <span class="journey-label">${esc(s.label)}</span>
+    </div>`).join('');
+
+  let meter = '';
+  if (j.pct !== null) {
+    meter = `
+      <div class="journey-meter" role="progressbar" aria-valuenow="${j.pct}"
+           aria-valuemin="0" aria-valuemax="100"
+           aria-label="Bu dönemde ilerleme">
+        <div class="journey-fill" style="width:${j.pct}%"></div>
+      </div>
+      <div class="journey-foot">
+        <span>Bu dönemde <b>${j.daysInStage}</b> / ${j.stageDays} gün</span>
+        ${j.nextLabel ? `<span>Sonraki: <b>${esc(j.nextLabel)}</b></span>` : ''}
+      </div>`;
+  } else if (j.finalStage) {
+    meter = `<div class="journey-foot"><span>Son dönem — <b>hasada kadar sürer</b></span>
+             ${j.day !== null && j.day > 0 ? `<span>${j.day}. gün</span>` : ''}</div>`;
+  } else {
+    // Tutarsız veri: dönemi ve günü söyle, oran söyleme.
+    meter = `<div class="journey-foot">
+        ${j.day !== null && j.day > 0 ? `<span>Dikimden beri <b>${j.day}</b> gün</span>` : ''}
+        ${j.nextLabel ? `<span>Sonraki: <b>${esc(j.nextLabel)}</b></span>` : ''}
+      </div>`;
+  }
+
+  const chips = [];
+  if (store.crop.crop === 'custom') {
+    chips.push('<span class="chip">✎ Kurallar elle düzenlendi</span>');
+  }
+  if (store.crop.autoStage && !store.crop.autoStageActive) {
+    chips.push('<span class="chip">⏸ Dönem ilerlemesi duraklatıldı</span>');
+  }
+  if (!store.crop.autoStage) {
+    chips.push('<span class="chip">⤳ Dönemi siz seçiyorsunuz</span>');
+  }
+
+  // Ürünün kimliği KAHRAMAN KARTIN üst satırında zaten yazıyor ("Çilek ·
+  // Çiçeklenme dönemi"); burada tekrar etmiyoruz. Eksik olan şey EYLEMDİ:
+  // ana sayfadan ürünü değiştirmenin ya da bırakmanın hiçbir yolu yoktu,
+  // kullanıcı Ayarlar → Bahçe ekranını bulmak zorundaydı.
+  return `<div class="journey">
+      <div class="journey-track">${track}</div>
+      ${meter}
+      ${chips.length ? `<div class="journey-chips">${chips.join('')}</div>` : ''}
+      <div class="journey-actions">
+        <button id="cropChangeBtn" class="btn btn-sm btn-outline">Ürünü değiştir</button>
+        <button id="cropRemoveBtn" class="btn btn-sm btn-ghost-danger">Kaldır</button>
+      </div>
+      <p id="cropHomeMsg" class="form-feedback"></p>
+    </div>`;
+}
+
+/// Ürünü bırakma — hasat bitti, saksı boş.
+///
+/// ── NEDEN ÖNCE ÖNİZLEME ─────────────────────────────────────────────────────
+/// Ürünü kaldırmak sulama programını da siler. Kaç kuralın silineceğini
+/// SÖYLEMEDEN onay istemek, kullanıcıya ne kaybedeceğini bilmediği bir
+/// karar verdirmek olurdu. Sihirbazın "şunlar değişecek" ekranıyla aynı
+/// ilke; cihaz sayıyı zaten hesaplıyor, sormak yeterli.
+async function removeCrop() {
+  const m = el0('cropHomeMsg');
+  const btn = el0('cropRemoveBtn');
+  const name = cropDisplayName();
+
+  const say = (cls, s) => { if (m) { m.className = 'form-feedback' + (cls ? ' ' + cls : ''); txt(m, s); } };
+
+  say('', 'Ne silineceği hesaplanıyor…');
+
+  let willDelete = 0;
+  try {
+    const plan = await api('/api/crop/preview', {
+      method: 'POST', body: JSON.stringify({ crop: 'none' }),
+    });
+    willDelete = plan.replacedCount || 0;
+  } catch (e) {
+    say('err', 'Silinecekler öğrenilemedi: ' + e.message);
+    return;
+  }
+
+  const ok = confirm(
+    `"${name}" kaldırılacak.\n\n` +
+    (willDelete > 0
+      ? `· ${willDelete} sulama/ışık kuralı silinecek\n`
+      : '· Silinecek bir kural yok\n') +
+    '· Hedef pH/besin aralıkları kaldırılacak; ölçümler yorumsuz gösterilir\n' +
+    '· Gün sayacı sıfırlanır\n\n' +
+    'Ayarlarınız, Wi-Fi ve parolanız etkilenmez. Sonra yeni bir ürün seçebilirsiniz.');
+
+  if (!ok) { say('', ''); return; }
+
+  if (btn) { btn.disabled = true; }
+  say('', 'Kaldırılıyor…');
+
+  try {
+    // `plantedAt: 0` gün sayacını sıfırlar, `autoStage: false` dönem
+    // ilerlemesini durdurur — ürün yokken ikisi de anlamsız.
+    await api('/api/crop', {
+      method: 'PUT',
+      body: JSON.stringify({ crop: 'none', plantedAt: 0, autoStage: false }),
+    });
+  } catch (e) {
+    if (btn) { btn.disabled = false; }
+    say('err', 'Kaldırılamadı: ' + e.message);
+    return;
+  }
+
+  await loadCrop();
+  if (typeof loadRules === 'function') { loadRules(); }
+  // `loadCrop()` kartı yeniden çizdi; mesaj kutusu artık yok. Geri bildirimi
+  // yerinde duran kahraman karta bırakıyoruz — o zaten "Başlayalım" diyecek.
+}
+
 // ── Değer yorumlama ────────────────────────────────────────────────────────
 
 /// Bir ölçümü hedef bandına göre yorumlar.
@@ -88,16 +309,23 @@ function bandVerdict(v, band) {
 
 /// Bir sensörün o anki durumunu düz Türkçe olarak döndürür.
 ///
-/// @return { level, value, unit, text, band }
+/// İki metin döner ve ikisi de gerekir:
+///   `word` — TEK SÖZCÜK, panelin kompakt kutusu için ("Biraz yüksek")
+///   `text` — TAM CÜMLE + hedef aralık, Bitkim ekranındaki kart için
+/// Kompakt kutuya uzun cümleyi sığdırmaya çalışmak, ya kesik metin ya da
+/// okunmayacak kadar küçük punto demekti.
+///
+/// @return { id, label, level, word, value, unit, text, band }
 function sensorStatus(sn) {
   const meta = SENSOR_META[sn.id] || { label: sn.id, unit: '', digits: 2 };
   const out = { id: sn.id, label: meta.label, unit: meta.unit, band: null,
-                level: 'unknown', value: '—', text: '' };
+                level: 'unknown', word: '—', value: '—', text: '' };
 
   // Değer YOKKEN birim de gösterilmez: "Yok lx" saçmadır ve okuyan kişiye
   // sensörün bir değer ürettiği izlenimi verir.
   if (sn.quality === 'notPresent') {
     out.level = 'off';
+    out.word  = 'Takılı değil';
     out.value = 'Yok';
     out.unit  = '';
     out.text  = 'Bu sensör takılı değil';
@@ -105,6 +333,7 @@ function sensorStatus(sn) {
   }
   if (sn.quality === 'fault') {
     out.level = 'bad';
+    out.word  = 'Arızalı';
     out.value = '—';
     out.unit  = '';
     out.text  = 'Sensör okunamıyor — kabloyu kontrol edin';
@@ -117,6 +346,7 @@ function sensorStatus(sn) {
     const idx = Math.max(0, Math.min(2, Math.round(sn.value)));
     out.value = LEVEL_TEXT[idx] || '?';
     out.level = idx === 2 ? 'ok' : (idx === 1 ? 'warn' : 'bad');
+    out.word  = idx === 2 ? 'Yeterli' : (idx === 1 ? 'Azalıyor' : 'Kritik');
     out.text  = idx === 2 ? 'Depoda yeterli su var'
               : (idx === 1 ? 'Su azalıyor — yakında ekleyin'
                            : 'Su bitmek üzere — pompa kilitlenir');
@@ -134,11 +364,13 @@ function sensorStatus(sn) {
 
   if (sn.quality === 'stale') {
     out.level = 'warn';
+    out.word  = 'Değişmiyor';
     out.text  = 'Değer bir süredir değişmiyor';
     return out;
   }
   if (sn.quality === 'outOfRange') {
     out.level = 'bad';
+    out.word  = 'Aralık dışı';
     out.text  = 'Değer beklenen aralığın dışında';
     return out;
   }
@@ -147,11 +379,15 @@ function sensorStatus(sn) {
     // Hedef band yok: ürün seçilmemiş veya bu sensörün ürünle ilgisi yok
     // (akış, ışık). Sayıyı gösterip yorum yapmıyoruz.
     out.level = 'ok';
+    out.word  = 'Ölçülüyor';
     out.text  = cropSelected() ? '' : 'Ürün seçilince hedef aralık gösterilir';
     return out;
   }
 
   out.level = v.level;
+  out.word = v.level === 'ok' ? 'İdeal'
+           : (v.level === 'warn' ? (v.low ? 'Biraz düşük' : 'Biraz yüksek')
+                                 : (v.low ? 'Çok düşük'   : 'Çok yüksek'));
   const range = `hedef ${trimNum(out.band.min)}–${trimNum(out.band.max)}${meta.unit ? ' ' + meta.unit : ''}`;
   out.text = v.level === 'ok' ? 'İyi · ' + range
            : (v.low ? 'Hedefin altında · ' + range : 'Hedefin üstünde · ' + range);
@@ -172,7 +408,10 @@ function buildAdvice() {
   const byId = {};
   s.sensors.forEach((sn) => { byId[sn.id] = sn; });
 
-  const push = (level, text) => items.push({ level, text });
+  // `key` yalnızca kahraman kartın bir maddeyi TANIYABİLMESİ için var:
+  // "ürün seçilmedi" maddesinin altında zaten bir "Ürün Seç" düğmesi
+  // duruyor, o yüzden orada talimat yerine davet gösteriyoruz.
+  const push = (level, text, key) => items.push({ level, text, key: key || '' });
 
   // 1) Güvenlik önce: su seviyesi pompayı kilitler.
   const lvl = byId.level;
@@ -192,7 +431,8 @@ function buildAdvice() {
 
   // 3) Ürün seçilmemişse en faydalı tavsiye budur.
   if (!cropSelected()) {
-    push('warn', 'Henüz ürün seçilmedi. Ayarlar → "Ne yetiştiriyorsunuz?" adımını tamamlayın; sistem hedefleri ve sulama programını sizin için kursun.');
+    push('warn', 'Henüz ürün seçilmedi. Ayarlar → Bahçe bölümünden ne yetiştirdiğinizi ' +
+                 'seçin; cihaz hedefleri ve sulama programını sizin için kursun.', 'noCrop');
     return items;
   }
 
@@ -239,6 +479,28 @@ function buildAdvice() {
     push('bad', `${meta.label} sensörü okunamıyor — kablosunu kontrol edin. Bu ölçüme bağlı kurallar çalışmaz.`);
   });
 
+  // 6b) Cihaz bir aktüatörü ÇALIŞTIRAMIYOR.
+  //
+  // `block` her telemetri paketinde geliyordu ama yalnızca Kontrol
+  // ekranındaki kartın üstünde görünüyordu. "Pompa neden çalışmadı"
+  // sorusunun cevabı, kullanıcının baktığı ilk yerde — yapılacaklar
+  // listesinde — olmalı; başka bir sekmeye gidip aramak zorunda kalmamalı.
+  //
+  // `a.block` tek bir telemetri paketinde parlayıp söndüğü için doğrudan
+  // ona bakmak, listede bir saniye görünüp kaybolan bir madde üretirdi —
+  // okunamayacak kadar kısa ve dikkat dağıtıcı. Son 20 saniyede bildirilen
+  // engeli kullanıyoruz: madde yeterince duruyor ki okunabilsin, ama
+  // düzeldikten sonra da kalmıyor.
+  const BLOCK_WINDOW_MS = 20000;
+  s.actuators.forEach((a) => {
+    const meta = ACT_META[a.id];
+    if (!meta) { return; }
+    const lb = store.lastBlock[a.id];
+    const code = a.block || (lb && Date.now() - lb.at < BLOCK_WINDOW_MS ? lb.code : 0);
+    if (!code) { return; }
+    push('bad', `${meta.name} çalıştırılamıyor — ${errText(code)}`, 'block:' + a.id);
+  });
+
   // 7) Dönem ilerlemesi durduysa nedenini söyle.
   if (store.crop && store.crop.autoStage && !store.crop.autoStageActive) {
     push('warn', 'Gelişim dönemi otomatik ilerlemesi duraklatıldı — cihaz saati geçerli değil. Wi-Fi bağlanınca kendiliğinden düzelir.');
@@ -247,6 +509,14 @@ function buildAdvice() {
   // 8) Kurallar hazır ama motor kapalı — en sık sorulan "neden çalışmıyor".
   if (s.automation && s.automation.mode === 0 && store.rulesCountHint > 0) {
     push('warn', 'Sulama programı hazır ancak sistem MANUEL modda; kendiliğinden çalışmaz. Ayarlar → Otomatik çalışma bölümünden açabilirsiniz.');
+  }
+
+  // 9) Cihazın kendi bildirdiği etkin hatalar. Sayı telemetride hazır
+  // duruyor; teşhis ekranına girmeden en azından VARLIĞINDAN haberdar
+  // olunmalı — kullanıcı listeyi temiz görüp sorun yok sanmasın.
+  if (s.system && s.system.faults > 0) {
+    push('warn', `Cihaz ${s.system.faults} etkin hata bildiriyor. ` +
+                 'Ayarlar → Sistem ekranındaki teşhis bölümünde listeleniyor.', 'faults');
   }
 
   if (!items.length) push('ok', 'Her şey yolunda görünüyor. Yapılacak bir şey yok.');
@@ -261,97 +531,115 @@ function actuatorEnabled(id) {
 
 // ── Panel kartları ─────────────────────────────────────────────────────────
 
+/// "Yapmanız gerekenler" bölümü.
+///
+/// TEK MADDEYİ ÇİZMEZ: onu kahraman kart tam metniyle zaten söylüyor
+/// (bkz. `renderHeadline`). Liste yalnızca iki ve üzeri madde varsa görünür;
+/// o zaman kahraman kart sayıya döner ve ayrıntı buraya düşer.
+/// "Bugün yapılacaklar" — ana sayfanın görev listesi.
+///
+/// ── NEDEN HER ZAMAN GÖRÜNÜR ─────────────────────────────────────────────────
+/// Önceki sürümde bölüm yalnızca 2+ madde varken çiziliyordu. Sonuç: liste
+/// kullanıcının GÜVENEBİLECEĞİ bir yer değildi — bazen vardı, bazen yoktu ve
+/// tek maddelik bir sorun hiç listelenmiyordu. "Bugün ne yapmalıyım?"
+/// sorusunun cevabı HER ZAMAN aynı yerde olmalı; boşsa da orada olmalı ki
+/// boş olduğu görülebilsin.
+///
+/// Kahraman kart artık madde metnini TEKRARLAMAZ, yalnızca sayar — tekrar
+/// bu yüzden oluşmuyor.
 function renderAdvice() {
-  const host = el('adviceList');
+  const host = el0('adviceList');
+  const count = el0('adviceCount');
   if (!host) return;
-  const items = buildAdvice();
-  host.innerHTML = items.map((it) => `
+
+  const items = store.advice || buildAdvice().filter((it) => it.level !== 'ok');
+
+  if (count) {
+    txt(count, items.length ? String(items.length) : '✓');
+    count.className = 'section-badge' + (items.length
+      ? (items.some((i) => i.level === 'bad') ? ' badge-bad' : ' badge-warn')
+      : ' badge-ok');
+  }
+
+  if (!items.length) {
+    host.innerHTML = `
+      <div class="advice advice-done">
+        <span class="advice-mark" aria-hidden="true">✓</span>
+        <span>Bugün yapmanız gereken bir şey yok. Cihaz bahçenizi kendisi
+          izliyor; bir şey değişirse burada görürsünüz.</span>
+      </div>`;
+    return;
+  }
+
+  // Önce ACİL olanlar. İki madde varsa ve biri "hemen su ekleyin" ise,
+  // kullanıcının onu listenin altında araması saçma olurdu.
+  const order = { bad: 0, warn: 1, ok: 2 };
+  const sorted = items.slice().sort((a, b) => (order[a.level] || 9) - (order[b.level] || 9));
+
+  host.innerHTML = sorted.map((it) => `
     <div class="advice advice-${it.level}">
-      <span class="advice-dot"></span>
+      <span class="advice-mark" aria-hidden="true">${it.level === 'bad' ? '!' : '•'}</span>
       <span>${esc(it.text)}</span>
     </div>`).join('');
 }
 
+/// Kahraman kartın alt yarısı: gelişim yolculuğu — ürün yoksa kurulum çağrısı.
+///
+/// Ürünün ADI ve durumu artık kartın ÜST yarısında (`renderHeadline`) yazıyor;
+/// burada tekrarlanmıyor. Eski sürümde aynı bilgi üç ayrı yerde vardı:
+/// başlıktaki rozet, kahraman metni ve ürün kartının başlığı.
 function renderCropCard() {
   const host = el('cropCard');
   if (!host) return;
 
   if (!store.crop) {
-    host.innerHTML = '<p class="muted">Ürün bilgisi alınamadı.</p>';
+    host.innerHTML = '';
     return;
   }
 
-  const tag = el('headCropTag');
+  const tag = el0('headCropTag');
 
   if (!cropSelected()) {
     if (tag) txt(tag, 'KURULUM');
+    // Açıklama kahraman kartın üst yarısında zaten var; burada YALNIZCA
+    // eylem duruyor. Aynı gerekçeyi iki kez yazmak, ekranı doldurmaktan
+    // başka bir işe yaramaz.
     host.innerHTML = `
-      <div class="crop-empty">
-        <div class="crop-empty-icon">🌱</div>
-        <div>
-          <h3>Henüz bir ürün seçmediniz</h3>
-          <p class="muted small">
-            Ne yetiştirdiğinizi söyleyin; sistem o bitkinin hedef pH/besin
-            değerlerini, sulama programını ve ışık süresini sizin için kursun.
-          </p>
-        </div>
-        <button id="cropStartBtn" class="btn btn-primary btn-lg">Ürün Seç</button>
+      <div class="journey">
+        <button id="cropStartBtn" class="btn btn-primary btn-block btn-lg">🌱 Ürün Seç</button>
       </div>`;
-    const b = el('cropStartBtn');
+    const b = el0('cropStartBtn');
     if (b) b.onclick = openWizard;
     return;
   }
 
-  const c = store.crop;
-  if (tag) txt(tag, (c.name || cropDisplayName()).toUpperCase());
+  if (tag) txt(tag, (store.crop.name || cropDisplayName()).toUpperCase());
+  host.innerHTML = renderJourney();
 
-  const stageName = STAGE_TEXT[c.stage] || c.stage;
-  const custom = c.crop === 'custom';
+  const chg = el0('cropChangeBtn');
+  if (chg) { chg.onclick = openWizard; }
+  const rm = el0('cropRemoveBtn');
+  if (rm) { rm.onclick = removeCrop; }
+}
 
-  // Sonraki dönem ne zaman? Kullanıcı "ne bekliyorum" sorusunun cevabını
-  // görmeli; yalnızca "34. gün" tek başına bir şey anlatmaz.
-  let progress = '';
-  if (c.targets && c.targets.durationDays > 0 && typeof c.daysSincePlanting === 'number') {
-    const total = c.targets.durationDays;
-    const done  = Math.min(total, c.daysSincePlanting);
-    const pct   = Math.max(2, Math.min(100, Math.round((done / total) * 100)));
-    progress = `
-      <div class="crop-progress">
-        <div class="crop-progress-bar" style="width:${pct}%"></div>
-      </div>
-      <span class="muted small">Bu dönem yaklaşık ${total} gün sürer</span>`;
-  } else if (c.targets) {
-    progress = '<span class="muted small">Son dönem — hasada kadar sürer</span>';
-  }
+/// Hedef bant çipleri — Bitkim ekranının başında. Panelde DEĞİL: kullanıcı
+/// panelde "iyi mi kötü mü" sorusunun cevabını ister, aralığın kendisini
+/// değil. Aralık, sayıya bakmak isteyenin ekranında durur.
+function renderCropTargets() {
+  const host = el0('cropTargets');
+  if (!host) return;
 
-  const t = c.targets;
-  const chips = t ? `
-    <div class="crop-chips">
-      <span class="chip">pH ${trimNum(t.ph.min)}–${trimNum(t.ph.max)}</span>
-      <span class="chip">EC ${trimNum(t.ec.min)}–${trimNum(t.ec.max)}</span>
-      <span class="chip">Su ${trimNum(t.waterTemp.min)}–${trimNum(t.waterTemp.max)} °C</span>
-      <span class="chip">Işık ${Math.round(t.lightMinutes / 60)} sa/gün</span>
-    </div>` : '';
+  const t = cropTargets();
+  if (!t) { host.innerHTML = ''; show(host, false); return; }
 
+  show(host, true);
   host.innerHTML = `
-    <div class="crop-head">
-      <div>
-        <h3>${esc(cropDisplayName())}</h3>
-        <p class="crop-sub">
-          <b>${esc(stageName)}</b> dönemi
-          ${typeof c.daysSincePlanting === 'number' && c.daysSincePlanting > 0
-            ? ` · ${c.daysSincePlanting}. gün` : ''}
-          · Sulama: ${esc(INTENSITY_TEXT[c.intensity] || c.intensity)}
-        </p>
-      </div>
-      <button id="cropChangeBtn" class="btn btn-secondary btn-sm">Değiştir</button>
-    </div>
-    ${custom ? `<div class="warn-note small">Kurallar elle değiştirildiği için profil <b>ÖZEL</b>'e düştü. Dönem otomatik ilerlemesi durdu; yeniden profil uygulamak isterseniz "Değiştir" deyin.</div>` : ''}
-    ${chips}
-    ${progress}`;
-
-  const b = el('cropChangeBtn');
-  if (b) b.onclick = openWizard;
+    <span class="chip">pH ${trimNum(t.ph.min)}–${trimNum(t.ph.max)}</span>
+    <span class="chip">EC ${trimNum(t.ec.min)}–${trimNum(t.ec.max)} mS/cm</span>
+    <span class="chip">Su ${trimNum(t.waterTemp.min)}–${trimNum(t.waterTemp.max)} °C</span>
+    <span class="chip">Hava ${trimNum(t.airTemp.min)}–${trimNum(t.airTemp.max)} °C</span>
+    <span class="chip">Nem %${trimNum(t.humidity.min)}–${trimNum(t.humidity.max)}</span>
+    <span class="chip">Işık ${Math.round(t.lightMinutes / 60)} sa/gün</span>`;
 }
 
 // ── Ayarlar: ürün özeti ────────────────────────────────────────────────────

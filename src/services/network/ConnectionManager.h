@@ -29,7 +29,12 @@ namespace net {
 namespace conn {
 
 /// Event hiç gelmezse devreye giren emniyet valfi.
-constexpr uint32_t CONNECT_TIMEOUT_MS = 20000u;
+///
+/// Normal yolda sonuç 2-8 sn içinde event olarak gelir (auth + DHCP). 12 sn
+/// bunun kat kat üstüdür ve valfin erken tetiklenmesi bir denemeyi boşa
+/// harcamaz. Önceki 20 sn, olay hiç gelmediği durumda kullanıcıyı 8 saniye
+/// fazladan bekletiyordu — üstelik hiçbir şeyin OLMADIĞI 8 saniye.
+constexpr uint32_t CONNECT_TIMEOUT_MS = 12000u;
 
 core::ErrCode begin(const core::Config& cfg);
 

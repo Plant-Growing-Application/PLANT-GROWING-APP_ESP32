@@ -33,8 +33,18 @@ namespace softap {
 ///
 /// Süre tabanlı ölçüt seçildi: "N deneme" ölçütü backoff yüzünden geçen
 /// süreyi belirsiz kılar (3 deneme 7 sn de olabilir 90 sn de). Kullanıcı
-/// deneyimi süreyle ölçülür: "1.5 dakikadır bağlanamıyorum".
-constexpr uint32_t FALLBACK_AFTER_MS = 90000u;
+/// deneyimi süreyle ölçülür: "bir dakikadır bağlanamıyorum".
+///
+/// ── NEDEN 90 SANİYE DEĞİL ──────────────────────────────────────────────────
+/// Süre 90 sn'ydi ve kullanıcı açısından şu demekti: internet gittiğinde
+/// cihaza ULAŞILAMAYAN bir buçuk dakika. O sürede ne web arayüzü ne de
+/// ayarlar erişilebilirdi; kullanıcı cihazın çöktüğünü düşünüyordu.
+///
+/// 45 sn hâlâ "geçici kopma" ile "gerçek arıza"yı ayıracak kadar uzun:
+/// yönlendirici yeniden başlatması tipik olarak 20-40 sn sürer ve bu sürede
+/// AP açılıp kapanmaz. Kurtarma AP'si STA denemesini DURDURMAZ (AP_STA), bu
+/// yüzden erken açılması bağlantının geri gelmesini geciktirmez.
+constexpr uint32_t FALLBACK_AFTER_MS = 45000u;
 
 /// STA bağlandıktan sonra AP'nin açık kalmaya devam edeceği asgari süre.
 ///

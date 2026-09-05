@@ -54,6 +54,17 @@ bool     confirming();
 /// Acil duruma girildiğinde ekranı öncelikli ekrana taşır.
 void onEmergency(core::Millis now);
 
+/// Katalogdaki ürün sayısını bildirir.
+///
+/// Navigasyon ürün tablosunu tanımaz; yalnızca `CROP` ekranında kaç satır
+/// olduğunu bilmesi gerekir. Sayı `UiService` tarafından her turda verilir,
+/// böylece katalog büyürse burada değişecek bir şey olmaz.
+void setCropCount(uint8_t n);
+
+/// İlk açılış kurulum ekranını açar. `UiService` bunu YALNIZCA BİR KEZ
+/// çağırır: kullanıcı ekrandan çıktıktan sonra kendiliğinden geri gelmez.
+void onSetupNeeded(core::Millis now);
+
 } // namespace nav
 } // namespace ui
 } // namespace interfaces

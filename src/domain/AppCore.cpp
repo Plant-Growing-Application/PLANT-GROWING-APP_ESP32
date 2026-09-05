@@ -14,6 +14,8 @@
 #include "domain/SafetyMonitor.h"
 #include "domain/SystemSupervisor.h"
 #include "services/ConfigService.h"
+#include "services/CropService.h"
+#include "services/TimeService.h"
 #include "services/network/NetworkFsm.h"
 
 namespace domain {
@@ -92,6 +94,42 @@ void applyCommand(const Command& c, const core::SystemState& snap, Millis now)
                 core::diag::log(core::LogLevel::WARNING, rc, c.param,
                                 "otomasyon modu degistirilemedi");
             }
+            break;
+        }
+
+        case CommandType::CROP_APPLY:
+        {
+            // ── OLED'DEN ÜRÜN SEÇİMİ ───────────────────────────────────────
+            //
+            // Varsayılanlar bilinçli ve web arayüzünün sihirbazıyla aynı:
+            //   · dönem      → İLK dönem (kullanıcı fideyle başlar)
+            //   · yoğunluk   → NORMAL (cihaz sistem tipini bilemez)
+            //   · dikim      → bugün; saat geçersizse 0
+            //   · otomatik dönem ilerlemesi → açık
+            //
+            // Saat geçersizken 0 yazıyoruz, UYDURMA BİR TARİH DEĞİL: sıfır
+            // "bilinmiyor" demektir ve `autoStageActive()` zaten duraklar.
+            // Gerçek bir tarih uydurmak, gün sayacını sessizce yanlış
+            // başlatmak olurdu.
+            const int64_t planted =
+                services::timesvc::valid()
+                    ? static_cast<int64_t>(services::timesvc::epoch().s)
+                    : 0;
+
+            services::crop::CropPlan plan{};
+            const ErrCode rc = services::crop::apply(
+                static_cast<core::CropId>(c.target), core::GrowthStage::SEEDLING,
+                core::Intensity::NORMAL, planted, true, plan);
+
+            if (rc != ErrCode::OK)
+            {
+                core::diag::log(core::LogLevel::WARNING, rc, c.target,
+                                "OLED urun profili uygulanamadi");
+                break;
+            }
+
+            core::diag::log(core::LogLevel::INFO, ErrCode::OK, plan.ruleCount,
+                            "OLED uzerinden urun profili uygulandi");
             break;
         }
 

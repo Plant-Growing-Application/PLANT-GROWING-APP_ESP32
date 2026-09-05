@@ -47,6 +47,16 @@ struct NetworkRuntime
     uint8_t stopped;       ///< kimlik hatası sınırına ulaşıldı, deneme durdu
     uint8_t retryNow;      ///< kullanıcı "şimdi dene" dedi → backoff atlanır
 
+    // ── KURULUM OTURUMU (TASK-038 / ISSUE-041) ─────────────────────────────
+    // `provisioning`, cihazın kurulum AP'sini KİMLİK BİLGİSİ OLMADIĞI için
+    // açtığı oturumu işaretler: ilk açılış veya "ağı unut" sonrası. AP
+    // fallback bu oturumun parçası DEĞİLDİR — orada zaten çalışan bir
+    // yapılandırma vardır ve yeniden başlatmak sorunu çözmez, döngü yaratır.
+    core::Millis setupDoneAt;   ///< kurulumda IP alındığı an — nefes payı sayacı
+    uint8_t provisioning;       ///< kurulum oturumu sürüyor
+    uint8_t setupDone;          ///< kurulumda IP alındı, kontrollü reset bekliyor
+    uint8_t rebootPosted;       ///< SYSTEM_RESTART komutu kuyruğa kondu
+
     void reset()
     {
         stateSince        = core::Millis{0};
@@ -58,10 +68,14 @@ struct NetworkRuntime
         lastClass         = DisconnectClass::UNKNOWN;
         lastError         = core::ErrCode::OK;
         state             = core::NetState::BOOT;
+        setupDoneAt       = core::Millis{0};
         attempt           = 0;
         authFailures      = 0;
         stopped           = 0;
         retryNow          = 0;
+        provisioning      = 0;
+        setupDone         = 0;
+        rebootPosted      = 0;
     }
 };
 
