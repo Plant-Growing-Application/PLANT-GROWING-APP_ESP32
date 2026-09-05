@@ -274,14 +274,18 @@ void ipToText(uint32_t raw, char* out, size_t cap)
 
 } // namespace
 
-void build(const core::SystemState& s, ScreenId screen, uint8_t cursor, bool editing,
-           const char* apSsid, const char* apPassword, UiModel& out)
+void build(const core::SystemState& s, const NavState& nav, const char* apSsid,
+           const char* apPassword, UiModel& out)
 {
     memset(&out, 0, sizeof(out));   // `memcmp` karşılaştırması için dolgu da sıfır olmalı
 
-    out.screen  = screen;
-    out.cursor  = cursor;
-    out.editing = editing ? 1u : 0u;
+    out.screen        = nav.screen;
+    out.cursor        = nav.cursor;
+    out.editing       = (nav.confirming != 0u) ? 1u : 0u;
+    out.navFocus      = (nav.focus != 0u) ? 1u : 0u;
+    out.pageIndex     = nav.pageIndex;
+    out.pageCount     = nav.pageCount;
+    out.pageEnterable = (nav.enterable != 0u) ? 1u : 0u;
 
     // --- Durum çubuğu ---
     // Zaman geçersizken SAHTE DEĞER YOK. Eski `getFormattedTime()`

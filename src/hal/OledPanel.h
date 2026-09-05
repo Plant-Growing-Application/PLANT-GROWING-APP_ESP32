@@ -45,7 +45,31 @@ void clear();
 void setTextSize(uint8_t size);
 void drawText(int16_t x, int16_t y, const char* text);
 void drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1);
+
+/// Dikdörtgen: `filled == false` beyaz ÇERÇEVE, `filled == true` **SİYAH**
+/// dolgu — yani alanı TEMİZLER.
+///
+/// İsim yanıltıcıdır ve tam olarak bu yüzden üç ayrı yerde ters çizime yol
+/// açtı (TASK-075): başlık bantları, ACİL rozeti ve Wi-Fi çubukları "dolu"
+/// isteyip görünmez oluyordu. Vurgulu (beyaz) dolgu `fillHighlight()`'tır.
+///
+/// `filled == true` bugün hiçbir yerden çağrılmıyor; bir alanı temizlemek
+/// meşru bir ihtiyaç olduğu için duruyor.
 void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, bool filled);
+
+/// BEYAZ dolgulu dikdörtgen — seçim çubuğunun ve rozetlerin zemini.
+///
+/// Ters renkli satır yazmanın ilk yarısıdır; ikinci yarısı
+/// `drawTextInverse()`. İkisi olmadan mono bir panelde "seçili" durumu
+/// yalnızca satır başına konan bir işaretle anlatılabiliyordu ve bir metre
+/// mesafeden seçilmiyordu (TASK-075).
+void fillHighlight(int16_t x, int16_t y, int16_t w, int16_t h);
+
+/// SİYAH metin — YALNIZCA `fillHighlight()` ile doldurulmuş zemin üzerine.
+///
+/// Boş zemine yazılırsa GÖRÜNMEZ; çağıran önce zemini doldurmalıdır.
+void drawTextInverse(int16_t x, int16_t y, const char* text);
+
 void drawBitmap(int16_t x, int16_t y, const uint8_t* bitmap, int16_t w, int16_t h);
 
 /// Metnin piksel genişliğini ölçer (ortalama/sığdırma için).

@@ -34,7 +34,12 @@ namespace {
 
 namespace L = layout;
 
-void text(int16_t x, int16_t y, const char* s) { hal::oled::drawText(x, y, s); }
+/// Metin. `inverse` ise beyaz zemine SİYAH yazar (seçim çubuğunun içi).
+void text(int16_t x, int16_t y, const char* s, bool inverse = false)
+{
+    if (inverse) { hal::oled::drawTextInverse(x, y, s); }
+    else         { hal::oled::drawText(x, y, s); }
+}
 
 /// Yerleşik 5×7 fontta bir karakterin kapladığı genişlik (1 px boşlukla).
 constexpr int16_t CHAR_W = 6;
@@ -92,46 +97,177 @@ const char* fitValue(const char* value, int16_t availPx, char* buf, size_t cap)
 /// Saga yaslama ile ayni IP x=50'den baslar ve tam oturur. Deger etiketin
 /// uzerine binecek kadar uzunsa `fitValue()` onu keser ve ".." ekler: etiket
 /// okunur kalir, satir tasmaz.
-void row(int16_t y, const char* label, const char* value)
+void row(int16_t y, const char* label, const char* value, bool inverse = false)
 {
-    text(L::COL_LABEL, y, label);
+    text(L::COL_LABEL, y, label, inverse);
 
     if (value == nullptr || *value == 0) { return; }
 
     const int16_t labelEnd = static_cast<int16_t>(
         L::COL_LABEL + hal::oled::textWidth(label, 1) + 4);
 
+    // Sağ kenarda `PAD_RIGHT` kadar yer bırakılır: seçim çubuğu satırın
+    // tamamını kaplıyor ve kenara yapışan bir değer çubuğun içinde sıkışmış
+    // görünüyordu.
+    const int16_t rightEdge = static_cast<int16_t>(L::W - L::PAD_RIGHT);
+
     // Etiketten sonra kalan alana SIĞDIRILIR; taşan değer kesilir.
     char        buf[VALUE_MAX];
-    const char* shown  = fitValue(value, static_cast<int16_t>(L::W - labelEnd),
+    const char* shown  = fitValue(value, static_cast<int16_t>(rightEdge - labelEnd),
                                   buf, sizeof(buf));
     const int16_t valueW = static_cast<int16_t>(hal::oled::textWidth(shown, 1));
 
-    int16_t x = static_cast<int16_t>(L::W - valueW);
+    int16_t x = static_cast<int16_t>(rightEdge - valueW);
     if (x < labelEnd) { x = labelEnd; }
 
-    text(x, y, shown);
+    text(x, y, shown, inverse);
 }
 
-/// Seçilebilir satır. İmleç `>` ile gösterilir; onay bekleniyorsa `?`.
-void selectableRow(int16_t y, uint8_t index, uint8_t cursor, bool confirming,
-                   const char* label, const char* value)
+/// Seçili satırın ters renkli vurgusu.
+///
+/// ── NEDEN `>` DEĞİL ─────────────────────────────────────────────────────────
+/// Seçim eskiden satır başına konan tek bir `>` karakteriyle anlatılıyordu:
+/// 128×64 bir panelde 5×7 piksellik bir işaret, bir metre öteden — yani
+/// cihazın sera duvarında asılı olduğu normal mesafeden — seçilmiyordu.
+/// Kullanıcı hangi satırda olduğunu ancak ekrana eğilerek görebiliyordu.
+///
+/// Satırın tamamının ters renge dönmesi, aynı bilgiyi 128×10 piksellik bir
+/// yüzeyle anlatır ve uzaktan bakışta tek görünen şey olur.
+void selectionBar(int16_t y)
 {
-    if (index == cursor)
-    {
-        text(L::CURSOR_X, y, confirming ? "?" : ">");
-    }
-    row(y, label, value);
+    hal::oled::fillHighlight(0, static_cast<int16_t>(y + L::BAR_DY), L::W, L::BAR_H);
 }
+
+/// Seçilebilir satır.
+///
+/// @param focused  sayfanın İÇİNDE miyiz? Sayfa modunda imleç KULLANICIYA AİT
+///                 DEĞİLDİR (encoder sayfaları geziyordur) ve hiçbir satır
+///                 vurgulanmaz: vurgulanan satır, çevirince oraya gidileceği
+///                 sözünü verirdi ve bu söz tutulmazdı.
+/// @param confirming  onay bekleniyor. Değer sütunu "ONAY?" olur; hangi
+///                 satırın onay beklediği, ekranın altındaki ipucu satırından
+///                 bağımsız olarak SATIRIN ÜZERİNDE yazar.
+void selectableRow(int16_t y, uint8_t index, uint8_t cursor, bool focused,
+                   bool confirming, const char* label, const char* value)
+{
+    if (index != cursor || !focused)
+    {
+        row(y, label, value);
+        return;
+    }
+
+    selectionBar(y);
+    row(y, label, confirming ? "ONAY?" : value, true);
+}
+
+/// Sayfa göstergesi ve mod işareti — ayırıcı çizginin YERİNE.
+///
+/// ── NEDEN ───────────────────────────────────────────────────────────────────
+/// Yedi sayfa arasında dolaşırken "kaçıncı sayfadayım, kaç sayfa var"
+/// sorusunun cevabı hiçbir yerde yazmıyordu: kullanıcı sayfayı yalnızca
+/// içeriğinden tanıyor, sıranın nerede biteceğini bilmiyordu.
+///
+/// Gösterge FAZLADAN SATIR HARCAMAZ — zaten çizilen ayırıcı çizginin şeridini
+/// kullanır. 128×64'te bir satır, gösterilebilecek ölçümlerin beşte biridir.
+///
+///     ▁▁ ▁▁ ██ ▁▁ ▁▁ ▁▁ ▁▁          bulunulan sayfa kalın ve dolu
+///                            ▼      sayfa modu:  BAS = içeri gir
+///                            ▲      öğe modu:    GERİ = dışarı çık
+///
+/// Mod işareti, iki seviyeli gezinmenin (TASK-075) tek görsel ipucudur:
+/// kullanıcının "şu an neyi çeviriyorum" sorusuna bakışta cevap verir.
+void drawNavStrip(const UiModel& m)
+{
+    constexpr int16_t GLYPH_W = 5;
+    constexpr int16_t GLYPH_X = L::W - GLYPH_W - 1;
+    constexpr int16_t STRIP_W = GLYPH_X - 2;          ///< işarete kadar olan alan
+
+    // ── ÖĞE MODU: ŞERİDİN TAMAMI YANAR ─────────────────────────────────────
+    //
+    // Mod farkı yalnızca 5×3 piksellik bir ok işaretiyle anlatılıyordu ve
+    // KİMSE FARK ETMEDİ: kullanıcı sayfanın içinde olduğunu bilmeden encoder'ı
+    // çeviriyor, sayfa değişmiyor ve ekran donmuş sanılıyordu.
+    //
+    // Dolu şerit ile dilimlenmiş şerit arasındaki fark, ekrana bakar bakmaz
+    // görülür. Sayfa konumu bu modda GÖSTERİLMEZ; kullanıcı zaten sayfa
+    // değiştirmiyor, çıkmayı bilmesi gerekiyor.
+    if (m.navFocus != 0u)
+    {
+        hal::oled::fillHighlight(0, L::SEP_Y, STRIP_W, 3);
+
+        // ▲ — "GERİ ile çık"
+        hal::oled::drawLine(GLYPH_X + 2, L::SEP_Y,     GLYPH_X + 2, L::SEP_Y);
+        hal::oled::drawLine(GLYPH_X + 1, L::SEP_Y + 1, GLYPH_X + 3, L::SEP_Y + 1);
+        hal::oled::drawLine(GLYPH_X,     L::SEP_Y + 2, GLYPH_X + 4, L::SEP_Y + 2);
+        return;
+    }
+
+    // ── SAYFA MODU: KONUM GÖSTERGESİ ───────────────────────────────────────
+    if (m.pageCount == 0u || m.pageIndex >= m.pageCount)
+    {
+        // Sırada YERİ OLMAYAN ekran (`EMERGENCY`, `SETUP`): gösterilecek bir
+        // konum yok. Yanlış bir dilimi yakmaktansa düz ayırıcı çizilir.
+        hal::oled::drawLine(0, L::SEP_Y, L::W - 1, L::SEP_Y);
+    }
+    else
+    {
+        const int16_t seg = static_cast<int16_t>(STRIP_W / m.pageCount);
+        const int16_t w   = static_cast<int16_t>(seg - 2);   // dilimler arası boşluk
+
+        for (uint8_t i = 0; i < m.pageCount; ++i)
+        {
+            const int16_t x = static_cast<int16_t>(i * seg);
+
+            if (i == m.pageIndex) { hal::oled::fillHighlight(x, L::SEP_Y, w, 3); }
+            else
+            {
+                hal::oled::drawLine(x, L::SEP_Y + 1, static_cast<int16_t>(x + w - 1),
+                                    L::SEP_Y + 1);
+            }
+        }
+    }
+
+    if (m.pageEnterable != 0u)
+    {
+        // ▼ — "BAS ile gir". İçeriği olmayan sayfada ÇİZİLMEZ: çalışmayan bir
+        // düğmeye davet etmek, cihazı takılmış gösterir (§12.2).
+        hal::oled::drawLine(GLYPH_X,     L::SEP_Y,     GLYPH_X + 4, L::SEP_Y);
+        hal::oled::drawLine(GLYPH_X + 1, L::SEP_Y + 1, GLYPH_X + 3, L::SEP_Y + 1);
+        hal::oled::drawLine(GLYPH_X + 2, L::SEP_Y + 2, GLYPH_X + 2, L::SEP_Y + 2);
+    }
+}
+
+/// Sayfa modunda gösterilen ipucu.
+///
+/// Şeritteki ▼ işareti gezinme yapısını anlatır ama İLK KEZ karşılaşan
+/// kullanıcıya bir sembol yetmez. Boş kalan ipucu satırı olan ekranlarda
+/// gesture bir kez açıkça yazılır; kullanıcı öğrendikten sonra da yeri
+/// başka bir bilgiden çalınmış olmaz.
+constexpr const char* HINT_ENTER = "Girmek icin bas";
+
+/// Öğe modunda gösterilen ipucu — **çıkış yolu yazıyla durur**.
+///
+/// Sayfanın içinde olduğunu fark etmeyen kullanıcı için tek kurtuluş, geri
+/// tuşunun orada yazıyor olmasıdır. Zaman aşımı (bkz. `FOCUS_IDLE_MS`) bunun
+/// ağıdır; bu satır ise yirmi saniye beklemeyi gereksiz kılar.
+constexpr const char* HINT_BACK  = "Geri: cikis";
 
 /// Wi-Fi sinyal çubukları — 0 çubuk = bağlı değil.
+///
+/// ── TERSİNE ÇİZİLİYORDU ─────────────────────────────────────────────────────
+/// Dolu çubuklar `drawRect(..., filled=true)` ile çiziliyordu ve o çağrı
+/// SİYAH doldurur: gösterge tam tersini anlatıyordu — dört çubukluk sinyalde
+/// hiçbir şey görünmüyor, sinyal yokken dört boş çerçeve duruyordu.
 void drawBars(int16_t x, int16_t y, uint8_t bars)
 {
     for (uint8_t i = 0; i < 4u; ++i)
     {
-        const int16_t h = static_cast<int16_t>(2 + i * 2);
-        hal::oled::drawRect(static_cast<int16_t>(x + i * 3), static_cast<int16_t>(y + 8 - h),
-                            2, h, i < bars);
+        const int16_t h  = static_cast<int16_t>(2 + i * 2);
+        const int16_t bx = static_cast<int16_t>(x + i * 3);
+        const int16_t by = static_cast<int16_t>(y + 8 - h);
+
+        if (i < bars) { hal::oled::fillHighlight(bx, by, 2, h); }
+        else          { hal::oled::drawRect(bx, by, 2, h, false); }
     }
 }
 
@@ -166,12 +302,17 @@ void drawStatusBar(const UiModel& m)
     }
 
     // ACİL rozeti KALICIDIR: kullanıcı hangi ekranda olursa olsun görür.
+    //
+    // Rozet artık GERÇEKTEN ters renkli. Önceki hâlde zemin `drawRect(...,
+    // true)` ile SİYAH dolduruluyordu (o çağrı bir alanı temizler) ve rozet
+    // yanındaki mod yazısından hiçbir farkı kalmıyordu: sistemin en kritik
+    // göstergesi, düz bir kelime olarak duruyordu.
     if (m.emergency != 0u)
     {
-        const int16_t w = 34;
+        const int16_t w = static_cast<int16_t>(hal::oled::textWidth("ACIL", 1) + 6);
         const int16_t x = static_cast<int16_t>(rightEdge - w);
-        hal::oled::drawRect(x, L::STATUS_Y - 1, w, 10, true);
-        text(static_cast<int16_t>(x + 2), L::STATUS_Y, "ACIL");
+        hal::oled::fillHighlight(x, L::STATUS_Y, w, 10);
+        text(static_cast<int16_t>(x + 3), L::STATUS_Y + 1, "ACIL", true);
     }
     else
     {
@@ -181,7 +322,7 @@ void drawStatusBar(const UiModel& m)
         text(x, L::STATUS_Y, m.modeText);
     }
 
-    hal::oled::drawLine(0, L::SEP_Y, L::W - 1, L::SEP_Y);
+    drawNavStrip(m);
 }
 
 // ── HOME: özet ──────────────────────────────────────────────────────────────
@@ -230,6 +371,18 @@ void drawHome(const UiModel& m)
 
     if (m.alertText[0] != '\0') { text(L::COL_LABEL, L::ROW3, m.alertText); }
     else                        { row(L::ROW3, "Calisma", m.uptime); }
+
+    // ── IP AÇILIŞ EKRANINDA ────────────────────────────────────────────────
+    //
+    // Adres yalnızca `NETWORK` sayfasındaydı: arayüzü açmak isteyen herkes
+    // önce cihazın başına gidip sayfalar arasında dolaşmak zorundaydı. Cihazın
+    // İLK gösterdiği ekranda durması, telefondan bağlanmak için gereken tek
+    // bilgiyi tek bakışa indirir (TASK-075).
+    //
+    // Bağlantı yokken model "bagli degil" taşır ve BU DA BİLGİDİR: boş bir
+    // satır, kullanıcıya adresin ne olduğunu değil, ekranın bozuk olduğunu
+    // düşündürürdü.
+    row(L::ROW4, "IP", m.ip);
 }
 
 // ── SENSORS: tüm sensörler + kalite ────────────────────────────────────────
@@ -296,7 +449,7 @@ void drawSensors(const UiModel& m)
         // `selectableRow` ile çiziliyor: imleç burada bir EYLEM seçmez,
         // yalnızca listedeki konumu gösterir. `confirming` her zaman false —
         // sensör ekranında onaylanacak bir şey yok.
-        selectableRow(rows[drawn], k, cursor, false, s.label, s.value);
+        selectableRow(rows[drawn], k, cursor, m.navFocus != 0u, false, s.label, s.value);
     }
 }
 
@@ -326,12 +479,13 @@ void drawControl(const UiModel& m)
     {
         if (k < UI_ACTS)
         {
-            selectableRow(rows[drawn], k, cursor, m.editing != 0u, m.actuators[k].label,
-                          m.actuators[k].on ? "ACIK" : "kapali");
+            selectableRow(rows[drawn], k, cursor, m.navFocus != 0u, m.editing != 0u,
+                          m.actuators[k].label, m.actuators[k].on ? "ACIK" : "kapali");
         }
         else
         {
-            selectableRow(rows[drawn], k, cursor, m.editing != 0u, "ACIL DURDUR", "");
+            selectableRow(rows[drawn], k, cursor, m.navFocus != 0u, m.editing != 0u,
+                          "ACIL DURDUR", "");
         }
     }
 
@@ -339,13 +493,23 @@ void drawControl(const UiModel& m)
     // "sistem bozuk" sanmaya iter (§12.2 gözlemlenebilirlik).
     const int16_t lastRow = rows[UI_VISIBLE_ROWS - 1u];
 
-    if (m.editing != 0u)
+    if (m.navFocus == 0u)
+    {
+        // Sayfa modunda imleç kullanıcıya ait değil: seçili aktüatörün engel
+        // nedenini göstermek, seçmediği bir satır hakkında konuşmak olurdu.
+        text(L::COL_LABEL, lastRow, HINT_ENTER);
+    }
+    else if (m.editing != 0u)
     {
         text(L::COL_LABEL, lastRow, "Onaylamak icin bas");
     }
     else if (cursor < UI_ACTS && m.actuators[cursor].blocked != 0u)
     {
         text(L::COL_LABEL, lastRow, m.actuators[cursor].why);
+    }
+    else
+    {
+        text(L::COL_LABEL, lastRow, HINT_BACK);
     }
 }
 
@@ -379,8 +543,12 @@ void drawSystem(const UiModel& m)
     row(L::ROW1, "Calisma", m.uptime);
     row(L::ROW2, "Saat", m.clock);
 
-    selectableRow(L::ROW3, 0, m.cursor, m.editing != 0u, "Yeniden baslat", "");
-    if (m.editing != 0u) { text(L::COL_LABEL, L::ROW4, "Onaylamak icin bas"); }
+    selectableRow(L::ROW3, 0, m.cursor, m.navFocus != 0u, m.editing != 0u,
+                  "Yeniden baslat", "");
+
+    if (m.editing != 0u)       { text(L::COL_LABEL, L::ROW4, "Onaylamak icin bas"); }
+    else if (m.navFocus == 0u) { text(L::COL_LABEL, L::ROW4, HINT_ENTER); }
+    else                       { text(L::COL_LABEL, L::ROW4, HINT_BACK); }
 }
 
 // ── ALERTS: aktif hatalar ──────────────────────────────────────────────────
@@ -412,8 +580,12 @@ void drawAlerts(const UiModel& m)
 // onayın nasıl verileceği gösterilir.
 void drawEmergency(const UiModel& m)
 {
-    hal::oled::drawRect(0, L::BODY_Y - 2, L::W, 12, true);
-    text(24, L::ROW0, "ACIL DURUM");
+    // Başlık bandı GERÇEKTEN ters renkli. Önceki hâlde zemin `drawRect(...,
+    // true)` ile SİYAH dolduruluyordu — o çağrı bir alanı TEMİZLER — ve band
+    // hiç görünmüyordu: sistemin en kritik başlığı sıradan bir satır gibi
+    // duruyordu.
+    hal::oled::fillHighlight(0, L::BODY_Y - 2, L::W, 12);
+    text(24, L::ROW0, "ACIL DURUM", true);
 
     text(L::COL_LABEL, L::ROW1, m.emergencyWhy[0] ? m.emergencyWhy : "neden bilinmiyor");
     text(L::COL_LABEL, L::ROW2, "Aktuatorler kesildi");
@@ -421,7 +593,8 @@ void drawEmergency(const UiModel& m)
     // Koşullar düzelmeden onay reddedilir (TASK-032); kullanıcıya bunu
     // önceden söylüyoruz ki reddi bir arıza sanmasın.
     text(L::COL_LABEL, L::ROW3, "Once sorunu giderin");
-    selectableRow(L::ROW4, 0, m.cursor, m.editing != 0u, "Onayla ve temizle", "");
+    selectableRow(L::ROW4, 0, m.cursor, m.navFocus != 0u, m.editing != 0u,
+                  "Onayla ve temizle", "");
 }
 
 // ── SETUP: ilk açılış — telefonu cihaza bağlamak için gereken her şey ──────
@@ -434,8 +607,8 @@ void drawEmergency(const UiModel& m)
 // okunmaz.
 void drawSetup(const UiModel& m)
 {
-    hal::oled::drawRect(0, L::BODY_Y - 2, L::W, 12, true);
-    text(28, L::ROW0, "KURULUM");
+    hal::oled::fillHighlight(0, L::BODY_Y - 2, L::W, 12);
+    text(28, L::ROW0, "KURULUM", true);
 
     // ── KURULUM BİTTİ ──────────────────────────────────────────────────────
     // Ağ adı ve kurulum şifresi artık ÖLÜ BİLGİ: birazdan o AP kapanacak.
@@ -463,9 +636,11 @@ void drawSetup(const UiModel& m)
         text(L::COL_LABEL, L::ROW2, "Ag ekranina bakin");
     }
 
-    // Telefonu olmayan kullanıcı için çıkış yolu: basmak doğrudan ürün
-    // seçimine götürür.
-    text(L::COL_LABEL, L::ROW4, "Bas: urun sec");
+    // Telefonu olmayan kullanıcı için çıkış yolu: basmak ürün SAYFASINA
+    // götürür. Listeye girmek için orada bir kez daha basılır — kurulum
+    // ekranının kullanıcıyı iki seviye birden derine indirmesi, nerede
+    // olduğunu bilmediği bir moda düşürüyordu.
+    text(L::COL_LABEL, L::ROW4, "Bas: urun sayfasi");
 }
 
 // ── CROP: ürün seçimi + programı başlat ────────────────────────────────────
@@ -493,14 +668,14 @@ void drawCrop(const UiModel& m)
         {
             // Uygulanmış profil işaretlenir: kullanıcı hangisinin seçili
             // olduğunu görmeden yeniden seçmek zorunda kalmamalı.
-            selectableRow(rows[drawn], k, cursor, m.editing != 0u, m.crops[k].name,
-                          m.crops[k].active ? "AKTIF" : "");
+            selectableRow(rows[drawn], k, cursor, m.navFocus != 0u, m.editing != 0u,
+                          m.crops[k].name, m.crops[k].active ? "AKTIF" : "");
         }
         else
         {
             // Program yürüyorsa düğme DURDUR'a döner: tek satır hem durumu
             // hem eylemi söyler.
-            selectableRow(rows[drawn], k, cursor, m.editing != 0u,
+            selectableRow(rows[drawn], k, cursor, m.navFocus != 0u, m.editing != 0u,
                           m.autoMode ? "DURDUR" : "BASLAT",
                           m.autoMode ? "calisiyor" : "kapali");
         }
@@ -518,6 +693,12 @@ void drawCrop(const UiModel& m)
         // ÖNCEDEN söylüyoruz. Basıp hiçbir şey olmaması, düğmenin bozuk
         // olduğu izlenimi verirdi (§12.2).
         text(L::COL_LABEL, lastRow, "Once bir urun secin");
+    }
+    else if (m.navFocus != 0u)
+    {
+        // Sayfanın içindeyken çıkış yolu, aktif programın adından daha
+        // gereklidir: uygulanmış profil zaten listede "AKTIF" ile işaretli.
+        text(L::COL_LABEL, lastRow, HINT_BACK);
     }
     else
     {

@@ -1005,12 +1005,13 @@ UI'nin dış dünyaya **tek çıkışı** `CommandQueue.post()`'tur.
   │  saat · Wi-Fi ikonu+RSSI · mod rozeti · hata sayısı │
   └────────────────────────────────────────────────────┘
 
-  Ana ekranlar (encoder ile yatay gezinme):
-    HOME       → özet: mod, pompa durumu, kritik sensörler
+  Ana ekranlar (SAYFA MODUNDA encoder ile yatay gezinme — döngüsel):
+    HOME       → özet: mod, pompa durumu, kritik sensörler, **IP adresi**
+    CROP       → ürün seçimi + programı başlat/durdur
     SENSORS    → tüm sensörler + kalite göstergesi
-    CONTROL    → aktüatör durumu + manuel komut + override kalan süre
+    CONTROL    → aktüatör durumu + manuel komut + acil durdurma
     NETWORK    → durum, SSID, IP, RSSI, AP bilgisi  (şifre GÖSTERİLMEZ)
-    SYSTEM     → uptime, mod, boot raporu, yeniden başlat
+    SYSTEM     → uptime, mod, saat, yeniden başlat
     ALERTS     → aktif hatalar, acil durum, onay/temizleme
 
   Öncelikli ekran:
@@ -1024,6 +1025,31 @@ UI'nin dış dünyaya **tek çıkışı** `CommandQueue.post()`'tur.
   [Encoder ISR] ──▶ InputEventQueue ──▶ ui task ──▶ navigasyon / düzenleme
   [Buton ISR]   ──▶ (kısa/uzun basış) ──▶ onay / geri / acil durdurma (uzun basış)
 ```
+
+**İki seviyeli gezinme (TASK-075).** Encoder tek bir listede hem sayfaları hem
+satırları gezerse, sayfa değiştirmek yoldaki her seçeneğin üzerinden geçmek
+demektir (`SENSORS` + `CONTROL` + `CROP` tek başına 21 detent):
+
+```text
+  SAYFA MODU   çevir → sayfa (döngüsel, en fazla 3 detent)
+               BAS   → sayfanın içine gir
+  ÖĞE MODU     çevir → sayfa içindeki satırlar (döngüsel)
+               BAS   → onay akışı (iki basış)
+               GERİ  → sayfa moduna dön
+```
+
+**Öğe moduna yalnızca kullanıcı girer**: hiçbir olay ve hiçbir ekran geçişi
+gezinmeyi kendiliğinden sayfanın içine almaz. Aksi hâlde kullanıcı iki seviye
+derinde başlar, encoder'ı çevirir, sayfa değişmez ve ekran donmuş görünür.
+
+İki zaman aşımı vardır: 20 sn hareketsizlikte onay ve öğe modu düşer (ekran
+değişmez), 60 sn'de `HOME`'a dönülür. Kısası acil durum ekranında da işler —
+kimse bir modun içinde kilitli kalamaz.
+
+Seçili satır **ters renkle** vurgulanır; sayfa modunda hiçbir satır
+vurgulanmaz (imleç o modda kullanıcıya ait değildir). Ayırıcı çizginin yerini
+mod göstergesi alır: sayfa modunda dilimlenmiş konum şeridi + ▼, öğe modunda
+**tamamen dolu şerit** + ▲.
 
 ISR yalnızca ham olay üretir; dekodlama, debounce sonrası yorumlama ve tüm çizim task
 bağlamındadır. Detent normalizasyonu tamsayı aritmetiğiyle yapılır ve yapılandırılabilirdir.

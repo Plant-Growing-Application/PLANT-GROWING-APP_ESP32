@@ -142,6 +142,29 @@ void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, bool filled)
     }
 }
 
+void fillHighlight(int16_t x, int16_t y, int16_t w, int16_t h)
+{
+    if (g_available)
+    {
+        g_panel.fillRect(x, y, w, h, SSD1306_WHITE);
+    }
+}
+
+void drawTextInverse(int16_t x, int16_t y, const char* text)
+{
+    if (!g_available || text == nullptr)
+    {
+        return;
+    }
+    g_panel.setCursor(x, y);
+    g_panel.setTextColor(SSD1306_BLACK);
+    g_panel.print(text);
+
+    // Renk BURADA geri alınmaz: `drawText()` her çağrıda beyazı kendisi
+    // ayarlar. İki fonksiyon da rengi kendi başına kurduğu için çizim sırası
+    // ne olursa olsun sızıntı olmaz.
+}
+
 void drawBitmap(int16_t x, int16_t y, const uint8_t* bitmap, int16_t w, int16_t h)
 {
     if (g_available && bitmap != nullptr)

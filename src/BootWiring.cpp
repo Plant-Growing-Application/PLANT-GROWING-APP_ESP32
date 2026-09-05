@@ -114,6 +114,13 @@ ErrCode stageSensorHw()
     if (pcnt != ErrCode::OK) { return pcnt; }
 
     // Encoder ve butonlar: `ui` task'ının girdi kaynağı.
+    //
+    // Varsayılan detent oranı 4'tür (EC11 ve benzerleri). SAHADA DOĞRULANMALI:
+    // oran yanlışsa bir tık iki satır atlar ya da iki tık bir satır ilerletir.
+    // Sayfa gezinmesinde (TASK-075) bu doğrudan "sayfa atlıyor" olarak görünür.
+    //
+    // Test: bir sayfanın içine girip listeyi çevirin — BİR tık BİR satır
+    // ilerletmeli. İki satır atlıyorsa buraya `begin(2)` yazılır.
     return hal::input::begin();
 }
 

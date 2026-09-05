@@ -233,6 +233,11 @@ void tick(Millis now)
     // tanımıyor ve katalog büyürse orada değişecek bir şey olmuyor.
     nav::setCropCount(core::cropCount());
 
+    // Aynı gerekçe sensörler için: kayıtlı sensör sayısı çalışma anında
+    // belli olur ve imlecin çizilmeyen satırlara gitmesi, encoder'ın son
+    // tıklarını ölü gösterirdi.
+    nav::setSensorCount(s.sensors.count);
+
     // ── İLK AÇILIŞ: KURULUM EKRANI ─────────────────────────────────────────
     //
     // Koşul "AP açık VE ürün seçilmemiş": ikisi birden ancak kutudan yeni
@@ -259,8 +264,20 @@ void tick(Millis now)
     nav::tick(now, emergency);
 
     // 3) ViewModel — SAF dönüşüm.
-    build(s, nav::screen(), nav::cursor(), nav::confirming(), g_apSsid, g_apPassword,
-          g_model);
+    //
+    // Navigasyon durumu tek yapıda taşınır: modu, imleci ve sayfa konumunu
+    // ayrı ayrı geçirmek, çağrıda sıra karıştığında derleyicinin yakalamadığı
+    // bir hata sınıfı yaratırdı (TASK-075).
+    NavState navState{};
+    navState.screen     = nav::screen();
+    navState.cursor     = nav::cursor();
+    navState.focus      = nav::focused() ? 1u : 0u;
+    navState.confirming = nav::confirming() ? 1u : 0u;
+    navState.pageIndex  = nav::pageIndex();
+    navState.pageCount  = nav::pageCount();
+    navState.enterable  = nav::pageEnterable() ? 1u : 0u;
+
+    build(s, navState, g_apSsid, g_apPassword, g_model);
 
     // 4) YALNIZCA değişince çiz. Her döngüde çizmek I2C busunu ve CPU'yu
     //    boşuna harcar; girdi olayı zaten modeli değiştirir.

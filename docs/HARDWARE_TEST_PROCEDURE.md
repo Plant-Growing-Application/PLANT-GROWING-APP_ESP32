@@ -47,17 +47,34 @@ pio run -t uploadfs
 | # | Test | Beklenen | Ölçülecek |
 |---|---|---|---|
 | 1.1 | Web'den pompa AÇ | Röle çeker, web ve OLED güncellenir | tıklama→röle gecikmesi |
-| 1.2 | OLED'den pompa AÇ (encoder + onay) | Aynı zincir | basış→röle gecikmesi |
+| 1.2 | OLED'den pompa AÇ (bas → gir, çevir → seç, bas ×2 → onay) | Aynı zincir | basış→röle gecikmesi |
 | 1.3 | Sensör değeri değiştir | Web ve OLED'de görünür | değişim→ekran gecikmesi |
 | 1.4 | Güvenlik vetosu (hazne boş) | Komut reddedilir, **neden görünür** | — |
 
-### 1.5 Task periyotları
+### 1.5 OLED gezinme (TASK-075)
+
+| # | Adım | Beklenen |
+|---|---|---|
+| a | Açılışta ekrana bak | `HOME`, son satırda **IP adresi** |
+| b | Encoder'ı çevir | Sayfa değişir; ayırıcı şeritteki dolu dilim kayar |
+| c | Yedi kez ileri çevir | Başa döner (döngüsel) |
+| d | İçeriği olan sayfada bas | Sayfaya girilir; seçili satır **ters renkli**; şerit tamamen dolar, işaret ▼ → ▲ |
+| e | Öğe modunda liste sonuna kadar çevir | Sayfa DEĞİŞMEZ, imleç başa DÖNER |
+| f | GERİ | Sayfa moduna dönülür, vurgu kalkar |
+| g | `HOME`/`NETWORK`/`ALERTS`'te bas | Hiçbir şey olmaz; ▼ zaten çizilmez |
+| h | Bir öğeye bas | Satırda `ONAY?`; ikinci basış eylemi üretir |
+| i | Acil durum tetikle, sonra encoder'ı çevir | Ekran acil durumla açılır ama **sayfa modundadır**: çevirmek doğrudan sayfa değiştirir; ACİL rozeti kalır |
+| j | Bir sayfaya gir, 20 sn bekle | Kendiliğinden sayfa moduna döner (şerit dilimlenir); ekran değişmez |
+| k | Onaya bas, 20 sn bekle | Onay iptal olur; **hiçbir eylem üretilmez** |
+| l | Öğe modunda listeyi çevir | BİR tık BİR satır ilerletmeli. İki satır atlıyorsa `BootWiring.cpp` → `input::begin(2)` |
+
+### 1.6 Task periyotları
 
 `GET /api/diagnostics` → her task için `maxLoopUs` ve `overruns`.
 
 Hedefler: `app_core` < 30 ms · `io_sense` < 100 ms · `ui` < 20 ms
 
-### 1.6 24 saat kesintisiz
+### 1.7 24 saat kesintisiz
 
 24 saat çalıştır, sonra `GET /api/diagnostics`:
 - `overruns` makul mü

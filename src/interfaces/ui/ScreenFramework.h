@@ -46,9 +46,24 @@ constexpr int16_t ROW2       = BODY_Y + LINE_H * 2;
 constexpr int16_t ROW3       = BODY_Y + LINE_H * 3;
 constexpr int16_t ROW4       = BODY_Y + LINE_H * 4;
 
-constexpr int16_t COL_LABEL  = 2;
-constexpr int16_t COL_VALUE  = 62;   ///< değer sütunu — sağa hizalı bölge başı
-constexpr int16_t CURSOR_X   = 0;
+/// Etiket sütunu. 2 idi; ters renkli seçim çubuğu (TASK-075) satırın
+/// tamamını kaplıyor ve yazının kenara YAPIŞMASI okunurluğu düşürüyordu.
+constexpr int16_t COL_LABEL  = 4;
+/// Değer sütunu — **artık kullanılmıyor**, `row()` sağa yaslıyor.
+///
+/// Sabit sütun bir IP adresini ekrandan taşırıyordu (ISSUE-032); sabit,
+/// tarihçesi kaybolmasın diye duruyor.
+constexpr int16_t COL_VALUE  = 62;
+
+/// Sağa yaslanan değerin sağ kenardan uzaklığı — çubuk içinde nefes payı.
+constexpr int16_t PAD_RIGHT  = 3;
+
+/// Seçim çubuğunun yüksekliği ve satır metnine göre kaydırması.
+///
+/// Metin `y`'den başlar ve 8 px yüksektir; çubuk 1 px yukarıdan başlayıp
+/// 10 px sürer, yani yazının altında ve üstünde birer piksel bırakır.
+constexpr int16_t BAR_H      = LINE_H;
+constexpr int16_t BAR_DY     = -1;
 
 }  // namespace layout
 

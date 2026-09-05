@@ -78,6 +78,25 @@ enum class ScreenId : uint8_t
     COUNT     = 9,
 };
 
+/// Sayfa göstergesinde yeri olmayan ekran (`EMERGENCY`, `SETUP`).
+constexpr uint8_t UI_NO_PAGE = 0xFFu;
+
+/// Navigasyonun ekrana bildirdiği her şey — TASK-075.
+///
+/// Ayrı ayrı yedi parametre yerine tek yapı: `build()` çağrısında `bool`
+/// sırası karışırsa derleyici bunu YAKALAMAZ, ekran sessizce yanlış modda
+/// çizilirdi.
+struct NavState
+{
+    ScreenId screen;
+    uint8_t  cursor;
+    uint8_t  focus;       ///< 1 = sayfanın İÇİNDEYİZ (öğe gezinme)
+    uint8_t  confirming;  ///< 1 = onay bekleniyor
+    uint8_t  pageIndex;   ///< sıradaki konum; `UI_NO_PAGE` = sırada değil
+    uint8_t  pageCount;   ///< gezinilebilir sayfa sayısı
+    uint8_t  enterable;   ///< 1 = bu sayfanın girilebilir içeriği var
+};
+
 /// Bir sensör satırı — biçimlendirilmiş, çizime hazır.
 struct SensorLine
 {
@@ -151,6 +170,21 @@ struct UiModel
     ScreenId screen;
     uint8_t  cursor;         ///< ekran içi seçim
     uint8_t  editing;        ///< 1 = onay bekleniyor
+
+    /// 1 = sayfanın İÇİNDEYİZ; encoder satırları geziyor.
+    ///
+    /// Ekran katmanı bunu bilmeden seçim çubuğunu çizemez: sayfa modunda
+    /// imleç kullanıcıya AİT DEĞİLDİR (nereye basacağını bilmediği bir satır
+    /// vurgulanmış görünürdü).
+    uint8_t  navFocus;
+
+    /// Sayfa göstergesi: kaçıncı sayfa / kaç sayfa.
+    ///
+    /// Ekranların başlığı yok: kullanıcı sayfayı yalnızca içeriğinden
+    /// tanıyor, sıranın nerede bittiğini bilmiyordu.
+    uint8_t  pageIndex;      ///< `UI_NO_PAGE` = gösterge çizilmez
+    uint8_t  pageCount;
+    uint8_t  pageEnterable;  ///< 1 = "gir" ipucu gösterilir
 
     /// Kurulum tamamlandı, cihaz kontrollü biçimde yeniden başlıyor (§8.4).
     ///

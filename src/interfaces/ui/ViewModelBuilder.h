@@ -20,10 +20,11 @@ namespace ui {
 
 /// Görünüm modelini üretir.
 ///
+/// @param nav  navigasyonun bildirdiği ekran, imleç ve mod (TASK-075)
 /// @param apSsid / apPassword  kurulum AP bilgileri (TASK-038); `nullptr`
 ///        verilebilir — yalnızca AP açıkken anlamlıdır
-void build(const core::SystemState& s, ScreenId screen, uint8_t cursor, bool editing,
-           const char* apSsid, const char* apPassword, UiModel& out);
+void build(const core::SystemState& s, const NavState& nav, const char* apSsid,
+           const char* apPassword, UiModel& out);
 
 /// İki model aynı mı? Aynıysa **çizilmez** (I2C yükü ve titreme).
 bool sameAs(const UiModel& a, const UiModel& b);

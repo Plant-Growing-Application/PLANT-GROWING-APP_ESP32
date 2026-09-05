@@ -33,6 +33,10 @@ constexpr uint8_t ORDER_LEN = sizeof(ORDER) / sizeof(ORDER[0]);
 /// varsayılır ve yalnızca "BASLAT" satırı kalır.
 uint8_t g_cropCount = 0;
 
+/// `SENSORS` ekranındaki satır sayısı — kayıtlı sensör adedi.
+/// `UiService` her turda bildirir; bildirilmediyse ekran boş kabul edilir.
+uint8_t g_sensorCount = 0;
+
 /// Her ekranda kaç seçilebilir öğe var? 0 = seçim yok.
 ///
 /// CONTROL: beş aktüatör + ACİL DURDUR (ISSUE-036). Sabit 3 iken büyütme
@@ -44,7 +48,7 @@ uint8_t g_cropCount = 0;
 uint8_t itemCount(ScreenId s)
 {
     return (s == ScreenId::CONTROL)   ? static_cast<uint8_t>(core::MAX_ACTUATORS + 1u)
-         : (s == ScreenId::SENSORS)   ? core::MAX_SENSORS
+         : (s == ScreenId::SENSORS)   ? g_sensorCount
          : (s == ScreenId::SYSTEM)    ? 1u   // yeniden başlat
          : (s == ScreenId::EMERGENCY) ? 1u   // onayla
          : (s == ScreenId::CROP)      ? static_cast<uint8_t>(g_cropCount + 1u)  // + BASLAT
@@ -70,14 +74,61 @@ uint8_t   g_cursor     = 0;
 bool      g_confirm    = false;  ///< onay bekleniyor
 Millis    g_lastInput{0};
 
+/// Sayfanın İÇİNDE miyiz?
+///
+/// `false` (SAYFA MODU): encoder sayfaları gezer, imleç kullanılmaz.
+/// `true`  (ÖĞE MODU):   encoder sayfa içindeki satırları gezer.
+///
+/// Tek seviyeli gezinmede kullanıcı, `SENSORS`'ın sekiz satırını çevirmeden
+/// `CONTROL`'e geçemiyordu (TASK-075).
+bool      g_focus      = false;
+
 void resetConfirm() { g_confirm = false; }
 
+/// Ekran değiştirir ve SAYFA MODUNA döner.
+///
+/// Yeni bir sayfaya öğe modunda düşmek, kullanıcıyı hiç istemediği bir
+/// satırın üzerinde bırakırdı; ekran değişimi her zaman en dış seviyeye
+/// döner.
 void goTo(ScreenId s, Millis now)
 {
     g_screen    = s;
     g_cursor    = 0;
     g_lastInput = now;
+    g_focus     = false;
     resetConfirm();
+}
+
+/// Sayfa sırasındaki konumu ekrandan bulur.
+///
+/// `g_index` yeterli DEĞİLDİR: `EMERGENCY`/`SETUP` sıraya girmeden ekranı
+/// devralır ve `g_index` o sırada eski sayfada kalır — gösterge yanlış
+/// sayfayı işaret ederdi.
+uint8_t indexOf(ScreenId s)
+{
+    for (uint8_t i = 0; i < ORDER_LEN; ++i)
+    {
+        if (ORDER[i] == s) { return i; }
+    }
+    return NO_PAGE;
+}
+
+/// Sayfa sırasında ilerler — DÖNGÜSELDİR.
+///
+/// Uçlarda durmak, tek seviyeli gezinmede imlecin ekran değiştirmesiyle
+/// birleşince anlamlıydı. Sayfa modunda uçta durmak yalnızca yolu uzatır:
+/// yedi sayfada döngüsellik ile en uzak sayfa üç detenttir.
+void movePage(bool forward, Millis now)
+{
+    // Sıra dışı bir ekrandan (`EMERGENCY`, `SETUP`) çıkarken de YÖN KORUNUR.
+    //
+    // Bir ara "ayrılınan sayfaya dön" kestirmesi vardı: ilk çevirme yönü ne
+    // olursa olsun aynı sayfayı açıyordu. Kullanıcı geriye çevirip ileri
+    // gidince gezinmenin tutarsız olduğunu düşünüyordu. Bir sayfa atlamak,
+    // encoder'ın yönüne güvenilmemesinden iyidir.
+    g_index = forward ? static_cast<uint8_t>((g_index + 1u) % ORDER_LEN)
+                      : static_cast<uint8_t>((g_index + ORDER_LEN - 1u) % ORDER_LEN);
+    goTo(ORDER[g_index], now);
 }
 
 /// İmleç konumundan eylemi türetir. **Yalnızca onay verildikten sonra çağrılır.**
@@ -122,6 +173,7 @@ void begin()
     g_screen  = ScreenId::HOME;
     g_cursor  = 0;
     g_confirm = false;
+    g_focus   = false;
 }
 
 ActionRequest handle(const hal::InputEvent& ev, Millis now, bool emergencyActive)
@@ -146,38 +198,65 @@ ActionRequest handle(const hal::InputEvent& ev, Millis now, bool emergencyActive
             // ÇIKAR. `g_index` zaten HOME'u gösteriyor.
             if (g_screen == ScreenId::SETUP) { g_index = 0; goTo(ORDER[0], now); break; }
 
-            if (items > 0u)
+            // ── ÖĞE MODU: imleç sayfanın İÇİNDE kalır ve DÖNER ─────────────
+            //
+            // Sayfa DEĞİŞTİRMEZ: eskiden imleç listenin sonuna gelince bir
+            // sonraki sayfaya atlıyordu ve kullanıcı bir aktüatörü ararken
+            // kendini başka bir ekranda buluyordu. Sayfadan çıkış tek bir
+            // yerdendir: GERİ tuşu.
+            //
+            // Uçta DURMAK da olmaz: listenin sonunda encoder ölü görünüyordu —
+            // kullanıcı çeviriyor, hiçbir piksel değişmiyor, ekran donmuş
+            // sanılıyordu. Döngüsel imleç ikisini de çözer.
+            //
+            // `items` küçülmüş olsa bile (sensör sayısı düşerse) modülo
+            // imleci kendiliğinden geçerli aralığa çeker.
+            if (g_focus && items > 0u)
             {
-                // Ekran içi imleç. Uçlarda DURUR — dairesel değil.
-                if (fwd && g_cursor + 1u < items)  { ++g_cursor; }
-                else if (!fwd && g_cursor > 0u)    { --g_cursor; }
-                else if (!fwd && g_cursor == 0u)
-                {
-                    // İmleç başındayken geriye çevirmek ekran değiştirir.
-                    if (g_index > 0u) { --g_index; goTo(ORDER[g_index], now); }
-                }
-                else if (fwd && g_cursor + 1u >= items)
-                {
-                    if (g_index + 1u < ORDER_LEN) { ++g_index; goTo(ORDER[g_index], now); }
-                }
+                if (fwd) { g_cursor = static_cast<uint8_t>((g_cursor + 1u) % items); }
+                else     { g_cursor = static_cast<uint8_t>((g_cursor + items - 1u) % items); }
+                break;
             }
-            else
-            {
-                // Seçilebilir öğesi olmayan ekranlarda encoder ekran değiştirir.
-                if (fwd && g_index + 1u < ORDER_LEN)  { ++g_index; goTo(ORDER[g_index], now); }
-                else if (!fwd && g_index > 0u)        { --g_index; goTo(ORDER[g_index], now); }
-            }
+
+            // ── SAYFA MODU ─────────────────────────────────────────────────
+            movePage(fwd, now);
             break;
         }
 
         case InputEventType::BUTTON_SHORT:
             if (ev.button == ButtonId::BACK)
             {
-                // Acil durum aktifken BACK her yerden ACİL ekrana döner —
-                // uyarıya dönüş her zaman bir tuş uzakta olmalı.
-                if (emergencyActive) { goTo(ScreenId::EMERGENCY, now); }
-                else if (g_confirm)  { resetConfirm(); }
-                else                 { g_index = 0; goTo(ScreenId::HOME, now); }
+                // GERİ **tek adım** geri alır: önce onay, sonra sayfa modu,
+                // en sonda HOME. Bir basışta birden çok seviye atlamak,
+                // kullanıcının nerede olduğunu takip etmesini imkânsız kılar.
+                if (g_confirm) { resetConfirm(); break; }
+                if (g_focus)
+                {
+                    // İmleç de başa döner: sayfa modunda seçili satır
+                    // ÇİZİLMEZ (imleç kullanıcıya ait değildir) ve kaydırılmış
+                    // bir listenin ortasında bırakmak, sayfaya yeniden
+                    // girildiğinde imlecin görünmeyen bir yerden başlaması
+                    // demek olurdu.
+                    g_focus  = false;
+                    g_cursor = 0;
+                    break;
+                }
+
+                // Acil durum aktifken BACK ACİL ekrana döner — uyarıya dönüş
+                // her zaman bir tuş uzakta olmalı.
+                //
+                // ACİL EKRANIN KENDİSİ HARİÇ: orada da ACİL'e dönmek, ekranı
+                // KİLİTLERDİ. Öğe modundan çıkıldıktan sonra tek çıkış yolu
+                // bu tuş; teşhis için başka ekranlara bakmak gerekebilir
+                // (ACİL rozeti zaten her ekranda kalıcı).
+                if (emergencyActive && g_screen != ScreenId::EMERGENCY)
+                {
+                    goTo(ScreenId::EMERGENCY, now);   // SAYFA MODUNDA
+                    break;
+                }
+
+                g_index = 0;
+                goTo(ScreenId::HOME, now);
                 break;
             }
 
@@ -188,7 +267,22 @@ ActionRequest handle(const hal::InputEvent& ev, Millis now, bool emergencyActive
             if (g_screen == ScreenId::SETUP)
             {
                 g_index = 1;                       // ORDER[1] == CROP
-                goTo(ScreenId::CROP, now);
+                goTo(ScreenId::CROP, now);          // SAYFA MODUNDA (bkz. `onEmergency`)
+                break;
+            }
+
+            // ── SAYFA MODU: BAS = sayfanın İÇİNE gir ───────────────────
+            //
+            // İçeriği olmayan sayfada (HOME, NETWORK, ALERTS) hiçbir şey
+            // yapmaz; ekran da bu sayfalarda "gir" ipucunu göstermez, yani
+            // kullanıcı çalışmayan bir düğmeye basmaya davet edilmez.
+            if (!g_focus)
+            {
+                if (items > 0u)
+                {
+                    g_focus  = true;
+                    g_cursor = 0;   // her giriş listenin BAŞINDAN başlar
+                }
                 break;
             }
 
@@ -222,7 +316,24 @@ ActionRequest handle(const hal::InputEvent& ev, Millis now, bool emergencyActive
 
 void tick(Millis now, bool emergencyActive)
 {
-    // Acil durumdan otomatik dönüş YOK; onay beklerken sayaç işlemez.
+    // ── ÖNCE: ONAY VE ÖĞE MODU KENDİLİĞİNDEN DÜŞER ─────────────────────────
+    //
+    // Bu adım HER EKRANDA işler — acil ekranında da, acil durum aktifken de.
+    // Aşağıdaki erken çıkışların arkasına konsaydı, acil durumdayken sayfanın
+    // içinde unutulan bir kullanıcı orada SONSUZA KADAR kalırdı: encoder
+    // yalnızca satırları gezer ve çıkışın tek yolu, varlığı bilinmeyen bir
+    // tuş olurdu.
+    //
+    // Onayın da düşmesi bir GÜVENLİK kazancıdır: on dakika önce açılmış bir
+    // "onaylamak icin bas" durumu, knob'a değen birinin pompayı çalıştırması
+    // demektir. Zaman aşımı hiçbir zaman eylem ÜRETMEZ, yalnızca iptal eder.
+    if (core::hasElapsed(now, g_lastInput, core::millisecs(FOCUS_IDLE_MS)))
+    {
+        resetConfirm();
+        if (g_focus) { g_focus = false; g_cursor = 0; }
+    }
+
+    // Acil durumdan otomatik EKRAN dönüşü YOK; onay beklerken sayaç işlemez.
     if (g_screen == ScreenId::EMERGENCY || g_confirm || emergencyActive) { return; }
     if (g_screen == ScreenId::HOME) { return; }
 
@@ -240,12 +351,28 @@ void tick(Millis now, bool emergencyActive)
 
 void onEmergency(Millis now)
 {
+    // SAYFA MODUNDA açılır — otomatik olarak içine GİRİLMEZ.
+    //
+    // Bir süre öğe moduyla açıldı: "tek öğesi var, bir basış kazandıralım".
+    // Sahada bunun bedeli ağırdı. Cihaz acil durumla açıldığında kullanıcı
+    // farkında olmadan iki seviye derinde başlıyor, encoder'ı çeviriyor ve
+    // HİÇBİR ŞEY olmuyordu (tek öğelik listede imleç kımıldamaz). Ekran
+    // donmuş görünüyordu ve çıkış için önce onayı, sonra öğe modunu iptal
+    // eden İKİ geri basışı gerekiyordu.
+    //
+    // Kural artık istisnasız: **sayfaya yalnızca kullanıcı basarak girer.**
+    // Kazanılan bir basış, kaybedilen bir zihinsel modele değmez.
     if (g_screen != ScreenId::EMERGENCY) { goTo(ScreenId::EMERGENCY, now); }
 }
 
 void setCropCount(uint8_t n)
 {
     g_cropCount = (n > UI_CROPS) ? UI_CROPS : n;
+}
+
+void setSensorCount(uint8_t n)
+{
+    g_sensorCount = (n > UI_SENSORS) ? UI_SENSORS : n;
 }
 
 void onSetupNeeded(Millis now)
@@ -256,6 +383,12 @@ void onSetupNeeded(Millis now)
 ScreenId screen()     { return g_screen; }
 uint8_t  cursor()     { return g_cursor; }
 bool     confirming() { return g_confirm; }
+bool     focused()    { return g_focus; }
+
+uint8_t  pageIndex()  { return indexOf(g_screen); }
+uint8_t  pageCount()  { return ORDER_LEN; }
+
+bool     pageEnterable() { return itemCount(g_screen) > 0u; }
 
 } // namespace nav
 } // namespace ui
